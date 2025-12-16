@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset='UTF-8'>
+    <title>LogiBot</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Jockey+One&family=Syne+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <section id="landing-page">
+        <h1>Hi! I'm LogiBot</h1>
+        <h2>Your logical healthcare companion</h2>
+        <h3>Health concerns, simplified through logic and reasoning.</h3>
+        <button id="start-button">Start Diagnosis</button>
+        <footer id="disclaimer">
+            Disclaimer: This tool is for informational and educational purposes only 
+            and does not replace professional medical advice, diagnosis, or treatment.
+        </footer>
+    </section>
+    <section id="model-page">
+        <h1 id="selectText">Select a body part</h1>
+        <button id="back-button">Back to home page</button>
+        <button id="switch-button">Switch model</button>
+        <div id="model-container">
+            <canvas id="model-canvas"></canvas>
+            <button id="reset-button">Reset Model</button>
+            <div id="chatbox-popup">
+                <div id="chatbox-messages"></div>
+                <div id="chatbox-input">
+                    <input type="text" id="user-input" placeholder="Start talking with LogiBot" autocomplete="off">
+                    <button id="send-button">Send</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script type='module' src='/src/main.js'></script>
+</body>
+</html>
+
+
