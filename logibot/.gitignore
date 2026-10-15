@@ -29,3 +29,6 @@ dist-ssr
 coverage
 tsconfig.tsbuildinfo
 .shots
+
+# Blender backups
+*.blend1

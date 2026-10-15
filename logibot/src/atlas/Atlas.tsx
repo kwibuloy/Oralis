@@ -3,33 +3,39 @@ import { GROUPS } from '../content/anatomy';
 import { TISSUES } from '../content/histology';
 import { MODES, modeById, type ModeId } from '../content/modes';
 import { BODYPARTS3D, SITE } from '../content/site';
-import { GROUP_COLOR, MESH_TO_KEY, STRUCTURES, structureByKey } from '../content/structures';
+import { GROUP_COLOR, GROUP_ORDER, MESH_TO_KEY, structureByKey, structuresIn } from '../content/structures';
 import { SYSTEM_LABEL, type NumberingSystem } from '../content/teeth';
 import { modeHref, replaceSelection } from '../lib/route';
-import { buildToothSection } from '../viewer/histologyModel';
-import { Viewer } from '../viewer/Viewer';
+import { Viewer, type View } from '../viewer/Viewer';
+import { Segmented, Switch } from './controls';
 import { archOf, labelFor } from './describe';
-import InfoCard from './InfoCard';
-import StructureList from './StructureList';
+import DetailCard from './DetailCard';
+import Icon from './Icon';
+import Search, { type SearchItem } from './Search';
 import './atlas.css';
 
 type ArchFilter = 'both' | 'upper' | 'lower';
-const BITE_OPEN = { x: 0, y: -1.8, z: 0.4 };
-const headGroups = Object.keys(GROUPS);
-const tissueKeys = TISSUES.map((t) => t.key);
+const BITE_OPEN = { x: 0, y: -1.6, z: 0.3 };
+const VIEWS: [View, string, string][] = [['front', 'F', 'Front'], ['side', 'S', 'Side'], ['back', 'B', 'Back'], ['top', 'T', 'Top']];
+const STAGE_LABEL: Record<ModeId, string> = {
+  general: 'Head and neck · adult male',
+  dental: 'Permanent dentition',
+  histology: 'Longitudinal section · schematic',
+};
 
-function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
-  return (
-    <div className="segmented" role="radiogroup" aria-label={label}>
-      {options.map(([v, text]) => (
-        <button key={v} role="radio" aria-checked={value === v} onClick={() => onChange(v)}>{text}</button>
-      ))}
-    </div>
-  );
+interface Layer { id: string; label: string; color: string; count: number }
+
+function layersFor(modeId: ModeId, model: string): Layer[] {
+  if (modeId === 'histology') return TISSUES.map((t) => ({ id: t.key, label: t.name, color: t.color, count: 1 }));
+  const inModel = structuresIn(model);
+  return GROUP_ORDER.filter((g) => inModel.some((s) => s.group === g)).map((g) => ({
+    id: g, label: GROUPS[g].label, color: GROUP_COLOR[g], count: inModel.filter((s) => s.group === g).length,
+  }));
 }
 
 export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; initialSelected?: string }) {
   const mode = modeById(modeId)!;
+  const modelName = mode.model.replace(/^.*\/|\.glb$/g, '');
   const canvas = useRef<HTMLCanvasElement>(null);
   const viewer = useRef<Viewer | null>(null);
 
@@ -38,16 +44,22 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [selected, setSelected] = useState<string | null>(initialSelected ?? null);
   const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
   const [visible, setVisible] = useState<string[]>(mode.defaultVisible);
-  const [showContext, setShowContext] = useState(true);
   const [isolated, setIsolated] = useState(false);
+  const [explode, setExplode] = useState(0);
+  const [autoRotate, setAutoRotate] = useState(false);
+  const [view, setView] = useState<View | null>('front');
   const [system, setSystem] = useState<NumberingSystem>('fdi');
   const [arch, setArch] = useState<ArchFilter>('both');
   const [biteOpen, setBiteOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
 
-  const allGroups = mode.model === 'tooth-section' ? tissueKeys : headGroups;
-  const listGroups = mode.id === 'dental' ? [...mode.defaultVisible, ...(mode.context ?? [])] : visible;
+  const layers = useMemo(() => layersFor(modeId, modelName), [modeId, modelName]);
+  const context = (mode.context ?? []).filter((g) => !visible.includes(g));
+  const piecesVisible = layers.filter((l) => visible.includes(l.id)).reduce((t, l) => t + l.count, 0);
+  const totalPieces = layers.reduce((t, l) => t + l.count, 0);
 
-  // Viewer lifecycle: one per mount (App keys this component by model).
+  // One viewer and one model per mode (App keys this component by mode).
   useEffect(() => {
     if (!canvas.current) return;
     const v = new Viewer(canvas.current);
@@ -56,43 +68,27 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     v.onHover = (key, at) => setHover(key && at ? { key, ...at } : null);
     v.onPick = (key) => setSelected(key);
     let cancelled = false;
-    const load = mode.model === 'tooth-section'
-      ? Promise.resolve(v.loadGroup(buildToothSection(), (key) => ({ key, group: key, color: TISSUES.find((t) => t.key === key)!.color })))
-      : v.loadGLB('/models/head.glb', (id) => {
-        const key = MESH_TO_KEY.get(id);
-        const s = key ? structureByKey(key) : undefined;
-        return s ? { key: s.key, group: s.group, color: GROUP_COLOR[s.group] ?? '#ddd' } : null;
-      });
-    load.then(() => !cancelled && setReady(true)).catch(() => !cancelled && setError('The 3D model could not be loaded. Check your connection and reload.'));
+    v.loadGLB(mode.model, (node) => {
+      if (modeId === 'histology') {
+        const t = TISSUES.find((x) => x.key === node);
+        return t ? { key: t.key, group: t.key, color: t.color } : null;
+      }
+      const key = MESH_TO_KEY.get(node);
+      const s = key ? structureByKey(key) : undefined;
+      return s ? { key: s.key, group: s.group, color: GROUP_COLOR[s.group] ?? '#ddd' } : null;
+    })
+      .then(() => !cancelled && setReady(true))
+      .catch(() => !cancelled && setError('The 3D model could not be loaded. Check your connection and reload.'));
     return () => { cancelled = true; v.dispose(); viewer.current = null; };
-  }, [mode.model]);
+  }, [mode.model, modeId]);
 
-  // Reset per-mode state when switching between modes that share a model.
-  const lastMode = useRef(modeId);
-  useEffect(() => {
-    if (lastMode.current === modeId) return;
-    lastMode.current = modeId;
-    setVisible(mode.defaultVisible);
-    setShowContext(true);
-    setIsolated(false);
-    setArch('both');
-    setBiteOpen(false);
-    setSelected(initialSelected ?? null);
-  }, [modeId, mode.defaultVisible, initialSelected]);
-
-  // Push state into the viewer.
-  useEffect(() => {
-    viewer.current?.setVisibleGroups(visible, showContext ? mode.context ?? [] : []);
-  }, [visible, showContext, mode.context, ready]);
-
-  useEffect(() => {
-    viewer.current?.setFilter(arch === 'both' ? () => true : (key) => archOf(key) === arch);
-  }, [arch, ready]);
-
-  useEffect(() => {
-    viewer.current?.setOffset((key) => archOf(key) === 'lower', biteOpen ? BITE_OPEN : { x: 0, y: 0, z: 0 });
-  }, [biteOpen, ready]);
-
+  // Push React state into the viewer.
+  useEffect(() => { viewer.current?.setVisibleGroups(visible, context); }, [visible, context.join(), ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { viewer.current?.setFilter(arch === 'both' ? () => true : (key) => archOf(key) === arch); }, [arch, ready]);
+  useEffect(() => { viewer.current?.setOffset((key) => archOf(key) === 'lower', biteOpen ? BITE_OPEN : { x: 0, y: 0, z: 0 }); }, [biteOpen, ready]);
+  useEffect(() => { viewer.current?.setExplode(explode); }, [explode, ready]);
+  useEffect(() => { viewer.current?.setAutoRotate(autoRotate); }, [autoRotate, ready]);
+  useEffect(() => { viewer.current?.setIsolated(isolated); }, [isolated, ready]);
   useEffect(() => {
     if (!ready) return;
     viewer.current?.select(selected);
@@ -100,97 +96,166 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     if (!selected) setIsolated(false);
   }, [selected, ready, modeId]);
 
-  useEffect(() => { viewer.current?.setIsolated(isolated); }, [isolated, ready]);
-
-  // Frame the visible set when a mode opens or the arch changes.
-  useEffect(() => { if (ready && !selected) viewer.current?.frameAll(); }, [ready, modeId, arch]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Keyboard: Escape clears the selection.
+  // Refit once the slider settles; the inventory (past 50%) reads best face-on.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSelected(null);
+    if (!ready) return;
+    const id = setTimeout(() => {
+      if (explode > 0.5) { viewer.current?.setView('front'); setView('front'); } else viewer.current?.fit();
+    }, 220);
+    return () => clearTimeout(id);
+  }, [explode, ready]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setSelected(null); setCreditsOpen(false); }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const toggleGroup = (g: string) => setVisible((v) => (v.includes(g) ? v.filter((x) => x !== g) : [...v, g]));
-  const counts = useMemo(() => Object.fromEntries(headGroups.map((g) => [g, STRUCTURES.filter((s) => s.group === g).length])), []);
+  const searchItems: SearchItem[] = useMemo(() => {
+    if (modeId === 'histology') return TISSUES.map((t) => ({ key: t.key, label: t.name, group: 'Tissue', color: t.color }));
+    return structuresIn(modelName).map((s) => ({ key: s.key, label: labelFor(modeId, s.key, system), group: GROUPS[s.group].label, color: GROUP_COLOR[s.group] }));
+  }, [modeId, modelName, system]);
+
+  const toggle = (id: string, on: boolean) => setVisible((v) => (on ? [...new Set([...v, id])] : v.filter((x) => x !== id)));
+  const activePreset = mode.presets.find((p) => p.groups.length === visible.length && p.groups.every((g) => visible.includes(g)))?.label ?? null;
+  const goView = (v: View) => { setView(v); viewer.current?.setView(v); };
+  const resetAll = () => {
+    setSelected(null); setExplode(0); setIsolated(false); setBiteOpen(false); setArch('both');
+    setVisible(mode.defaultVisible); setAutoRotate(false); setView('front');
+    requestAnimationFrame(() => viewer.current?.setView('front'));
+  };
+  const stageLabel = explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
 
   return (
-    <div className="atlas">
-      <header className="atlas__bar">
-        <a className="atlas__wordmark" href="#/">{SITE.name}</a>
-        <nav className="atlas__modes" aria-label="Mode">
-          {MODES.map((m) => (
-            <a key={m.id} href={modeHref(m.id)} aria-current={m.id === modeId ? 'page' : undefined}>
-              <span className="atlas__mode-long">{m.name}</span><span className="atlas__mode-short">{m.short}</span>
-            </a>
-          ))}
-        </nav>
-        <button className="button button--quiet atlas__reset" onClick={() => { setSelected(null); viewer.current?.resetView(); }}>Reset view</button>
+    <div className="atlas" data-mode={modeId}>
+      <div className="atlas__stage">
+        <span className="floor" aria-hidden="true" />
+        <canvas ref={canvas} aria-label={`${mode.name} 3D model`} role="img" />
+        <p className="floor__label" aria-hidden="true">{stageLabel}</p>
+        {!ready && !error && <p className="atlas__status">Loading the {mode.name.toLowerCase()} model…</p>}
+        {error && <p className="atlas__status atlas__status--error" role="alert">{error}</p>}
+        {hover && hover.key !== selected && (
+          <p className="tag" style={{ transform: `translate(${hover.x}px, ${hover.y + 22}px) translateX(-50%)` }}>
+            {labelFor(modeId, hover.key, system)}
+          </p>
+        )}
+      </div>
+
+      <header className="brand">
+        <p className="brand__eyebrow"><span className="brand__dot" />{SITE.eyebrow}</p>
+        <h1>{SITE.name} <span className="chip">3D</span></h1>
+        <p className="brand__meta">{totalPieces} modeled pieces · {mode.source === 'blender' ? 'Modeled in Blender' : 'BodyParts3D'}</p>
       </header>
 
-      <section className="atlas__stage" aria-label={`${mode.name} model`}>
-        <canvas ref={canvas} aria-hidden="true" />
-        {!ready && !error && <p className="atlas__loading">Loading the {mode.model === 'head' ? 'head and neck' : 'tooth section'}…</p>}
-        {error && <p className="atlas__error" role="alert">{error}</p>}
-        {hover && hover.key !== selected && (
-          <p className="atlas__tag" style={{ transform: `translate(${hover.x + 14}px, ${hover.y + 14}px)` }}>{labelFor(modeId, hover.key, system)}</p>
-        )}
-        <div className="atlas__controls">
-          {mode.id === 'dental' && (
-            <>
-              <Segmented label="Numbering system" value={system} onChange={setSystem} options={(['fdi', 'universal', 'palmer'] as const).map((s) => [s, SYSTEM_LABEL[s]])} />
-              <Segmented label="Arch" value={arch} onChange={setArch} options={[['both', 'Both arches'], ['upper', 'Upper'], ['lower', 'Lower']]} />
-              <button className="chip" aria-pressed={biteOpen} onClick={() => setBiteOpen((b) => !b)}>Open bite</button>
-              <button className="chip" aria-pressed={showContext} onClick={() => setShowContext((b) => !b)}>Jaw bones</button>
-            </>
-          )}
-          {selected && (
-            <button className="chip" aria-pressed={isolated} onClick={() => setIsolated((b) => !b)}>{isolated ? 'Show surroundings' : 'Isolate'}</button>
-          )}
+      <nav className="card modes" aria-label="Mode">
+        {MODES.map((m) => (
+          <a key={m.id} href={modeHref(m.id)} aria-current={m.id === modeId ? 'page' : undefined}>
+            <span className="modes__long">{m.name}</span><span className="modes__short">{m.short}</span>
+          </a>
+        ))}
+      </nav>
+
+      <div className="topright">
+        <Search items={searchItems} onSelect={setSelected} />
+        <button className="card icon-button" aria-label="Sources and credits" aria-expanded={creditsOpen} onClick={() => setCreditsOpen((o) => !o)}>
+          <Icon name="info" />
+        </button>
+      </div>
+
+      <button className="card layers-toggle" aria-expanded={layersOpen} onClick={() => setLayersOpen((o) => !o)}>
+        <Icon name="layers" /> Layers
+      </button>
+      <section className={`card layers${layersOpen ? ' is-open' : ''}`} aria-labelledby="layers-title">
+        <div className="layers__head">
+          <h2 id="layers-title">{modeId === 'histology' ? 'Tissues' : 'Layers'}</h2>
+          <span className="count">{layers.length}</span>
         </div>
-        <p className="atlas__hint">Drag to turn · scroll or pinch to zoom · right-drag to pan · tap a structure</p>
+        <Segmented label="Layer preset" value={activePreset} options={mode.presets.map((p) => [p.label, p.label])}
+          onChange={(label) => setVisible(mode.presets.find((p) => p.label === label)!.groups)} />
+        <ul className="layers__list">
+          {layers.map((l) => (
+            <li key={l.id}>
+              <span className="dot" style={{ background: l.color }} aria-hidden="true" />
+              <span className="layers__label">{l.label}</span>
+              {modeId !== 'histology' && <span className="layers__count">{l.count}</span>}
+              <Switch label={`Show ${l.label}`} checked={visible.includes(l.id)} onChange={(on) => toggle(l.id, on)} />
+            </li>
+          ))}
+        </ul>
+        {modeId === 'dental' && (
+          <div className="layers__extra">
+            <p className="layers__caption">Numbering</p>
+            <Segmented label="Numbering system" value={system} onChange={setSystem}
+              options={(['fdi', 'universal', 'palmer'] as const).map((s) => [s, SYSTEM_LABEL[s]])} />
+            <p className="layers__caption">Arch</p>
+            <Segmented label="Arch" value={arch} onChange={setArch} options={[['both', 'Both'], ['upper', 'Upper'], ['lower', 'Lower']]} />
+            <div className="layers__row">
+              <span>Open bite</span>
+              <Switch label="Open bite" checked={biteOpen} onChange={setBiteOpen} />
+            </div>
+          </div>
+        )}
+        <div className="layers__foot">
+          <span>{piecesVisible} {modeId === 'histology' ? 'tissues' : 'pieces'} visible</span>
+          <button className="text-button" onClick={() => setVisible(piecesVisible ? [] : layers.map((l) => l.id))}>
+            {piecesVisible ? 'Hide all' : 'Show all'}
+          </button>
+        </div>
       </section>
 
-      <aside className="atlas__panel" aria-label="Details">
-        {selected ? (
-          <div className="atlas__selected">
-            <InfoCard mode={modeId} selected={selected} />
-            <button className="link atlas__clear" onClick={() => setSelected(null)}>Clear selection</button>
+      <div className="card toolbar" role="toolbar" aria-label="View">
+        <button className="icon-button" aria-pressed={autoRotate} aria-label="Auto-rotate" onClick={() => setAutoRotate((a) => !a)}>
+          <Icon name="rotate" />
+        </button>
+        <span className="toolbar__sep" />
+        {VIEWS.map(([v, letter, name]) => (
+          <button key={v} className="toolbar__view" aria-pressed={view === v} aria-label={`${name} view`} title={`${name} view`} onClick={() => goView(v)}>
+            {letter}
+          </button>
+        ))}
+        <span className="toolbar__sep" />
+        <button className="icon-button" aria-label="Reset everything" title="Reset" onClick={resetAll}><Icon name="reset" /></button>
+      </div>
+
+      <section className="card explode" aria-labelledby="explode-title">
+        <div className="explode__main">
+          <div className="explode__head">
+            <h2 id="explode-title">Explode anatomy</h2>
+            <output className="chip chip--value" htmlFor="explode-range">{Math.round(explode * 100)}<small>%</small></output>
           </div>
-        ) : (
-          <div className="atlas__intro">
-            <h1>{mode.name}</h1>
-            <p>{mode.lead}</p>
-          </div>
-        )}
+          <input id="explode-range" type="range" min={0} max={100} value={Math.round(explode * 100)}
+            onChange={(e) => setExplode(Number(e.target.value) / 100)} style={{ '--fill': `${explode * 100}%` } as React.CSSProperties} />
+          <div className="explode__ends"><span>Assembled</span><span>Every piece</span></div>
+        </div>
+        <button className="explode__reset" onClick={() => setExplode(0)} disabled={explode === 0}>
+          <Icon name="reset" /> <span>Reset</span>
+        </button>
+      </section>
 
-        {mode.id !== 'dental' && (
-          <fieldset className="layers">
-            <legend>{mode.model === 'tooth-section' ? 'Tissues' : 'Layers'}</legend>
-            {allGroups.map((g) => {
-              const tissue = TISSUES.find((t) => t.key === g);
-              return (
-                <label key={g} className="layers__item">
-                  <input type="checkbox" checked={visible.includes(g)} onChange={() => toggleGroup(g)} />
-                  <span className="swatch" style={{ background: tissue?.color ?? GROUP_COLOR[g] }} aria-hidden="true" />
-                  {tissue?.name ?? GROUPS[g].label}
-                  {!tissue && <span className="layers__count">{counts[g]}</span>}
-                </label>
-              );
-            })}
-          </fieldset>
-        )}
+      {selected && (
+        <DetailCard mode={modeId} selected={selected} isolated={isolated}
+          onIsolate={() => setIsolated((i) => !i)} onClear={() => setSelected(null)} />
+      )}
 
-        <StructureList mode={modeId} groups={mode.model === 'tooth-section' ? tissueKeys : listGroups} system={system} selected={selected} onSelect={setSelected} />
+      {creditsOpen && (
+        <aside className="card credits" aria-label="Sources and credits">
+          <button className="icon-button detail__close" onClick={() => setCreditsOpen(false)} aria-label="Close"><Icon name="close" /></button>
+          <h2>Sources &amp; credits</h2>
+          <p>
+            General and dental models: <a href={BODYPARTS3D.url}>{BODYPARTS3D.name}</a>, {BODYPARTS3D.by},{' '}
+            <a href={BODYPARTS3D.license.url}>{BODYPARTS3D.license.name}</a>; extracted from the packaging in{' '}
+            <a href={BODYPARTS3D.via.url}>{BODYPARTS3D.via.name}</a> and simplified for the web.
+          </p>
+          <p>Histology model: authored for {SITE.name} in Blender. It is schematic; proportions are stylised for teaching.</p>
+          <p>Not in the source data: muscles of mastication, trigeminal branches, facial and maxillary arteries, parotid gland, third molars, primary teeth.</p>
+          <p>For study only. Not for diagnosis or treatment planning. <a href={SITE.repo}>Source code</a> (MIT).</p>
+        </aside>
+      )}
 
-        <p className="atlas__credit">
-          {mode.model === 'head'
-            ? <>Geometry: <a className="link" href={BODYPARTS3D.url}>{BODYPARTS3D.name}</a>, {BODYPARTS3D.by}, <a className="link" href={BODYPARTS3D.license.url}>{BODYPARTS3D.license.name}</a>. Simplified for the web.</>
-            : <>A schematic section drawn in code; proportions are stylised for teaching.</>}
-          {' '}For study only, not clinical use.
-        </p>
-      </aside>
+      <p className="hints" aria-hidden="true">Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect</p>
+      <button className="credits-link" onClick={() => setCreditsOpen(true)}>Source &amp; credits <Icon name="external" size={14} /></button>
     </div>
   );
 }
