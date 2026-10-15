@@ -1,11 +1,11 @@
 ---
 name: add-structure
-description: Add or change anatomical structures and their study notes in Oralis — pull more BodyParts3D meshes into the head model, regroup them, or write notes for structures. Use when the user asks to add a bone, muscle, gland, nerve or vessel, to change which layers exist, or when a content test says a note is missing.
+description: Add or change anatomical structures and their study notes in Oralis — pull more BodyParts3D meshes into the General or Dental model, regroup them, or write notes for structures. Use when the user asks to add a bone, muscle, gland, nerve or vessel, to change which layers exist, or when a content test says a note is missing.
 ---
 
 # Adding structures to Oralis
 
-Everything lives in `logibot/`. The 3D head is generated; the notes are hand-written.
+Everything lives in `logibot/`. The General and Dental models are generated from BodyParts3D; the notes are hand-written.
 
 ## 1. Is it in the source data?
 
@@ -16,29 +16,29 @@ git clone --depth 1 https://github.com/ashemag/human-atlas ../human-atlas   # on
 node -e "const a=require('../human-atlas/public/models/atlas.json');console.log(a.parts.filter(p=>/NAME/i.test(p.name)).map(p=>p.name+' @'+p.system))"
 ```
 
-If it is missing, say so to the user. Do not model anatomy by hand to fill the gap; a supplied GLB can be added as a separate model later.
+If it is missing, say so to the user. It can be authored in Blender instead (`blender-model` skill), clearly labelled as schematic.
 
-## 2. Pull it into the model
+## 2. Pull it into the models
 
-Edit `GROUPS` in `scripts/extract-head.mjs` (first matching regex wins; side prefixes are stripped before matching), then run:
+Edit `GROUPS` (first matching regex wins; side prefixes are stripped) and, if needed, `MODELS` (which groups each mode's GLB gets) in `scripts/extract-bodyparts.mjs`, then:
 
 ```bash
-node scripts/extract-head.mjs ../human-atlas
+node scripts/extract-bodyparts.mjs ../human-atlas
 ```
 
-This rewrites `public/models/head.glb` and `src/content/structures.generated.json`. A hook blocks hand edits to both. Keep the GLB under ~1.5 MB.
+This rewrites `public/models/general.glb`, `public/models/dental.glb` and `src/content/structures.generated.json`. A hook blocks hand edits to all three. Keep each GLB under ~1.5 MB.
 
 ## 3. Describe it
 
-- New group → add `{ label, blurb }` to `GROUPS` in `src/content/anatomy.ts` and a colour to `GROUP_COLOR` in `src/content/structures.ts`. Decide whether it is on by default in `src/content/modes.ts`.
-- New structure → add a note to `NOTES` in `anatomy.ts`, keyed by the source name without "Left/Right", lower-cased. Write `summary`, plus `supply` and `clinical` where they matter to a dentist.
-- Teeth get their facts from `MORPHOLOGY` in `src/content/teeth.ts`, keyed `upper-6`, `lower-3`, etc.
+- New group → `{ label, blurb }` in `GROUPS` (`src/content/anatomy.ts`), a colour in `GROUP_COLOR` (`src/content/structures.ts`), and decide its default visibility and presets in `src/content/modes.ts`.
+- New structure → a note in `NOTES` (`anatomy.ts`), keyed by the source name without "Left/Right", lower-cased: `summary`, plus `supply` and `clinical` where they matter to a dentist.
+- Teeth get facts from `MORPHOLOGY` in `src/content/teeth.ts`, keyed `upper-6`, `lower-3`, etc.
 
 ## 4. Verify
 
 ```bash
-npm test          # content.test.ts fails if any structure lacks a note or group
+npm test          # fails if a structure lacks a note/group or a GLB lacks a mesh
 npm run typecheck
 ```
 
-Then have the `anatomy-reviewer` agent check the new notes, and look at the result with the `visual-check` skill.
+Then the `anatomy-reviewer` agent for the notes and the `visual-check` skill for the result.

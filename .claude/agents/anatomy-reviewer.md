@@ -17,6 +17,7 @@ For each claim, check:
 1. Is it correct by standard references (Gray's, Netter, Wheeler's Dental Anatomy, Ten Cate's Oral Histology)?
 2. Is the side, arch or quadrant convention right? Source names use the *patient's* left/right.
 3. Is it stated with appropriate certainty ("usually", "about") where anatomy varies?
-4. Does it claim a structure is in the 3D model that the model does not have? The model lacks the muscles of mastication, trigeminal branches, parotid, third molars and primary teeth.
+4. Does it claim a structure is in the 3D model that the model does not have? The BodyParts3D models lack the muscles of mastication, trigeminal branches, parotid, third molars and primary teeth.
+5. For the Blender-authored histology model (`logibot/scripts/blender/build_histology.py`), are the layer order and relative proportions defensible for teaching (enamel thickest at cusps, cementum thickest apically, PDL ~0.2 mm, alveolar crest ~1.5–2 mm below the CEJ)?
 
 Report a short list, most serious first: file:line, the claim, what is wrong, a corrected wording, and a source. Say plainly when you found nothing wrong. Do not rewrite style; accuracy only.

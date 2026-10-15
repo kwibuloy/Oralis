@@ -1,7 +1,7 @@
 // Screenshot pages in headless Chrome/Edge at fixed widths and report console errors.
 //   npm run dev                       (in another terminal)
-//   node scripts/shoot.mjs [--out .shots] [--widths 1440,768,390] home dental histology/enamel ...
-// Routes are written without "#/" (Git Bash mangles a leading slash); "home" is the landing page; full URLs work too. Set BASE_URL (default http://localhost:5173/) or CHROME_PATH.
+//   node scripts/shoot.mjs [--out .shots] [--widths 1440,768,390] general dental histology/enamel ...
+// Routes are written without "#/" (Git Bash mangles a leading slash); "home" is the bare URL; full URLs work too. Set BASE_URL (default http://localhost:5173/) or CHROME_PATH.
 import { existsSync, mkdirSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 
@@ -9,7 +9,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const out = opt('--out', '.shots');
 const widths = opt('--widths', '1440,390').split(',').map(Number);
-const pages = args.length ? args : ['home'];
+const pages = args.length ? args : ['general'];
 const urlFor = (r) => (r.startsWith('http') ? r : r === 'home' ? base : `${base}#/${r}`);
 const base = process.env.BASE_URL ?? 'http://localhost:5173/';
 const HEIGHT = { 1440: 900, 1280: 800, 768: 1024, 390: 844 };

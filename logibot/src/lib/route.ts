@@ -1,13 +1,13 @@
 import { useSyncExternalStore } from 'react';
 import { modeById, type ModeId } from '../content/modes';
 
-/** Hash routes: `#/` landing, `#/general`, `#/dental/<structure-key>`, `#/histology/enamel`. */
-export type Route = { view: 'landing' } | { view: 'mode'; mode: ModeId; selected?: string };
+/** Hash routes: `#/general`, `#/dental/<structure-key>`, `#/histology/enamel`. Anything else opens General anatomy. */
+export interface Route { mode: ModeId; selected?: string }
 
 export function parseRoute(hash: string): Route {
   const [, mode, selected] = hash.replace(/^#/, '').split('/');
   const m = mode ? modeById(mode) : undefined;
-  return m ? { view: 'mode', mode: m.id, selected: selected ? decodeURIComponent(selected) : undefined } : { view: 'landing' };
+  return m ? { mode: m.id, selected: selected ? decodeURIComponent(selected) : undefined } : { mode: 'general' };
 }
 
 const subscribe = (cb: () => void) => {

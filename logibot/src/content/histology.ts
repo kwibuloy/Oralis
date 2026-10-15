@@ -45,6 +45,17 @@ export const TISSUES: Tissue[] = [
     clinical: 'Enclosed in rigid dentin, inflamed pulp cannot swell, so pressure builds: one reason pulpitis is so painful.',
   },
   {
+    key: 'neurovascular', name: 'Neurovascular bundle', color: '#e8c547',
+    composition: 'Arterioles, venules, lymphatics and nerve fibres that enter and leave the pulp through the apical foramen (and accessory canals).',
+    cells: 'Endothelial cells and pericytes in the vessels; myelinated A-delta and unmyelinated C fibres from the trigeminal nerve, plus sympathetic fibres.',
+    features: [
+      'A-delta fibres near the pulp–dentin border give sharp, well-localised pain; C fibres in the pulp core give dull, poorly localised pain.',
+      'Vessels branch into a dense subodontoblastic capillary plexus.',
+      'Sympathetic fibres regulate pulpal blood flow.',
+    ],
+    clinical: 'Because the supply passes through a small apical foramen, severe inflammation can strangle it and cause pulp necrosis.',
+  },
+  {
     key: 'cementum', name: 'Cementum', color: '#d9b67a',
     composition: 'About 45–50% mineral; avascular and not innervated.',
     cells: 'Cementoblasts on the surface; cementocytes trapped in lacunae within cellular cementum.',
@@ -67,7 +78,18 @@ export const TISSUES: Tissue[] = [
     clinical: 'On a radiograph the ligament shows as a thin dark line around the root; widening can indicate trauma from occlusion or apical pathology.',
   },
   {
-    key: 'bone', name: 'Alveolar bone', color: '#b9ab92',
+    key: 'lamina-dura', name: 'Lamina dura', color: '#efe7d6',
+    composition: 'The alveolar bone proper: a thin plate of compact bone lining the socket, including bundle bone.',
+    cells: 'Osteoblasts and osteoclasts on its surface; osteocytes within.',
+    features: [
+      'Bundle bone holds the bone-side ends of the periodontal ligament’s Sharpey’s fibres.',
+      'Perforated by many small canals (it is also called the cribriform plate) that carry vessels and nerves into the ligament.',
+      'Seen on radiographs as a thin white line around the root.',
+    ],
+    clinical: 'Loss of the lamina dura around an apex on a radiograph is an early sign of periapical pathology.',
+  },
+  {
+    key: 'bone', name: 'Alveolar bone', color: '#c9b99a',
     composition: 'The part of the jaw that exists to hold teeth; it resorbs once teeth are lost.',
     cells: 'Osteoblasts, osteocytes and osteoclasts, constantly remodelling.',
     features: [

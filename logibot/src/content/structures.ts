@@ -11,6 +11,8 @@ export interface Structure {
   /** BodyParts3D mesh ids (node names in head.glb). */
   meshIds: string[];
   fma: string;
+  /** Mode models that contain this structure. */
+  models: string[];
   tooth?: Tooth;
 }
 
@@ -20,7 +22,7 @@ for (const r of records) {
   if (existing) { existing.meshIds.push(r.id); continue; }
   const tooth = r.group === 'teeth' ? parseTooth(r.name) ?? undefined : undefined;
   byKey.set(r.key, {
-    key: r.key, sourceName: r.name, group: r.group, meshIds: [r.id], fma: r.fma, tooth,
+    key: r.key, sourceName: r.name, group: r.group, meshIds: [r.id], fma: r.fma, models: r.models, tooth,
     name: tooth?.name ?? r.name.charAt(0).toUpperCase() + r.name.slice(1),
   });
 }
@@ -30,8 +32,11 @@ export const structureByKey = (key: string) => byKey.get(key);
 export const MESH_TO_KEY = new Map(STRUCTURES.flatMap((s) => s.meshIds.map((id) => [id, s.key] as const)));
 export const GROUP_ORDER = Object.keys(GROUPS);
 
-/** Display colours per group, tuned to read against the warm-black stage. */
+/** Structures present in a mode's model. */
+export const structuresIn = (model: string) => STRUCTURES.filter((s) => s.models.includes(model));
+
+/** Display colours per group, tuned for the light atlas canvas. */
 export const GROUP_COLOR: Record<string, string> = {
-  teeth: '#f7f2e8', gingiva: '#d98c8a', mandible: '#e4d8bf', maxilla: '#e4d8bf', skull: '#d9ccb0', 'neck-bones': '#d9ccb0',
-  suprahyoid: '#b8665a', infrahyoid: '#a85b52', tongue: '#cf7f78', 'palate-pharynx': '#ad6b62', glands: '#d6b26a', lips: '#c98a7a',
+  teeth: '#f6f1e7', gingiva: '#e08f8c', mandible: '#e9e0cc', maxilla: '#e9e0cc', skull: '#e3d9c3', 'neck-bones': '#e3d9c3',
+  suprahyoid: '#c9655a', infrahyoid: '#bb5c52', tongue: '#d9847c', 'palate-pharynx': '#c06e64', glands: '#e0b65c', lips: '#d68f80',
 };

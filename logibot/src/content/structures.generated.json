@@ -5,7 +5,10 @@
   "name": "Gingiva of upper jaw",
   "group": "gingiva",
   "fma": "FMA59763",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1253",
@@ -13,7 +16,10 @@
   "name": "Gingiva of lower jaw",
   "group": "gingiva",
   "fma": "FMA59764",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1254",
@@ -21,7 +27,10 @@
   "name": "Left lower first secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55704",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1255",
@@ -29,7 +38,10 @@
   "name": "Left lower first secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55693",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1256",
@@ -37,7 +49,10 @@
   "name": "Left lower second secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55703",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1257",
@@ -45,7 +60,10 @@
   "name": "Left lower second secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55692",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1258",
@@ -53,7 +71,10 @@
   "name": "Left lower central secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA57143",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1259",
@@ -61,7 +82,10 @@
   "name": "Left lower lateral secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA57141",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1260",
@@ -69,7 +93,10 @@
   "name": "Left lower secondary canine tooth",
   "group": "teeth",
   "fma": "FMA55687",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1261",
@@ -77,7 +104,10 @@
   "name": "Left upper first secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55699",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1262",
@@ -85,7 +115,10 @@
   "name": "Left upper first secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55690",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1263",
@@ -93,7 +126,10 @@
   "name": "Left upper second secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55700",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1264",
@@ -101,7 +137,10 @@
   "name": "Left upper second secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55691",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1265",
@@ -109,7 +148,10 @@
   "name": "Left upper central secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA55682",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1266",
@@ -117,7 +159,10 @@
   "name": "Left upper lateral secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA55683",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1267",
@@ -125,7 +170,10 @@
   "name": "Left upper secondary canine tooth",
   "group": "teeth",
   "fma": "FMA55799",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1268",
@@ -133,7 +181,10 @@
   "name": "Right lower first secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55705",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1269",
@@ -141,7 +192,10 @@
   "name": "Right lower first secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55694",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1270",
@@ -149,7 +203,10 @@
   "name": "Right lower second secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55706",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1271",
@@ -157,7 +214,10 @@
   "name": "Right lower second secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55695",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1272",
@@ -165,7 +225,10 @@
   "name": "Right lower central secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA57142",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1273",
@@ -173,7 +236,10 @@
   "name": "Right lower lateral secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA57140",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1274",
@@ -181,7 +247,10 @@
   "name": "Right lower secondary canine tooth",
   "group": "teeth",
   "fma": "FMA55686",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1275",
@@ -189,7 +258,10 @@
   "name": "Right upper second secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55697",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1276",
@@ -197,7 +269,10 @@
   "name": "Right upper first secondary molar tooth",
   "group": "teeth",
   "fma": "FMA55698",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1277",
@@ -205,7 +280,10 @@
   "name": "Right upper first secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55689",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1278",
@@ -213,7 +291,10 @@
   "name": "Right upper second secondary premolar tooth",
   "group": "teeth",
   "fma": "FMA55688",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1279",
@@ -221,7 +302,10 @@
   "name": "Right upper central secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA55681",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1280",
@@ -229,7 +313,10 @@
   "name": "Right upper lateral secondary incisor tooth",
   "group": "teeth",
   "fma": "FMA55680",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1281",
@@ -237,7 +324,10 @@
   "name": "Right upper secondary canine tooth",
   "group": "teeth",
   "fma": "FMA55798",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ1555",
@@ -245,7 +335,9 @@
   "name": "Left digastric",
   "group": "suprahyoid",
   "fma": "FMA46293",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1556",
@@ -253,7 +345,9 @@
   "name": "Right digastric",
   "group": "suprahyoid",
   "fma": "FMA46292",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1558",
@@ -261,7 +355,9 @@
   "name": "Left platysma",
   "group": "infrahyoid",
   "fma": "FMA45740",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1559",
@@ -269,7 +365,9 @@
   "name": "Left geniohyoid",
   "group": "suprahyoid",
   "fma": "FMA46327",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1560",
@@ -277,7 +375,9 @@
   "name": "Left digastric",
   "group": "suprahyoid",
   "fma": "FMA46293",
-  "part": 2
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1562",
@@ -285,7 +385,9 @@
   "name": "Left mylohyoid",
   "group": "suprahyoid",
   "fma": "FMA46322",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1565",
@@ -293,7 +395,9 @@
   "name": "Left omohyoid",
   "group": "infrahyoid",
   "fma": "FMA13349",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1573",
@@ -301,7 +405,9 @@
   "name": "Left sternocleidomastoid",
   "group": "infrahyoid",
   "fma": "FMA13409",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1574",
@@ -309,7 +415,9 @@
   "name": "Left sternohyoid",
   "group": "infrahyoid",
   "fma": "FMA13347",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1576",
@@ -317,7 +425,9 @@
   "name": "Left stylohyoid",
   "group": "suprahyoid",
   "fma": "FMA45827",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1577",
@@ -325,7 +435,9 @@
   "name": "Left thyrohyoid",
   "group": "infrahyoid",
   "fma": "FMA13353",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1578",
@@ -333,7 +445,9 @@
   "name": "Left digastric",
   "group": "suprahyoid",
   "fma": "FMA46293",
-  "part": 3
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1579",
@@ -341,7 +455,9 @@
   "name": "Right digastric",
   "group": "suprahyoid",
   "fma": "FMA46292",
-  "part": 2
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1580",
@@ -349,7 +465,9 @@
   "name": "Right geniohyoid",
   "group": "suprahyoid",
   "fma": "FMA46326",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1583",
@@ -357,7 +475,9 @@
   "name": "Right mylohyoid",
   "group": "suprahyoid",
   "fma": "FMA46321",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1586",
@@ -365,7 +485,9 @@
   "name": "Right omohyoid",
   "group": "infrahyoid",
   "fma": "FMA13348",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1587",
@@ -373,7 +495,9 @@
   "name": "Right platysma",
   "group": "infrahyoid",
   "fma": "FMA45739",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1595",
@@ -381,7 +505,9 @@
   "name": "Right sternocleidomastoid",
   "group": "infrahyoid",
   "fma": "FMA13408",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1596",
@@ -389,7 +515,9 @@
   "name": "Right sternohyoid",
   "group": "infrahyoid",
   "fma": "FMA13346",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1598",
@@ -397,7 +525,9 @@
   "name": "Right stylohyoid",
   "group": "suprahyoid",
   "fma": "FMA45826",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ1599",
@@ -405,7 +535,9 @@
   "name": "Right thyrohyoid",
   "group": "infrahyoid",
   "fma": "FMA13352",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2738",
@@ -413,7 +545,9 @@
   "name": "Left genioglossus",
   "group": "tongue",
   "fma": "FMA46702",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2739",
@@ -421,7 +555,9 @@
   "name": "Left hyoglossus",
   "group": "tongue",
   "fma": "FMA46704",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2740",
@@ -429,7 +565,9 @@
   "name": "Left inferior pharyngeal constrictor",
   "group": "palate-pharynx",
   "fma": "FMA46636",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2741",
@@ -437,7 +575,9 @@
   "name": "Left levator veli palatini",
   "group": "palate-pharynx",
   "fma": "FMA46729",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2742",
@@ -445,7 +585,9 @@
   "name": "Right middle pharyngeal constrictor",
   "group": "palate-pharynx",
   "fma": "FMA46633",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2743",
@@ -453,7 +595,9 @@
   "name": "Left palatopharyngeus",
   "group": "palate-pharynx",
   "fma": "FMA46672",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2744",
@@ -461,7 +605,9 @@
   "name": "Left pterygomandibular raphe",
   "group": "palate-pharynx",
   "fma": "FMA55620",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2745",
@@ -469,7 +615,9 @@
   "name": "Left salpingopharyngeus",
   "group": "palate-pharynx",
   "fma": "FMA46670",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2746",
@@ -477,7 +625,9 @@
   "name": "Left stylopharyngeus",
   "group": "palate-pharynx",
   "fma": "FMA46668",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2747",
@@ -485,7 +635,9 @@
   "name": "Left superior pharyngeal constrictor",
   "group": "palate-pharynx",
   "fma": "FMA46632",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2748",
@@ -493,7 +645,9 @@
   "name": "Left tensor veli palatini",
   "group": "palate-pharynx",
   "fma": "FMA46732",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2750",
@@ -501,7 +655,9 @@
   "name": "Right genioglossus",
   "group": "tongue",
   "fma": "FMA46698",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2751",
@@ -509,7 +665,9 @@
   "name": "Right hyoglossus",
   "group": "tongue",
   "fma": "FMA46703",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2752",
@@ -517,7 +675,9 @@
   "name": "Right inferior pharyngeal constrictor",
   "group": "palate-pharynx",
   "fma": "FMA46635",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2753",
@@ -525,7 +685,9 @@
   "name": "Right levator veli palatini",
   "group": "palate-pharynx",
   "fma": "FMA46728",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2754",
@@ -533,7 +695,9 @@
   "name": "Left middle pharyngeal constrictor",
   "group": "palate-pharynx",
   "fma": "FMA46634",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2755",
@@ -541,7 +705,9 @@
   "name": "Right palatopharyngeus",
   "group": "palate-pharynx",
   "fma": "FMA46671",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2756",
@@ -549,7 +715,9 @@
   "name": "Right pterygomandibular raphe",
   "group": "palate-pharynx",
   "fma": "FMA55619",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2757",
@@ -557,7 +725,9 @@
   "name": "Right salpingopharyngeus",
   "group": "palate-pharynx",
   "fma": "FMA46669",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2758",
@@ -565,7 +735,9 @@
   "name": "Right stylopharyngeus",
   "group": "palate-pharynx",
   "fma": "FMA46667",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2759",
@@ -573,7 +745,9 @@
   "name": "Right superior pharyngeal constrictor",
   "group": "palate-pharynx",
   "fma": "FMA46631",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2760",
@@ -581,7 +755,9 @@
   "name": "Right tensor veli palatini",
   "group": "palate-pharynx",
   "fma": "FMA46731",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2761",
@@ -589,7 +765,9 @@
   "name": "Tongue",
   "group": "tongue",
   "fma": "FMA54640",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2762",
@@ -597,7 +775,9 @@
   "name": "Uvular muscle",
   "group": "palate-pharynx",
   "fma": "FMA46733",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2763",
@@ -605,7 +785,9 @@
   "name": "Left stylohyoid ligament",
   "group": "palate-pharynx",
   "fma": "FMA72311",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2764",
@@ -613,7 +795,9 @@
   "name": "Right stylohyoid ligament",
   "group": "palate-pharynx",
   "fma": "FMA72309",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2765",
@@ -621,7 +805,9 @@
   "name": "Left sublingual gland",
   "group": "glands",
   "fma": "FMA59805",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2766",
@@ -629,7 +815,9 @@
   "name": "Left submandibular gland",
   "group": "glands",
   "fma": "FMA59803",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2767",
@@ -637,7 +825,9 @@
   "name": "Right sublingual gland",
   "group": "glands",
   "fma": "FMA59804",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2768",
@@ -645,7 +835,9 @@
   "name": "Right submandibular gland",
   "group": "glands",
   "fma": "FMA59802",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2770",
@@ -653,7 +845,9 @@
   "name": "Epiglottis",
   "group": "palate-pharynx",
   "fma": "FMA55130",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2772",
@@ -661,7 +855,9 @@
   "name": "Hyoid bone",
   "group": "neck-bones",
   "fma": "FMA52749",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ2814",
@@ -669,7 +865,9 @@
   "name": "Lip",
   "group": "lips",
   "fma": "FMA59816",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3176",
@@ -677,7 +875,9 @@
   "name": "Atlas",
   "group": "neck-bones",
   "fma": "FMA12519",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3177",
@@ -685,7 +885,9 @@
   "name": "Axis",
   "group": "neck-bones",
   "fma": "FMA12520",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3199",
@@ -693,7 +895,9 @@
   "name": "Ethmoid",
   "group": "skull",
   "fma": "FMA52740",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3200",
@@ -701,7 +905,9 @@
   "name": "Frontal bone",
   "group": "skull",
   "fma": "FMA52734",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3201",
@@ -709,7 +915,9 @@
   "name": "Hyoid bone",
   "group": "neck-bones",
   "fma": "FMA52749",
-  "part": 2
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3263",
@@ -717,7 +925,9 @@
   "name": "Left inferior nasal concha",
   "group": "skull",
   "fma": "FMA54738",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3265",
@@ -725,7 +935,9 @@
   "name": "Left lacrimal bone",
   "group": "skull",
   "fma": "FMA53646",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3269",
@@ -733,7 +945,10 @@
   "name": "Left maxilla",
   "group": "maxilla",
   "fma": "FMA53650",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ3272",
@@ -741,7 +956,9 @@
   "name": "Left nasal bone",
   "group": "skull",
   "fma": "FMA53648",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3273",
@@ -749,7 +966,10 @@
   "name": "Left palatine bone",
   "group": "maxilla",
   "fma": "FMA53656",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ3274",
@@ -757,7 +977,9 @@
   "name": "Left parietal bone",
   "group": "skull",
   "fma": "FMA52789",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3281",
@@ -765,7 +987,9 @@
   "name": "Left temporal bone",
   "group": "skull",
   "fma": "FMA52739",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3287",
@@ -773,7 +997,9 @@
   "name": "Left zygomatic bone",
   "group": "skull",
   "fma": "FMA52893",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3289",
@@ -781,7 +1007,10 @@
   "name": "Mandible",
   "group": "mandible",
   "fma": "FMA52748",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ3309",
@@ -789,7 +1018,9 @@
   "name": "Occipital bone",
   "group": "skull",
   "fma": "FMA52735",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3369",
@@ -797,7 +1028,9 @@
   "name": "Right inferior nasal concha",
   "group": "skull",
   "fma": "FMA54737",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3371",
@@ -805,7 +1038,9 @@
   "name": "Right lacrimal bone",
   "group": "skull",
   "fma": "FMA53645",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3375",
@@ -813,7 +1048,10 @@
   "name": "Right maxilla",
   "group": "maxilla",
   "fma": "FMA53649",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ3378",
@@ -821,7 +1059,9 @@
   "name": "Right nasal bone",
   "group": "skull",
   "fma": "FMA53647",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3379",
@@ -829,7 +1069,10 @@
   "name": "Right palatine bone",
   "group": "maxilla",
   "fma": "FMA53655",
-  "part": 1
+  "models": [
+   "general",
+   "dental"
+  ]
  },
  {
   "id": "FJ3380",
@@ -837,7 +1080,9 @@
   "name": "Right parietal bone",
   "group": "skull",
   "fma": "FMA52788",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3386",
@@ -845,7 +1090,9 @@
   "name": "Right temporal bone",
   "group": "skull",
   "fma": "FMA52738",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3392",
@@ -853,7 +1100,9 @@
   "name": "Right zygomatic bone",
   "group": "skull",
   "fma": "FMA52892",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3394",
@@ -861,7 +1110,9 @@
   "name": "Sphenoid bone",
   "group": "skull",
   "fma": "FMA52736",
-  "part": 1
+  "models": [
+   "general"
+  ]
  },
  {
   "id": "FJ3395",
@@ -869,6 +1120,8 @@
   "name": "Vomer",
   "group": "skull",
   "fma": "FMA9710",
-  "part": 1
+  "models": [
+   "general"
+  ]
  }
 ]
