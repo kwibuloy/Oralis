@@ -27,3 +27,5 @@ dist-ssr
 .vercel
 .taste-skill
 coverage
+tsconfig.tsbuildinfo
+.shots
