@@ -1,4 +1,5 @@
 import { GROUPS } from '../content/anatomy';
+import { CARVING_TOOTH } from '../content/carving';
 import { tissueByKey } from '../content/histology';
 import type { ModeId } from '../content/modes';
 import { structureByKey } from '../content/structures';
@@ -7,6 +8,7 @@ import { toothNumber, type Arch, type NumberingSystem } from '../content/teeth';
 /** Short display label for a picked key, used by the hover tag and the list. */
 export function labelFor(mode: ModeId, key: string, system: NumberingSystem): string {
   if (mode === 'histology') return tissueByKey(key)?.name ?? key;
+  if (key in CARVING_TOOTH.parts) return CARVING_TOOTH.parts[key].name;
   const s = structureByKey(key);
   if (!s) return key;
   return s.tooth ? `${toothNumber(s.tooth, system)} · ${s.name}` : s.name;

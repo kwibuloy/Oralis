@@ -52,13 +52,13 @@ export const MODES: Mode[] = [
   },
   {
     id: 'dental', name: 'Oral anatomy', short: 'Oral', model: '/models/dental.glb', source: 'bodyparts3d',
-    lead: 'The 28 permanent teeth in their arches, with FDI, Universal and Palmer numbering.',
+    lead: 'The skull, the oral cavity and the 28 permanent teeth with FDI, Universal and Palmer numbering, plus a carving tooth to study from all five surfaces.',
     defaultVisible: ['teeth', 'gingiva'],
-    context: ['mandible', 'maxilla'],
+    context: ['mandible', 'maxilla', 'skull'],
     presets: [
-      { label: 'Teeth', groups: ['teeth'] },
-      { label: 'With gingiva', groups: ['teeth', 'gingiva'] },
-      { label: 'With jaws', groups: ['teeth', 'gingiva', 'mandible', 'maxilla'] },
+      { label: 'Teeth', groups: ['teeth', 'gingiva'] },
+      { label: 'Skull', groups: ['teeth', 'mandible', 'maxilla', 'skull', 'neck-bones'] },
+      { label: 'Oral cavity', groups: ['teeth', 'gingiva', 'tongue', 'palate-pharynx', 'suprahyoid', 'glands', 'lips'] },
     ],
   },
   {

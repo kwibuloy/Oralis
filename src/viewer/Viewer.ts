@@ -37,6 +37,15 @@ const VIEW_DIR: Record<View, THREE.Vector3> = {
   bottom: new THREE.Vector3(0, -1, 0.001),
 };
 
+/** A numbered marker pinned to a point on a part (in that part's local coordinates). */
+export interface Pin {
+  id: string;
+  label: string;
+  title: string;
+  position: [number, number, number];
+  normal: [number, number, number];
+}
+
 export interface Pickable {
   key: string;
   group: string;
@@ -95,8 +104,13 @@ export class Viewer {
   private lastFrame = performance.now();
   private lastTimeReport = 0;
   private pull: THREE.Group | null = null;
+  // Pins are DOM buttons over the canvas, moved after each render so they stay tappable on phones.
+  private pinLayer: HTMLDivElement;
+  private flying = false;
+  private pins: { el: HTMLButtonElement; mesh: PartMesh; local: THREE.Vector3; normal: THREE.Vector3 }[] = [];
 
   onPick: (key: string | null) => void = () => {};
+  onPinPick: (id: string) => void = () => {};
   /** Playback position (0..1), reported about ten times a second while playing. */
   onTime: (t: number) => void = () => {};
   onHover: (key: string | null, at: { x: number; y: number } | null) => void = () => {};
@@ -130,6 +144,9 @@ export class Viewer {
     canvas.addEventListener('pointerup', this.handleUp);
     canvas.addEventListener('pointermove', this.handleMove);
     canvas.addEventListener('pointerleave', this.handleLeave);
+    this.pinLayer = document.createElement('div');
+    this.pinLayer.className = 'pins';
+    (canvas.parentElement ?? document.body).append(this.pinLayer);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
     this.resize();
@@ -221,8 +238,34 @@ export class Viewer {
     this.frameKeys(this.visibleKeys(), FIT_PADDING, undefined, duration);
   }
 
-  setView(view: View) {
-    this.frameKeys(this.visibleKeys(), FIT_PADDING, VIEW_DIR[view].clone());
+  /** Look from a named view, or from any direction (e.g. a tooth surface). */
+  setView(view: View | THREE.Vector3Like) {
+    const dir = typeof view === 'string' ? VIEW_DIR[view].clone() : new THREE.Vector3().copy(view).normalize();
+    this.frameKeys(this.visibleKeys(), FIT_PADDING, dir);
+  }
+
+  /** Pin numbered markers to points on the part with `key`; an empty list removes them. */
+  setPins(key: string | null, pins: Pin[]) {
+    for (const p of this.pins) p.el.remove();
+    this.pins = [];
+    const mesh = key ? this.meshes.find((m) => m.userData.key === key) : undefined;
+    if (!mesh) return;
+    for (const pin of pins) {
+      const el = document.createElement('button');
+      el.className = 'pin is-hidden'; // shown by placePins once placed (and once the camera lands)
+      el.textContent = pin.label;
+      el.title = pin.title;
+      el.setAttribute('aria-label', `${pin.label}. ${pin.title}`);
+      el.dataset.id = pin.id;
+      el.addEventListener('click', () => this.onPinPick(pin.id));
+      this.pinLayer.append(el);
+      this.pins.push({ el, mesh, local: new THREE.Vector3(...pin.position), normal: new THREE.Vector3(...pin.normal) });
+    }
+    this.needsRender = true;
+  }
+
+  setActivePin(id: string | null) {
+    for (const p of this.pins) p.el.classList.toggle('is-active', p.el.dataset.id === id);
   }
 
   setAutoRotate(on: boolean) {
@@ -298,6 +341,7 @@ export class Viewer {
   dispose() {
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
+    this.pinLayer.remove();
     this.canvas.removeEventListener('pointerdown', this.handleDown);
     this.canvas.removeEventListener('pointerup', this.handleUp);
     this.canvas.removeEventListener('pointermove', this.handleMove);
@@ -442,7 +486,10 @@ export class Viewer {
       return;
     }
     gsap.to(this.controls.target, { x: sphere.center.x, y: sphere.center.y, z: sphere.center.z, duration: d, ease: 'power3.inOut' });
-    gsap.to(this.camera.position, { x: to.x, y: to.y, z: to.z, duration: d, ease: 'power3.inOut', onUpdate: () => void (this.needsRender = true) });
+    // Pins wait for the camera to land, then fade in (see placePins).
+    this.flying = true;
+    gsap.to(this.camera.position, { x: to.x, y: to.y, z: to.z, duration: d, ease: 'power3.inOut', onUpdate: () => void (this.needsRender = true),
+      onComplete: () => { this.flying = false; this.needsRender = true; } });
   }
 
   private pick(e: PointerEvent): string | null {
@@ -480,6 +527,22 @@ export class Viewer {
     this.apply();
   };
 
+  /** Move each pin over its point; hide pins on hidden parts or on the far side of the part. */
+  private placePins() {
+    if (!this.pins.length) return;
+    const { width, height } = this.canvas.getBoundingClientRect();
+    const world = new THREE.Vector3(), toCamera = new THREE.Vector3(), normal = new THREE.Vector3();
+    for (const p of this.pins) {
+      p.mesh.localToWorld(world.copy(p.local));
+      normal.copy(p.normal).transformDirection(p.mesh.matrixWorld);
+      toCamera.copy(this.camera.position).sub(world).normalize();
+      const facing = p.mesh.visible && normal.dot(toCamera) > 0.05;
+      world.project(this.camera);
+      p.el.style.transform = `translate(${((world.x + 1) / 2) * width}px, ${((1 - world.y) / 2) * height}px) translate(-50%, -50%)`;
+      p.el.classList.toggle('is-hidden', this.flying || !facing || world.z > 1);
+    }
+  }
+
   private resize() {
     const box = (this.canvas.parentElement ?? this.canvas).getBoundingClientRect();
     if (!box.width || !box.height) return;
@@ -508,6 +571,7 @@ export class Viewer {
     if (moving || this.needsRender || this.controls.autoRotate || gsap.globalTimeline.getChildren().length) {
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
+      this.placePins();
     }
   };
 }

@@ -17,7 +17,8 @@ This file points; it does not document. Read the files it names.
 | Typecheck / tests | `npm run typecheck` · `npm test` |
 | Production build | `npm run build` → `dist/` |
 | Screenshots | `node scripts/shoot.mjs --widths 1440,390 general dental histology/enamel` |
-| General + Dental models | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
+| Carving tooth (run before extract) | `node scripts/build-carving-tooth.mjs` → `models-src/carving-molar.glb`, `src/content/carving.generated.json` |
+| General, Physiology + Oral anatomy models | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
 | Histology model | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_histology.py -- public/models/histology.glb models-src/histology.blend` |
 
 ## Where things are
@@ -33,6 +34,7 @@ This file points; it does not document. Read the files it names.
 | Physiology functions: layers, descriptions, oxygenation, brain areas | `src/content/function.ts`, `src/atlas/FunctionCard.tsx`, `src/atlas/Timeline.tsx` |
 | Flow distances baked into `physiology.glb` (`_FLOW` attribute) | `scripts/lib/flow.mjs`, `computeFlows` in `scripts/extract-bodyparts.mjs` |
 | Tooth numbering + morphology | `src/content/teeth.ts` |
+| Carving tooth (Oral anatomy): landmarks, notes, Wheeler measurements | `src/content/carving.ts`, `src/atlas/CarvingCards.tsx`; geometry from `scripts/build-carving-tooth.mjs` |
 | Histology tissues | `src/content/histology.ts` |
 | Atlas screen (state, cards) | `src/atlas/Atlas.tsx`, `DetailCard.tsx`, `Search.tsx`, `controls.tsx` |
 | 3D viewer (framework-free) | `src/viewer/Viewer.ts` |

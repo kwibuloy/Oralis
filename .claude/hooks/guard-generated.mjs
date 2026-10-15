@@ -15,6 +15,8 @@ const RULES = [
   [/^public\/models\/[^/]+\.glb$/, 'Edit GROUPS/MODELS in scripts/extract-bodyparts.mjs and re-run it (see .claude/skills/add-structure).'],
   [/^src\/content\/structures\.generated\.json$/, 'It is written by scripts/extract-bodyparts.mjs (see .claude/skills/add-structure).'],
   [/^models-src\/.+\.blend$/, 'It is saved by scripts/blender/build_histology.py; change the script instead.'],
+  [/^models-src\/carving-molar\.glb$/, 'It is built by scripts/build-carving-tooth.mjs; change the script, then re-run it and extract-bodyparts.mjs.'],
+  [/^src\/content\/carving\.generated\.json$/, 'Landmark positions come from scripts/build-carving-tooth.mjs; names and notes live in src/content/carving.ts.'],
 ];
 
 const hit = RULES.find(([re]) => re.test(rel));

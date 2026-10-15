@@ -12,6 +12,8 @@ import { Segmented, Switch } from './controls';
 import { archOf, labelFor } from './describe';
 import DetailCard from './DetailCard';
 import FunctionCard from './FunctionCard';
+import { LandmarkCard, ToothCard } from './CarvingCards';
+import { CARVING_TOOTH, KIND_LABEL, LANDMARKS, landmarkById, MEASUREMENTS, type LandmarkKind } from '../content/carving';
 import LoadingBar, { type LoadProgress } from './LoadingBar';
 import Icon from './Icon';
 import SubjectPicker from './SubjectPicker';
@@ -22,6 +24,19 @@ import './atlas.css';
 type ArchFilter = 'both' | 'upper' | 'lower';
 const BITE_OPEN = { x: 0, y: -1.6, z: 0.3 };
 const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/**
+ * Carving tooth surfaces. The tooth is a left mandibular molar built with buccal +z, occlusal +y and
+ * mesial −x (scripts/build-carving-tooth.mjs), so each surface is viewed from that direction.
+ */
+const CARVING_VIEWS: [string, string, string, { x: number; y: number; z: number }][] = [
+  ['occlusal', 'O', 'Occlusal', { x: 0, y: 1, z: 0.001 }],
+  ['buccal', 'B', 'Buccal', { x: 0, y: 0.05, z: 1 }],
+  ['lingual', 'L', 'Lingual', { x: 0, y: 0.05, z: -1 }],
+  ['mesial', 'M', 'Mesial', { x: -1, y: 0.05, z: 0 }],
+  ['distal', 'D', 'Distal', { x: 1, y: 0.05, z: 0 }],
+];
+const CARVING_START = { x: -0.5, y: 0.45, z: 1 }; // three-quarter view from mesiobuccal
+const CARVING_COLOUR: Record<string, string> = { 'carving-crown': '#f2ece0', 'carving-root': '#e2cc9f' };
 const VIEWS: [View, string, string][] = [['front', 'F', 'Front'], ['side', 'S', 'Side'], ['back', 'B', 'Back'], ['top', 'T', 'Top']];
 const STAGE_LABEL: Record<ModeId, string> = {
   general: 'Whole body · adult male',
@@ -57,7 +72,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [isolated, setIsolated] = useState(false);
   const [explode, setExplode] = useState(0);
   const [autoRotate, setAutoRotate] = useState(false);
-  const [view, setView] = useState<View | null>('front');
+  const [view, setView] = useState<string | null>('front');
   const [system, setSystem] = useState<NumberingSystem>('fdi');
   const [arch, setArch] = useState<ArchFilter>('both');
   const [biteOpen, setBiteOpen] = useState(false);
@@ -70,10 +85,14 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [time, setTime] = useState(0);
   const [speed, setSpeed] = useState(1);
   const inFunction = !!mode.functionView;
+  // Oral anatomy: skull & arches or the carving tooth, and which landmark is open.
+  const [toothView, setToothView] = useState<'arches' | 'carving'>('arches');
+  const [landmark, setLandmark] = useState<string | null>(null);
+  const carving = modeId === 'dental' && toothView === 'carving';
 
   const layers = useMemo(() => layersFor(modeId, modelName, !!mode.systems), [modeId, modelName, mode.systems]);
   // In the Function view the skeleton stays faded behind the systems for orientation.
-  const context = (inFunction ? FUNCTION_CONTEXT : mode.context ?? []).filter((g) => !visible.includes(g));
+  const context = (inFunction ? FUNCTION_CONTEXT : carving ? [] : mode.context ?? []).filter((g) => !visible.includes(g));
   const piecesVisible = layers.filter((l) => visible.includes(l.id)).reduce((t, l) => t + l.count, 0);
   const totalPieces = layers.reduce((t, l) => t + l.count, 0);
 
@@ -86,12 +105,14 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     v.onHover = (key, at) => setHover(key && at ? { key, ...at } : null);
     v.onPick = (key) => setSelected(key);
     v.onTime = setTime;
+    v.onPinPick = (id) => { setSelected(null); setLandmark(id); };
     let cancelled = false;
     v.loadGLB(mode.model, (node) => {
       if (modeId === 'histology') {
         const t = TISSUES.find((x) => x.key === node);
         return t ? { key: t.key, group: t.key, color: t.color } : null;
       }
+      if (node in CARVING_COLOUR) return { key: node, group: 'carving', color: CARVING_COLOUR[node] };
       const key = MESH_TO_KEY.get(node);
       const s = key ? structureByKey(key) : undefined;
       return s ? { key: s.key, group: s.group, color: GROUP_COLOR[s.group] ?? '#ddd' } : null;
@@ -150,6 +171,23 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     setPresetTick((t) => t + 1);
   };
 
+  // Carving tooth: pins on the crown (landmarks are in the tooth's own millimetres), the open one highlighted.
+  useEffect(() => {
+    if (!ready) return;
+    viewer.current?.setPins(carving ? 'carving-crown' : null,
+      carving ? LANDMARKS.map((l) => ({ id: l.id, label: String(l.n), title: l.name, position: l.position, normal: l.normal })) : []);
+  }, [carving, ready]);
+  useEffect(() => { viewer.current?.setActivePin(landmark); }, [landmark, carving, ready]);
+  useEffect(() => { if (selected) setLandmark(null); }, [selected]);
+  const switchToothView = (next: 'arches' | 'carving') => {
+    setToothView(next);
+    setSelected(null); setLandmark(null); setExplode(0); setIsolated(false); setArch('both'); setBiteOpen(false);
+    setVisible(next === 'carving' ? ['carving'] : mode.defaultVisible);
+    setView(next === 'carving' ? null : 'front');
+    // After the visibility change has reached the viewer, frame the new view.
+    requestAnimationFrame(() => viewer.current?.setView(next === 'carving' ? CARVING_START : 'front'));
+  };
+
   // Refit once the slider settles; the inventory (past 50%) reads best face-on.
   useEffect(() => {
     if (!ready) return;
@@ -168,9 +206,13 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   }, []);
 
   const searchItems: SearchItem[] = useMemo(() => {
+    if (carving) return LANDMARKS.map((l) => ({ key: `landmark:${l.id}`, label: `${l.n}. ${l.name}`, group: KIND_LABEL[l.kind], color: '#2563eb' }));
     if (modeId === 'histology') return TISSUES.map((t) => ({ key: t.key, label: t.name, group: 'Tissue', color: t.color }));
     return structuresIn(modelName).map((s) => ({ key: s.key, label: labelFor(modeId, s.key, system), group: GROUPS[s.group].label, color: GROUP_COLOR[s.group] }));
-  }, [modeId, modelName, system]);
+  }, [modeId, modelName, system, carving]);
+  const onSearch = (key: string) => {
+    if (key.startsWith('landmark:')) { setSelected(null); setLandmark(key.slice(9)); } else setSelected(key);
+  };
 
   const toggle = (id: string, on: boolean) => setVisible((v) => (on ? [...new Set([...v, id])] : v.filter((x) => x !== id)));
   // System chips: a system is on when all its layers are; toggling adds or removes them all. Skin stays a manual layer.
@@ -183,12 +225,14 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   };
   const activePreset = mode.presets.find((p) => p.groups.length === visible.length && p.groups.every((g) => visible.includes(g)))?.label ?? null;
   const goView = (v: View) => { setView(v); viewer.current?.setView(v); };
+  const goSurface = (id: string, dir: { x: number; y: number; z: number }) => { setView(id); viewer.current?.setView(dir); };
   const resetAll = () => {
-    setSelected(null); setExplode(0); setIsolated(false); setBiteOpen(false); setArch('both');
-    setVisible(inFunction ? groupsFor(functions) : mode.defaultVisible); setAutoRotate(false); setView('front');
-    requestAnimationFrame(() => viewer.current?.setView('front'));
+    setSelected(null); setLandmark(null); setExplode(0); setIsolated(false); setBiteOpen(false); setArch('both');
+    setVisible(inFunction ? groupsFor(functions) : carving ? ['carving'] : mode.defaultVisible); setAutoRotate(false);
+    setView(carving ? null : 'front');
+    requestAnimationFrame(() => viewer.current?.setView(carving ? CARVING_START : 'front'));
   };
-  const stageLabel = inFunction ? 'Function · schematic flow' : explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
+  const stageLabel = carving ? `${CARVING_TOOTH.name} · idealised (Wheeler)` : inFunction ? 'Function · schematic flow' : explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
 
   return (
     <div className="atlas" data-mode={modeId}>
@@ -213,7 +257,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       <SubjectPicker current={modeId} />
 
       <div className="topright">
-        <Search items={searchItems} onSelect={setSelected} />
+        <Search items={searchItems} onSelect={onSearch} />
         <button className="card icon-button" aria-label="Sources and credits" aria-expanded={creditsOpen} onClick={() => setCreditsOpen((o) => !o)}>
           <Icon name="info" />
         </button>
@@ -224,10 +268,38 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       </button>
       <section className={`card layers${layersOpen ? ' is-open' : ''}`} aria-labelledby="layers-title">
         <div className="layers__head">
-          <h2 id="layers-title">{inFunction ? 'Functions' : modeId === 'histology' ? 'Tissues' : 'Layers'}</h2>
-          <span className="count">{inFunction ? FUNCTION_LAYERS.length : layers.length}</span>
+          <h2 id="layers-title">{carving ? 'Landmarks' : inFunction ? 'Functions' : modeId === 'histology' ? 'Tissues' : 'Layers'}</h2>
+          <span className="count">{carving ? LANDMARKS.length : inFunction ? FUNCTION_LAYERS.length : layers.length}</span>
         </div>
-        {inFunction ? (
+        {modeId === 'dental' && (
+          <div className="view-switch view-switch--card">
+            <Segmented label="Oral anatomy view" value={toothView} onChange={switchToothView} options={[['arches', 'Skull & arches'], ['carving', 'Carving tooth']]} />
+          </div>
+        )}
+        {carving ? (
+          <div className="landmarks">
+            {(Object.keys(KIND_LABEL) as LandmarkKind[]).map((kind) => (
+              <section key={kind}>
+                <p className="layers__caption">{KIND_LABEL[kind]}</p>
+                <ul>
+                  {LANDMARKS.filter((l) => l.kind === kind).map((l) => (
+                    <li key={l.id}>
+                      <button className="landmarks__item" aria-pressed={landmark === l.id} onClick={() => { setSelected(null); setLandmark(l.id); }}>
+                        <span className="landmarks__n">{l.n}</span>{l.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            <section>
+              <p className="layers__caption">Wheeler’s measurements (mm)</p>
+              <dl className="measurements">
+                {MEASUREMENTS.map(([label, mm]) => <div key={label}><dt>{label}</dt><dd>{mm.toFixed(1)}</dd></div>)}
+              </dl>
+            </section>
+          </div>
+        ) : inFunction ? (
           <>
             <ul className="function-list">
               {FUNCTION_LAYERS.map((f) => (
@@ -251,7 +323,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           <Segmented label="Layer preset" value={activePreset} options={mode.presets.map((p) => [p.label, p.label])}
             onChange={(label) => { setVisible(mode.presets.find((p) => p.label === label)!.groups); setPresetTick((t) => t + 1); }} />
         )}
-        {!inFunction && <ul className="layers__list">
+        {!inFunction && !carving && <ul className="layers__list">
           {layers.map((l) => (
             <li key={l.id}>
               <span className="dot" style={{ background: l.color }} aria-hidden="true" />
@@ -261,7 +333,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
             </li>
           ))}
         </ul>}
-        {modeId === 'dental' && (
+        {modeId === 'dental' && !carving && (
           <div className="layers__extra">
             <p className="layers__caption">Numbering</p>
             <Segmented label="Numbering system" value={system} onChange={setSystem}
@@ -274,7 +346,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
             </div>
           </div>
         )}
-        {!inFunction && <div className="layers__foot">
+        {!inFunction && !carving && <div className="layers__foot">
           <span>{piecesVisible} {modeId === 'histology' ? 'tissues' : 'pieces'} visible</span>
           <button className="text-button" onClick={() => setVisible(piecesVisible ? [] : layers.map((l) => l.id))}>
             {piecesVisible ? 'Hide all' : 'Show all'}
@@ -287,16 +359,28 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           <Icon name="rotate" />
         </button>
         <span className="toolbar__sep" />
-        {VIEWS.map(([v, letter, name]) => (
-          <button key={v} className="toolbar__view" aria-pressed={view === v} aria-label={`${name} view`} title={`${name} view`} onClick={() => goView(v)}>
-            {letter}
-          </button>
-        ))}
+        {carving
+          ? CARVING_VIEWS.map(([id, letter, name, dir]) => (
+            <button key={id} className="toolbar__view" aria-pressed={view === id} aria-label={`${name} surface`} title={`${name} surface`} onClick={() => goSurface(id, dir)}>
+              {letter}
+            </button>
+          ))
+          : VIEWS.map(([v, letter, name]) => (
+            <button key={v} className="toolbar__view" aria-pressed={view === v} aria-label={`${name} view`} title={`${name} view`} onClick={() => goView(v)}>
+              {letter}
+            </button>
+          ))}
         <span className="toolbar__sep" />
         <button className="icon-button" aria-label="Reset everything" title="Reset" onClick={resetAll}><Icon name="reset" /></button>
       </div>
 
-      {inFunction ? (
+      {modeId === 'dental' && (
+        // Phones and tablets: the view switch stays visible instead of hiding in the Layers drawer.
+        <div className={`card view-switch view-switch--float${carving ? ' is-low' : ''}`}>
+          <Segmented label="Oral anatomy view" value={toothView} onChange={switchToothView} options={[['arches', 'Skull & arches'], ['carving', 'Carving tooth']]} />
+        </div>
+      )}
+      {carving ? null : inFunction ? (
         <Timeline label="Function" playing={playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed} />
       ) : (
       <section className="card explode" aria-labelledby="explode-title">
@@ -313,7 +397,11 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       {inFunction && openFunction && !selected && (
         <FunctionCard fn={FUNCTION_LAYERS.find((f) => f.id === openFunction)!} onClose={() => setOpenFunction(null)} />
       )}
-      {selected && (
+      {carving && landmark && !selected && landmarkById(landmark) && (
+        <LandmarkCard landmark={landmarkById(landmark)!} onClose={() => setLandmark(null)} />
+      )}
+      {selected && selected in CARVING_COLOUR && <ToothCard part={selected} onClose={() => setSelected(null)} />}
+      {selected && !(selected in CARVING_COLOUR) && (
         <DetailCard mode={modeId} selected={selected} isolated={isolated}
           onIsolate={() => setIsolated((i) => !i)} onClear={() => setSelected(null)} />
       )}
