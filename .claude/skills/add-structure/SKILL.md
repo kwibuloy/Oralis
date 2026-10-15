@@ -5,7 +5,7 @@ description: Add or change anatomical structures and their study notes in Oralis
 
 # Adding structures to Oralis
 
-Everything lives in `logibot/`. The General and Dental models are generated from BodyParts3D; the notes are hand-written.
+Everything lives at the repo root. The General and Oral anatomy (`dental`) models are generated from BodyParts3D; the notes are hand-written. General already contains every BodyParts3D mesh, so new work there is regrouping and notes, not adding meshes.
 
 ## 1. Is it in the source data?
 
@@ -26,12 +26,14 @@ Edit `GROUPS` (first matching regex wins; side prefixes are stripped) and, if ne
 node scripts/extract-bodyparts.mjs ../human-atlas
 ```
 
-This rewrites `public/models/general.glb`, `public/models/dental.glb` and `src/content/structures.generated.json`. A hook blocks hand edits to all three. Keep each GLB under ~1.5 MB.
+This rewrites `public/models/general.glb`, `public/models/dental.glb` and `src/content/structures.generated.json`. A hook blocks hand edits to all three.
+
+**Accuracy over file size.** Never simplify, decimate or drop meshes to make a GLB smaller if it costs anatomical accuracy. Ship the source geometry at full detail and accept a larger download (General is ~5 MB). Draco compression is fine because it is lossless enough to preserve shape. If load time becomes a real problem, raise it with the user rather than reducing detail.
 
 ## 3. Describe it
 
-- New group → `{ label, blurb }` in `GROUPS` (`src/content/anatomy.ts`), a colour in `GROUP_COLOR` (`src/content/structures.ts`), and decide its default visibility and presets in `src/content/modes.ts`.
-- New structure → a note in `NOTES` (`anatomy.ts`), keyed by the source name without "Left/Right", lower-cased: `summary`, plus `supply` and `clinical` where they matter to a dentist.
+- New group → `{ label, blurb }` in `GROUPS` and its body system in `GROUP_SYSTEM` (`src/content/anatomy.ts`), a colour in `GROUP_COLOR` (`src/content/structures.ts`), and its default visibility in `src/content/modes.ts`. In the extractor, unmatched meshes fall back to a group per source system (`BY_SYSTEM`).
+- New structure → a note keyed by the source name without "left"/"right" (anywhere in the name), lower-cased: `summary`, plus `supply` and `clinical` where they matter to a dentist. Head and neck notes go in `NOTES` (`anatomy.ts`), skeleton and muscles in `body.ts`, organs, brain and vessels in `systems.ts`. Repeated structures can share a family note (regex; first match wins, so put specific patterns first). Never add a catch-all.
 - Teeth get facts from `MORPHOLOGY` in `src/content/teeth.ts`, keyed `upper-6`, `lower-3`, etc.
 
 ## 4. Verify

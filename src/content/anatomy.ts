@@ -3,6 +3,9 @@
  * "Left"/"Right" removed and lower-cased. Educational summaries, not a textbook:
  * check against your course material.
  */
+import { BODY_NOTES, FAMILY_NOTES } from './body';
+import { SYSTEM_FAMILY_NOTES, SYSTEM_NOTES } from './systems';
+
 export interface Note {
   summary: string;
   supply?: string;
@@ -15,13 +18,59 @@ export const GROUPS: Record<string, { label: string; blurb: string }> = {
   mandible: { label: 'Mandible', blurb: 'The lower jaw.' },
   maxilla: { label: 'Maxillae and palatine bones', blurb: 'The upper jaw and the bones of the hard palate.' },
   skull: { label: 'Cranium and facial skeleton', blurb: 'The remaining bones of the skull.' },
-  'neck-bones': { label: 'Hyoid and upper cervical spine', blurb: 'The hyoid bone, atlas and axis.' },
+  'neck-bones': { label: 'Hyoid, atlas and axis', blurb: 'The hyoid bone and the first two cervical vertebrae.' },
   suprahyoid: { label: 'Suprahyoid muscles', blurb: 'Muscles above the hyoid that form the floor of the mouth and help open the jaw.' },
-  infrahyoid: { label: 'Infrahyoid and neck muscles', blurb: 'Strap muscles below the hyoid, with the platysma and sternocleidomastoid.' },
+  infrahyoid: { label: 'Infrahyoid and neck muscles', blurb: 'Strap muscles below the hyoid, the platysma, sternocleidomastoid, scalenes and prevertebral muscles.' },
   tongue: { label: 'Tongue', blurb: 'The tongue and the extrinsic muscles in the model.' },
   'palate-pharynx': { label: 'Soft palate and pharynx', blurb: 'Muscles of the soft palate and pharyngeal wall, with their ligaments.' },
   glands: { label: 'Salivary glands', blurb: 'The submandibular and sublingual glands. The parotid is not in the source data.' },
   lips: { label: 'Lips', blurb: 'The lips as a surface.' },
+  larynx: { label: 'Larynx', blurb: 'Laryngeal cartilages, membranes and intrinsic muscles.' },
+  'eye-muscles': { label: 'Extraocular muscles', blurb: 'The six muscles that move the eye, levator palpebrae, the trochlea and the medial and lateral check ligaments.' },
+  nerves: { label: 'Orbital and optic nerves', blurb: 'The ophthalmic nerve (V1) and its branches, III, IV and the optic pathway. The source has no abducens nerve (VI), maxillary or mandibular branches, facial nerve or lower cranial nerves.' },
+  arteries: { label: 'Head and neck arteries', blurb: 'Aortic arch, carotid and vertebral arteries, subclavian branches and the circle of Willis. The external carotid artery and its branches are not in the source data.' },
+  veins: { label: 'Head and neck veins', blurb: 'Internal jugular, subclavian and brachiocephalic veins and the superior vena cava.' },
+  spine: { label: 'Vertebral column', blurb: 'Cervical (C3–C7), thoracic and lumbar vertebrae, the intervertebral disks and the sacrum.' },
+  'thorax-bones': { label: 'Ribs and sternum', blurb: 'The twelve pairs of ribs, costal cartilages 1–7 and the sternum.' },
+  'upper-limb-bones': { label: 'Upper limb bones', blurb: 'Clavicle, scapula, arm, forearm and hand.' },
+  'lower-limb-bones': { label: 'Lower limb bones', blurb: 'Hip bone, thigh, leg and foot.' },
+  'back-muscles': { label: 'Back muscles', blurb: 'Trapezius, rhomboids, erector spinae, the deep spinal muscles and the suboccipital group.' },
+  'trunk-muscles': { label: 'Chest, abdominal and pelvic floor muscles', blurb: 'Pectorals, serratus anterior, intercostals, diaphragm, external oblique and levator ani. Rectus abdominis, internal oblique and transversus abdominis are not in the source data.' },
+  'upper-limb-muscles': { label: 'Upper limb muscles', blurb: 'Shoulder, arm, forearm and hand muscles.' },
+  'lower-limb-muscles': { label: 'Lower limb muscles', blurb: 'Gluteal, thigh, leg and foot muscles.' },
+  ligaments: { label: 'Ligaments and membranes', blurb: 'Interosseous membranes, the long plantar ligament and the flexor retinaculum.' },
+  brain: { label: 'Brain', blurb: 'Cerebral gyri, deep nuclei, brainstem, cerebellum and the ventricles. The cranial nerves other than II–IV and V1 are not in the source data.' },
+  'cerebral-arteries': { label: 'Brain arteries', blurb: 'Branches of the anterior, middle and posterior cerebral arteries and the basilar system.' },
+  'body-arteries': { label: 'Arteries of the body', blurb: 'Aorta, coronary, pulmonary, visceral and limb arteries.' },
+  'body-veins': { label: 'Veins of the body', blurb: 'Venae cavae, azygos, portal, hepatic, pulmonary, cardiac and limb veins.' },
+  heart: { label: 'Heart', blurb: 'Atrial and ventricular walls and cavities, valves and papillary muscles.' },
+  airways: { label: 'Airways', blurb: 'Nasal cartilages, trachea and the bronchial tree. Lung tissue itself is not in the source data.' },
+  digestive: { label: 'Digestive organs', blurb: 'Oesophagus, stomach, intestines, pancreas, gallbladder, bile ducts and the liver (as its Couinaud segments).' },
+  urogenital: { label: 'Urinary and genital organs', blurb: 'Kidneys, ureters, bladder and the male genital organs (the source body is male).' },
+  endocrine: { label: 'Endocrine and lymphoid organs', blurb: 'Pituitary, pineal, adrenal glands, thymus and spleen.' },
+  senses: { label: 'Eye and ear', blurb: 'The eyeball and its coats, eyelid plates, lacrimal apparatus and the external ear.' },
+  skin: { label: 'Skin and hair', blurb: 'The body surface. Off by default because it hides everything beneath.' },
+};
+
+/** Body systems the General mode filters by. Each layer group belongs to exactly one. */
+export const SYSTEMS = [
+  { id: 'skeleton', label: 'Skeleton' },
+  { id: 'muscles', label: 'Muscles' },
+  { id: 'nerves', label: 'Nerves' },
+  { id: 'vessels', label: 'Vessels' },
+  { id: 'organs', label: 'Organs' },
+] as const;
+export type SystemId = (typeof SYSTEMS)[number]['id'];
+
+export const GROUP_SYSTEM: Record<string, SystemId> = {
+  teeth: 'skeleton', mandible: 'skeleton', maxilla: 'skeleton', skull: 'skeleton', 'neck-bones': 'skeleton', spine: 'skeleton',
+  'thorax-bones': 'skeleton', 'upper-limb-bones': 'skeleton', 'lower-limb-bones': 'skeleton', ligaments: 'skeleton',
+  suprahyoid: 'muscles', infrahyoid: 'muscles', tongue: 'muscles', 'palate-pharynx': 'muscles', 'eye-muscles': 'muscles',
+  'back-muscles': 'muscles', 'trunk-muscles': 'muscles', 'upper-limb-muscles': 'muscles', 'lower-limb-muscles': 'muscles',
+  brain: 'nerves', nerves: 'nerves',
+  arteries: 'vessels', 'cerebral-arteries': 'vessels', 'body-arteries': 'vessels', veins: 'vessels', 'body-veins': 'vessels',
+  heart: 'organs', airways: 'organs', larynx: 'organs', digestive: 'organs', urogenital: 'organs', endocrine: 'organs',
+  senses: 'organs', glands: 'organs', gingiva: 'organs', lips: 'organs', skin: 'organs',
 };
 
 export const NOTES: Record<string, Note> = {
@@ -126,5 +175,10 @@ export const NOTES: Record<string, Note> = {
   lip: { summary: 'The lips close the oral fissure. Orbicularis oris, the muscle inside them, is not in the source data.', clinical: 'The vermilion border is checked in every oral cancer screening.' },
 };
 
-export const baseName = (sourceName: string) => sourceName.replace(/^(left|right) /i, '').toLowerCase();
-export const noteFor = (sourceName: string): Note | undefined => NOTES[baseName(sourceName)];
+export const baseName = (sourceName: string) => sourceName.replace(/\b(left|right) /gi, '').toLowerCase();
+/** Exact note first, then a family note for repeated structures (vertebrae, ribs, phalanges…). */
+export const noteFor = (sourceName: string): Note | undefined => {
+  const name = baseName(sourceName);
+  return NOTES[name] ?? BODY_NOTES[name] ?? SYSTEM_NOTES[name]
+    ?? [...FAMILY_NOTES, ...SYSTEM_FAMILY_NOTES].find(([re]) => re.test(name))?.[1];
+};

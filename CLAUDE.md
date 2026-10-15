@@ -1,17 +1,18 @@
 # Oralis
 
-A white-theme 3D atlas for dental students. Three modes — General anatomy, Dental anatomy,
-Histology — each load their own GLB model; every part is clickable, with study notes, layer
-toggles, views and an explode/inventory slider. React 18 + TypeScript + three.js, Vite, static
-deploy on Vercel. The app lives in `logibot/` (folder name kept from the old LogiBot project).
+A white-theme 3D atlas for dental students. Twelve subjects are listed in a grouped picker; the
+ones with a model so far — General anatomy, Oral anatomy, General & oral histology — each load
+their own GLB, and the rest show a "model in progress" card. Every part is clickable, with study
+notes, layer toggles, views and an explode/inventory slider. React 18 + TypeScript + three.js,
+Vite, static deploy on Vercel. The app lives at the repo root (it moved out of `logibot/`).
 
 This file points; it does not document. Read the files it names.
 
-## Commands (run in `logibot/`)
+## Commands (run at the repo root)
 
 | Task | Command |
 | --- | --- |
-| Dev server (:5173) | `npm run dev` (or the `logibot` entry in `.claude/launch.json`) |
+| Dev server (:5173) | `npm run dev` (or the `oralis` entry in `.claude/launch.json`) |
 | Typecheck / tests | `npm run typecheck` · `npm test` |
 | Production build | `npm run build` → `dist/` |
 | Screenshots | `node scripts/shoot.mjs --widths 1440,390 general dental histology/enamel` |
@@ -22,24 +23,27 @@ This file points; it does not document. Read the files it names.
 
 | Concern | Start here |
 | --- | --- |
-| Routes (`#/<mode>/<key>`, default General) | `logibot/src/lib/route.ts`, `logibot/src/App.tsx` |
-| Modes: model URL, layers, presets | `logibot/src/content/modes.ts` |
-| Structure index, colours | `logibot/src/content/structures.ts` (reads `structures.generated.json`) |
-| Anatomy notes, layer groups | `logibot/src/content/anatomy.ts` |
-| Tooth numbering + morphology | `logibot/src/content/teeth.ts` |
-| Histology tissues | `logibot/src/content/histology.ts` |
-| Atlas screen (state, cards) | `logibot/src/atlas/Atlas.tsx`, `DetailCard.tsx`, `Search.tsx`, `controls.tsx` |
-| 3D viewer (framework-free) | `logibot/src/viewer/Viewer.ts` |
-| Models and their sources | `logibot/public/models/*.glb`, `logibot/models-src/*.blend`, `logibot/scripts/` |
-| Design tokens | `logibot/src/styles/base.css`, layout in `logibot/src/atlas/atlas.css` |
-| Tests (numbering, content, GLB contents, routes) | `logibot/src/content/content.test.ts` |
-| Deploy | `logibot/vercel.json` (Vercel root directory: `logibot`) |
+| Routes (`#/<subject>/<key>`, default General) | `src/lib/route.ts`, `src/App.tsx` |
+| Subject list and picker groups | `src/content/subjects.ts`, `src/atlas/SubjectPicker.tsx`, `src/atlas/ComingSoon.tsx` |
+| Modes with a model: URL, layers, presets/system chips | `src/content/modes.ts` |
+| Structure index, colours | `src/content/structures.ts` (reads `structures.generated.json`) |
+| Layer groups, body systems, head and neck notes | `src/content/anatomy.ts` |
+| Whole-body notes (skeleton, muscles) / (organs, brain, vessels) | `src/content/body.ts`, `src/content/systems.ts` |
+| Tooth numbering + morphology | `src/content/teeth.ts` |
+| Histology tissues | `src/content/histology.ts` |
+| Atlas screen (state, cards) | `src/atlas/Atlas.tsx`, `DetailCard.tsx`, `Search.tsx`, `controls.tsx` |
+| 3D viewer (framework-free) | `src/viewer/Viewer.ts` |
+| Models and their sources | `public/models/*.glb`, `models-src/*.blend`, `scripts/` |
+| Design tokens | `src/styles/base.css`, layout in `src/atlas/atlas.css` |
+| Tests (numbering, content, GLB contents, routes) | `src/content/content.test.ts` |
+| Deploy | `vercel.json` (Vercel root directory: the repo root) |
 
 ## Rules that are not obvious from the code
 
 - **Generated files are off limits:** `public/models/*.glb`, `src/content/structures.generated.json`
   and `models-src/*.blend` come from scripts. A PreToolUse hook blocks edits; change the script.
-- **One GLB per mode.** A mode never loads another mode's model. Node names in the GLB are the
+- **One GLB per mode.** A mode never loads another mode's model. General includes every
+  BodyParts3D mesh at full detail: **never simplify or drop meshes to save size** — accuracy wins. Node names in the GLB are the
   content keys (BodyParts3D mesh ids, or tissue keys for Blender models); tests enforce the match.
 - **The Viewer never imports React or content.** React owns state; the Viewer takes keys,
   groups and colours. Part positions are `base + bite + explode`, computed only in `place()`.
@@ -47,7 +51,8 @@ This file points; it does not document. Read the files it names.
   branches, facial/maxillary arteries, parotid, third molars and primary teeth. If something must
   exist anyway, author it in Blender and label it schematic.
 - **Left/right are the patient's,** as in the source names; FDI quadrants follow from that.
-- **Every structure needs a note.** `content.test.ts` fails otherwise.
+- **Every structure needs a note.** `content.test.ts` fails otherwise. Repeated structures may
+  share a family note (regex, first match wins — order matters), but never a catch-all.
 - **Design reference is the Human Atlas UI** (white canvas, rounded white cards, soft shadows,
   toggles, F/S/B/T rail, explode card). The user chose it over the vendored taste-skill house
   rules, which now apply only to any future marketing page. Use tokens from `base.css`.
@@ -69,7 +74,7 @@ This file points; it does not document. Read the files it names.
 | Agent | `viewer-engineer` | three.js / Viewer work and 3D bugs |
 | Agent | `ui-critic` | Visual critique at 1440/768/390 before committing |
 | Hook | `.claude/hooks/guard-generated.mjs` | Blocks edits to generated models and data |
-| Hook | `.claude/hooks/check-after-edit.mjs` | Typecheck (+ tests) after TS edits in `logibot/` |
+| Hook | `.claude/hooks/check-after-edit.mjs` | Typecheck (+ tests) after TS edits in `src/` or `scripts/` |
 
 ## Sources
 

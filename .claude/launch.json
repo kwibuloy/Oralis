@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "logibot",
+      "name": "oralis",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "logibot", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort"],
       "port": 5173
     }
   ]

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GROUPS, noteFor } from './anatomy';
+import { GROUP_SYSTEM, GROUPS, noteFor } from './anatomy';
 import { TISSUES } from './histology';
 import { MODES } from './modes';
 import { STRUCTURES } from './structures';
@@ -46,6 +46,18 @@ describe('content coverage', () => {
     expect(missing).toEqual([]);
   });
 
+  it('puts every General layer in a body system and includes every source mesh', () => {
+    const general = STRUCTURES.filter((s) => s.models.includes('general'));
+    expect([...new Set(general.map((s) => s.group))].filter((g) => !GROUP_SYSTEM[g])).toEqual([]);
+    expect(general.reduce((n, s) => n + s.meshIds.length, 0)).toBe(2234);
+  });
+
+  it('gives intervertebral disks the disk note, not their vertebra’s', () => {
+    for (const s of STRUCTURES.filter((s) => /intervertebral disk/i.test(s.sourceName))) {
+      expect(noteFor(s.sourceName)?.summary, s.sourceName).toMatch(/^Fibrocartilage joint/);
+    }
+  });
+
   it('labels every group used by the model and by the modes', () => {
     for (const s of STRUCTURES) expect(GROUPS[s.group], s.group).toBeDefined();
     const tissueKeys = new Set(TISSUES.map((t) => t.key));
@@ -85,6 +97,7 @@ describe('routes', () => {
     expect(parseRoute('#/dental/left-maxilla')).toEqual({ mode: 'dental', selected: 'left-maxilla' });
     expect(parseRoute('#/histology')).toEqual({ mode: 'histology', selected: undefined });
     expect(parseRoute('')).toEqual({ mode: 'general' });
+    expect(parseRoute('#/cariology')).toEqual({ mode: 'cariology', selected: undefined });
     expect(parseRoute('#/nonsense')).toEqual({ mode: 'general' });
   });
 });

@@ -2,10 +2,10 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Bash(npm --prefix logibot run *)",
+      "Bash(npm run *)",
       "Bash(npx tsc *)",
       "Bash(npx vitest *)",
-      "Bash(node logibot/scripts/shoot.mjs *)"
+      "Bash(node scripts/shoot.mjs *)"
     ]
   },
   "hooks": {

@@ -9,8 +9,16 @@ const SELECT_MIX = 0.22;
 const SELECT_GLOW = new THREE.Color('#1d4ed8').multiplyScalar(0.32);
 const HOVER_GLOW = new THREE.Color('#2563eb').multiplyScalar(0.12);
 const NO_GLOW = new THREE.Color(0x000000);
-/** Fraction of the canvas height the bottom cards cover; the projection is shifted up by half of it. */
-const BOTTOM_INSET = 0.09;
+/**
+ * Vertical projection shift as a fraction of canvas height (positive moves the model up). The cards
+ * above and below the model are about the same height on desktop; on phones the header and picker
+ * take more room at the top, so the model moves down a little.
+ */
+const SHIFT_DESKTOP = 0;
+const SHIFT_PHONE = -0.04;
+
+/** Room around a fitted model for the cards over the canvas (picker above, explode card below). */
+const FIT_PADDING = 1.35;
 
 export type View = 'front' | 'side' | 'back' | 'top' | 'bottom';
 const VIEW_DIR: Record<View, THREE.Vector3> = {
@@ -160,7 +168,7 @@ export class Viewer {
     this.gridDirty = true;
     this.apply();
     this.place();
-    if (this.selected) this.frameKeys(on ? [this.selected] : this.visibleKeys(), on ? 1.5 : 1.12);
+    if (this.selected) this.frameKeys(on ? [this.selected] : this.visibleKeys(), on ? 1.5 : FIT_PADDING);
   }
 
   /** Move every part whose key passes `match` by `offset` (e.g. open the bite). Animated. */
@@ -184,11 +192,11 @@ export class Viewer {
 
   /** Refit the camera to what is visible now, keeping the current viewing direction. */
   fit(duration = 0.6) {
-    this.frameKeys(this.visibleKeys(), 1.12, undefined, duration);
+    this.frameKeys(this.visibleKeys(), FIT_PADDING, undefined, duration);
   }
 
   setView(view: View) {
-    this.frameKeys(this.visibleKeys(), 1.12, VIEW_DIR[view].clone());
+    this.frameKeys(this.visibleKeys(), FIT_PADDING, VIEW_DIR[view].clone());
   }
 
   setAutoRotate(on: boolean) {
@@ -197,7 +205,7 @@ export class Viewer {
 
   /** Fit the camera to the visible parts. */
   frameAll(direction = new THREE.Vector3(0.35, 0.15, 1)) {
-    this.frameKeys(this.visibleKeys(), 1.12, direction, 0);
+    this.frameKeys(this.visibleKeys(), FIT_PADDING, direction, 0);
   }
 
   dispose() {
@@ -307,16 +315,26 @@ export class Viewer {
     for (const m of this.meshes) if (set.has(m.userData.key)) box.expandByObject(m);
     if (box.isEmpty()) return;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const size = box.getSize(new THREE.Vector3());
     // Never frame tighter than a share of everything visible, so small parts keep their surroundings.
     if (!this.isolated) {
       const all = new THREE.Box3();
       for (const m of this.meshes) if (m.visible) all.expandByObject(m);
-      if (!all.isEmpty()) sphere.radius = Math.max(sphere.radius, all.getBoundingSphere(new THREE.Sphere()).radius * 0.7);
+      if (!all.isEmpty()) {
+        sphere.radius = Math.max(sphere.radius, all.getBoundingSphere(new THREE.Sphere()).radius * 0.7);
+        size.max(all.getSize(new THREE.Vector3()).multiplyScalar(0.7));
+      }
     }
     const current = this.camera.position.clone().sub(this.controls.target);
     const dir = (direction ?? (current.lengthSq() > 1e-6 ? current : new THREE.Vector3(0.35, 0.15, 1))).clone().normalize();
-    const fov = THREE.MathUtils.degToRad(this.camera.fov);
-    const fit = Math.max(sphere.radius / Math.sin(fov / 2), sphere.radius / Math.sin(Math.atan(Math.tan(fov / 2) * this.camera.aspect)));
+    // Fit the box as seen from this direction rather than its bounding sphere, so tall models (a
+    // whole body) fill a narrow phone screen instead of shrinking to fit a sphere around them.
+    const fromAbove = Math.abs(dir.y) > 0.7;
+    const halfH = (fromAbove ? size.z : size.y) / 2;
+    const halfW = (fromAbove ? size.x : Math.abs(dir.z) * size.x + Math.abs(dir.x) * size.z) / 2;
+    const halfD = (fromAbove ? size.y : Math.abs(dir.x) * size.x + Math.abs(dir.z) * size.z) / 2;
+    const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+    const fit = Math.max(halfH / tan, halfW / (tan * this.camera.aspect)) + halfD;
     const distance = fit * padding;
     const to = sphere.center.clone().add(dir.multiplyScalar(distance));
     this.controls.minDistance = sphere.radius * 0.4;
@@ -376,8 +394,8 @@ export class Viewer {
     if (!box.width || !box.height) return;
     this.renderer.setSize(box.width, box.height, false);
     this.camera.aspect = box.width / box.height;
-    // Shift the projection so the model centres in the space above the bottom cards.
-    const shift = box.width > 860 ? Math.round(box.height * BOTTOM_INSET) : Math.round(box.height * 0.06);
+    // Shift the projection so the model centres in the space between the top and bottom cards.
+    const shift = Math.round(box.height * (box.width > 860 ? SHIFT_DESKTOP : SHIFT_PHONE));
     this.camera.setViewOffset(box.width, box.height, 0, shift, box.width, box.height);
     this.camera.updateProjectionMatrix();
     this.needsRender = true;

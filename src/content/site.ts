@@ -1,8 +1,8 @@
 /** Product name in one place: rename here. */
 export const SITE = {
   name: 'Oralis',
-  eyebrow: 'Dental anatomy atlas',
-  repo: 'https://github.com/kwibuloy/logibot',
+  eyebrow: 'Dental sciences atlas',
+  repo: 'https://github.com/kwibuloy/Oralis',
   author: 'Derick Conrad D. Mercado',
 };
 

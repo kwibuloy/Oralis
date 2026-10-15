@@ -10,7 +10,6 @@ Blender is installed at `D:\Blender\blender.exe` (4.5 LTS). Models are built by 
 ## Run
 
 ```bash
-cd logibot
 "/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_histology.py -- public/models/histology.glb models-src/histology.blend
 ```
 
@@ -21,7 +20,7 @@ The second argument saves a compressed `.blend` in `models-src/` so the user can
 - **Object name = content key.** The Viewer matches GLB node names to `src/content/<mode>.ts` keys (e.g. `enamel`, `lamina-dura`). Any other object is dropped. `content.test.ts` reads the GLB and fails if a key has no node.
 - **One object per selectable structure.** Join pieces that should select together.
 - **Millimetres, Z up.** The glTF exporter converts to Y up. For a section, put the cut on the plane y = 0 with tissue at y >= 0, so cut faces look at the default camera (+Z in glTF).
-- **Export:** GLB, `export_apply=True`, Draco on (`export_draco_mesh_compression_enable=True`). Keep each model under ~1 MB.
+- **Export:** GLB, `export_apply=True`, Draco on (`export_draco_mesh_compression_enable=True`). Don't trade accuracy for file size.
 - **Materials are a hint only.** The app colours meshes from the content colours; keep Blender colours in sync for anyone opening the `.blend`.
 
 ## Geometry pitfalls (all hit before)

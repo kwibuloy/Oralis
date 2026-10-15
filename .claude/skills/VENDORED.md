@@ -6,8 +6,8 @@ folder was left out. To update, re-copy `skills/taste-skill` and `skills/redesig
 
 Gate for this repo (run from the repo root, dev server on :5173):
 
-    node .claude/skills/taste-skill/scripts/lint.mjs logibot/src
-    node .claude/skills/taste-skill/scripts/inspect.mjs http://localhost:5173/ --out logibot/.shots/inspect
+    node .claude/skills/taste-skill/scripts/lint.mjs src
+    node .claude/skills/taste-skill/scripts/inspect.mjs http://localhost:5173/ --out .shots/inspect
 
 Current result: lint clean; inspect 0 FAIL, 1 WARN (`no-footage`, defended: the live 3D model is the
 moving picture and no honest dental clip exists in the open collections).

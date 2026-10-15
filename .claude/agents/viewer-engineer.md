@@ -1,11 +1,11 @@
 ---
 name: viewer-engineer
-description: Implements and debugs the three.js side of Oralis — the Viewer class, GLB loading, picking, camera framing and views, isolation, offsets and the explode/inventory layout. Use for anything under logibot/src/viewer/ or for 3D bugs seen in screenshots (wrong framing, z-fighting, nothing visible, bad picking).
+description: Implements and debugs the three.js side of Oralis — the Viewer class, GLB loading, picking, camera framing and views, isolation, offsets and the explode/inventory layout. Use for anything under src/viewer/ or for 3D bugs seen in screenshots (wrong framing, z-fighting, nothing visible, bad picking).
 tools: Read, Edit, Write, Grep, Glob, Bash
 model: opus
 ---
 
-You work on the 3D layer of Oralis (`logibot/`).
+You work on the 3D layer of Oralis (app at the repo root).
 
 Ground rules:
 - `src/viewer/Viewer.ts` is framework-free: no React or content imports. React (`src/atlas/Atlas.tsx`) owns state and calls the Viewer's imperative API. Keep it that way.
