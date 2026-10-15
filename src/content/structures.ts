@@ -39,4 +39,9 @@ export const structuresIn = (model: string) => STRUCTURES.filter((s) => s.models
 export const GROUP_COLOR: Record<string, string> = {
   teeth: '#f6f1e7', gingiva: '#e08f8c', mandible: '#e9e0cc', maxilla: '#e9e0cc', skull: '#e3d9c3', 'neck-bones': '#e3d9c3',
   suprahyoid: '#c9655a', infrahyoid: '#bb5c52', tongue: '#d9847c', 'palate-pharynx': '#c06e64', glands: '#e0b65c', lips: '#d68f80',
+  larynx: '#b9c7cf', 'eye-muscles': '#c4675d', nerves: '#e6c34a', arteries: '#d2463f', veins: '#4f72b8',
+  spine: '#e6dcc6', 'thorax-bones': '#e6dcc6', 'upper-limb-bones': '#e9e0cc', 'lower-limb-bones': '#e9e0cc',
+  ligaments: '#d9d2bf', brain: '#e8c9c0', 'cerebral-arteries': '#d2463f', 'body-arteries': '#d2463f', 'body-veins': '#4f72b8',
+  heart: '#b8443f', airways: '#c9d6dd', digestive: '#d9a27f', urogenital: '#d6a08f', endocrine: '#c99bc4', senses: '#e9edf0', skin: '#e8c4a8',
+  'back-muscles': '#b85a50', 'trunk-muscles': '#c4675d', 'upper-limb-muscles': '#bf6156', 'lower-limb-muscles': '#b3554b',
 };

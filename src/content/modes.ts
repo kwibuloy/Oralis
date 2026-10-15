@@ -20,21 +20,26 @@ export interface Mode {
   context?: string[];
   /** Quick layer presets shown above the toggles. */
   presets: Preset[];
+  /** Show body-system chips (multi-select) instead of presets; layers are listed by system. */
+  systems?: boolean;
 }
 
 export const MODES: Mode[] = [
   {
     id: 'general', name: 'General anatomy', short: 'Gen ana', model: '/models/general.glb', source: 'bodyparts3d',
-    lead: 'The skull, jaws, floor of the mouth, tongue, palate and salivary glands as separate structures.',
-    defaultVisible: ['teeth', 'gingiva', 'mandible', 'maxilla', 'skull', 'neck-bones', 'suprahyoid', 'tongue', 'palate-pharynx', 'glands'],
-    presets: [
-      { label: 'All', groups: ['teeth', 'gingiva', 'mandible', 'maxilla', 'skull', 'neck-bones', 'suprahyoid', 'infrahyoid', 'tongue', 'palate-pharynx', 'glands', 'lips'] },
-      { label: 'Skeleton', groups: ['teeth', 'mandible', 'maxilla', 'skull', 'neck-bones'] },
-      { label: 'Soft tissue', groups: ['gingiva', 'suprahyoid', 'infrahyoid', 'tongue', 'palate-pharynx', 'glands', 'lips'] },
+    lead: 'Every structure in BodyParts3D: skeleton, muscles, brain and nerves, vessels and organs, filterable by body system.',
+    // Everything except skin, which would hide the rest. Students narrow it down with the system chips.
+    defaultVisible: [
+      'teeth', 'mandible', 'maxilla', 'skull', 'neck-bones', 'spine', 'thorax-bones', 'upper-limb-bones', 'lower-limb-bones', 'ligaments',
+      'suprahyoid', 'infrahyoid', 'tongue', 'palate-pharynx', 'eye-muscles', 'back-muscles', 'trunk-muscles', 'upper-limb-muscles', 'lower-limb-muscles',
+      'brain', 'nerves', 'arteries', 'cerebral-arteries', 'body-arteries', 'veins', 'body-veins',
+      'heart', 'airways', 'larynx', 'digestive', 'urogenital', 'endocrine', 'senses', 'glands', 'gingiva', 'lips',
     ],
+    systems: true,
+    presets: [],
   },
   {
-    id: 'dental', name: 'Dental anatomy', short: 'Dental', model: '/models/dental.glb', source: 'bodyparts3d',
+    id: 'dental', name: 'Oral anatomy', short: 'Oral', model: '/models/dental.glb', source: 'bodyparts3d',
     lead: 'The 28 permanent teeth in their arches, with FDI, Universal and Palmer numbering.',
     defaultVisible: ['teeth', 'gingiva'],
     context: ['mandible', 'maxilla'],
@@ -45,7 +50,7 @@ export const MODES: Mode[] = [
     ],
   },
   {
-    id: 'histology', name: 'Histology', short: 'Histo', model: '/models/histology.glb', source: 'blender',
+    id: 'histology', name: 'General & oral histology', short: 'Histo', model: '/models/histology.glb', source: 'blender',
     lead: 'A tooth cut along its long axis in its socket, with the dental and periodontal tissues.',
     defaultVisible: ['enamel', 'dentin', 'pulp', 'neurovascular', 'cementum', 'pdl', 'lamina-dura', 'bone', 'gingiva'],
     presets: [

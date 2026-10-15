@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GROUPS } from '../content/anatomy';
+import { GROUP_SYSTEM, GROUPS, SYSTEMS, type SystemId } from '../content/anatomy';
 import { TISSUES } from '../content/histology';
-import { MODES, modeById, type ModeId } from '../content/modes';
+import { modeById, type ModeId } from '../content/modes';
 import { BODYPARTS3D, SITE } from '../content/site';
 import { GROUP_COLOR, GROUP_ORDER, MESH_TO_KEY, structureByKey, structuresIn } from '../content/structures';
 import { SYSTEM_LABEL, type NumberingSystem } from '../content/teeth';
-import { modeHref, replaceSelection } from '../lib/route';
+import { replaceSelection } from '../lib/route';
 import { Viewer, type View } from '../viewer/Viewer';
 import { Segmented, Switch } from './controls';
 import { archOf, labelFor } from './describe';
 import DetailCard from './DetailCard';
 import Icon from './Icon';
+import SubjectPicker from './SubjectPicker';
 import Search, { type SearchItem } from './Search';
 import './atlas.css';
 
@@ -18,17 +19,19 @@ type ArchFilter = 'both' | 'upper' | 'lower';
 const BITE_OPEN = { x: 0, y: -1.6, z: 0.3 };
 const VIEWS: [View, string, string][] = [['front', 'F', 'Front'], ['side', 'S', 'Side'], ['back', 'B', 'Back'], ['top', 'T', 'Top']];
 const STAGE_LABEL: Record<ModeId, string> = {
-  general: 'Head and neck · adult male',
+  general: 'Whole body · adult male',
   dental: 'Permanent dentition',
   histology: 'Longitudinal section · schematic',
 };
 
 interface Layer { id: string; label: string; color: string; count: number }
 
-function layersFor(modeId: ModeId, model: string): Layer[] {
+function layersFor(modeId: ModeId, model: string, bySystem: boolean): Layer[] {
   if (modeId === 'histology') return TISSUES.map((t) => ({ id: t.key, label: t.name, color: t.color, count: 1 }));
   const inModel = structuresIn(model);
-  return GROUP_ORDER.filter((g) => inModel.some((s) => s.group === g)).map((g) => ({
+  const rank = (g: string) => SYSTEMS.findIndex((s) => s.id === GROUP_SYSTEM[g]);
+  const order = bySystem ? [...GROUP_ORDER].sort((a, b) => rank(a) - rank(b)) : GROUP_ORDER;
+  return order.filter((g) => inModel.some((s) => s.group === g)).map((g) => ({
     id: g, label: GROUPS[g].label, color: GROUP_COLOR[g], count: inModel.filter((s) => s.group === g).length,
   }));
 }
@@ -54,7 +57,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
 
-  const layers = useMemo(() => layersFor(modeId, modelName), [modeId, modelName]);
+  const layers = useMemo(() => layersFor(modeId, modelName, !!mode.systems), [modeId, modelName, mode.systems]);
   const context = (mode.context ?? []).filter((g) => !visible.includes(g));
   const piecesVisible = layers.filter((l) => visible.includes(l.id)).reduce((t, l) => t + l.count, 0);
   const totalPieces = layers.reduce((t, l) => t + l.count, 0);
@@ -84,6 +87,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
 
   // Push React state into the viewer.
   useEffect(() => { viewer.current?.setVisibleGroups(visible, context); }, [visible, context.join(), ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Presets can change the extent a lot (whole body → head), so they refit; single toggles don't.
+  const [presetTick, setPresetTick] = useState(0);
+  useEffect(() => { if (presetTick) viewer.current?.fit(); }, [presetTick]);
   useEffect(() => { viewer.current?.setFilter(arch === 'both' ? () => true : (key) => archOf(key) === arch); }, [arch, ready]);
   useEffect(() => { viewer.current?.setOffset((key) => archOf(key) === 'lower', biteOpen ? BITE_OPEN : { x: 0, y: 0, z: 0 }); }, [biteOpen, ready]);
   useEffect(() => { viewer.current?.setExplode(explode); }, [explode, ready]);
@@ -119,6 +125,14 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   }, [modeId, modelName, system]);
 
   const toggle = (id: string, on: boolean) => setVisible((v) => (on ? [...new Set([...v, id])] : v.filter((x) => x !== id)));
+  // System chips: a system is on when all its layers are; toggling adds or removes them all. Skin stays a manual layer.
+  const systemLayers = (id: SystemId) => layers.filter((l) => GROUP_SYSTEM[l.id] === id && l.id !== 'skin').map((l) => l.id);
+  const systemOn = (id: SystemId) => systemLayers(id).every((g) => visible.includes(g));
+  const toggleSystem = (id: SystemId) => {
+    const ids = systemLayers(id);
+    setVisible((v) => (systemOn(id) ? v.filter((g) => !ids.includes(g)) : [...new Set([...v, ...ids])]));
+    setPresetTick((t) => t + 1);
+  };
   const activePreset = mode.presets.find((p) => p.groups.length === visible.length && p.groups.every((g) => visible.includes(g)))?.label ?? null;
   const goView = (v: View) => { setView(v); viewer.current?.setView(v); };
   const resetAll = () => {
@@ -149,13 +163,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         <p className="brand__meta">{totalPieces} modeled pieces · {mode.source === 'blender' ? 'Modeled in Blender' : 'BodyParts3D'}</p>
       </header>
 
-      <nav className="card modes" aria-label="Mode">
-        {MODES.map((m) => (
-          <a key={m.id} href={modeHref(m.id)} aria-current={m.id === modeId ? 'page' : undefined}>
-            <span className="modes__long">{m.name}</span><span className="modes__short">{m.short}</span>
-          </a>
-        ))}
-      </nav>
+      <SubjectPicker current={modeId} />
 
       <div className="topright">
         <Search items={searchItems} onSelect={setSelected} />
@@ -172,8 +180,16 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           <h2 id="layers-title">{modeId === 'histology' ? 'Tissues' : 'Layers'}</h2>
           <span className="count">{layers.length}</span>
         </div>
-        <Segmented label="Layer preset" value={activePreset} options={mode.presets.map((p) => [p.label, p.label])}
-          onChange={(label) => setVisible(mode.presets.find((p) => p.label === label)!.groups)} />
+        {mode.systems ? (
+          <div className="systems" role="group" aria-label="Body systems">
+            {SYSTEMS.map((s) => (
+              <button key={s.id} className="systems__chip" aria-pressed={systemOn(s.id)} onClick={() => toggleSystem(s.id)}>{s.label}</button>
+            ))}
+          </div>
+        ) : (
+          <Segmented label="Layer preset" value={activePreset} options={mode.presets.map((p) => [p.label, p.label])}
+            onChange={(label) => { setVisible(mode.presets.find((p) => p.label === label)!.groups); setPresetTick((t) => t + 1); }} />
+        )}
         <ul className="layers__list">
           {layers.map((l) => (
             <li key={l.id}>
@@ -220,17 +236,12 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       </div>
 
       <section className="card explode" aria-labelledby="explode-title">
-        <div className="explode__main">
-          <div className="explode__head">
-            <h2 id="explode-title">Explode anatomy</h2>
-            <output className="chip chip--value" htmlFor="explode-range">{Math.round(explode * 100)}<small>%</small></output>
-          </div>
-          <input id="explode-range" type="range" min={0} max={100} value={Math.round(explode * 100)}
-            onChange={(e) => setExplode(Number(e.target.value) / 100)} style={{ '--fill': `${explode * 100}%` } as React.CSSProperties} />
-          <div className="explode__ends"><span>Assembled</span><span>Every piece</span></div>
-        </div>
-        <button className="explode__reset" onClick={() => setExplode(0)} disabled={explode === 0}>
-          <Icon name="reset" /> <span>Reset</span>
+        <h2 id="explode-title">Explode</h2>
+        <input id="explode-range" type="range" min={0} max={100} value={Math.round(explode * 100)} aria-valuetext={`${Math.round(explode * 100)}% exploded`}
+          onChange={(e) => setExplode(Number(e.target.value) / 100)} style={{ '--fill': `${explode * 100}%` } as React.CSSProperties} />
+        <output className="explode__value" htmlFor="explode-range">{Math.round(explode * 100)}%</output>
+        <button className="icon-button explode__reset" aria-label="Reset explode" title="Reset explode" onClick={() => setExplode(0)} disabled={explode === 0}>
+          <Icon name="reset" />
         </button>
       </section>
 
@@ -244,18 +255,17 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           <button className="icon-button detail__close" onClick={() => setCreditsOpen(false)} aria-label="Close"><Icon name="close" /></button>
           <h2>Sources &amp; credits</h2>
           <p>
-            General and dental models: <a href={BODYPARTS3D.url}>{BODYPARTS3D.name}</a>, {BODYPARTS3D.by},{' '}
+            General and oral anatomy models: <a href={BODYPARTS3D.url}>{BODYPARTS3D.name}</a>, {BODYPARTS3D.by},{' '}
             <a href={BODYPARTS3D.license.url}>{BODYPARTS3D.license.name}</a>; extracted from the packaging in{' '}
-            <a href={BODYPARTS3D.via.url}>{BODYPARTS3D.via.name}</a> and simplified for the web.
+            <a href={BODYPARTS3D.via.url}>{BODYPARTS3D.via.name}</a>. General anatomy includes every source mesh at full detail.
           </p>
           <p>Histology model: authored for {SITE.name} in Blender. It is schematic; proportions are stylised for teaching.</p>
-          <p>Not in the source data: muscles of mastication, trigeminal branches, facial and maxillary arteries, parotid gland, third molars, primary teeth.</p>
+          <p>Not in the source data: muscles of mastication, maxillary and mandibular nerves, facial nerve and lower cranial nerves, external carotid artery and its branches, parotid gland, lung tissue, third molars, primary teeth.</p>
           <p>For study only. Not for diagnosis or treatment planning. <a href={SITE.repo}>Source code</a> (MIT).</p>
         </aside>
       )}
 
       <p className="hints" aria-hidden="true">Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect</p>
-      <button className="credits-link" onClick={() => setCreditsOpen(true)}>Source &amp; credits <Icon name="external" size={14} /></button>
     </div>
   );
 }
