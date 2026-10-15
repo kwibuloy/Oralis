@@ -8,6 +8,8 @@ const PATHS = {
   chevron: 'm9 18 6-6-6-6',
   layers: 'm12 3 9 5-9 5-9-5 9-5zm-9 9 9 5 9-5M3 16l9 5 9-5',
   external: 'M7 17 17 7M8 7h9v9',
+  play: 'M8 5.5v13l10.5-6.5z',
+  pause: 'M9 5v14M15 5v14',
 } as const;
 
 export type IconName = keyof typeof PATHS;

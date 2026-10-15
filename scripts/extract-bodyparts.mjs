@@ -4,7 +4,8 @@
 //   git clone --depth 1 https://github.com/ashemag/human-atlas ../human-atlas
 //   node scripts/extract-bodyparts.mjs ../human-atlas
 //
-// Writes public/models/general.glb (every BodyParts3D mesh) and public/models/dental.glb (dentition and
+// Writes public/models/general.glb (every BodyParts3D mesh), public/models/physiology.glb (only what the
+// Physiology functions show, plus the skeleton for orientation, with per-vertex flow distances) and public/models/dental.glb (dentition and
 // jaws). The histology model is authored in Blender instead: scripts/blender/build_histology.py.
 import { Document, NodeIO } from '@gltf-transform/core';
 import { KHRDracoMeshCompression } from '@gltf-transform/extensions';
@@ -12,6 +13,7 @@ import { weld } from '@gltf-transform/functions';
 import draco3d from 'draco3dgltf';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
+import { chainFlow, networkFlow, radialFlow } from './lib/flow.mjs';
 import { join } from 'node:path';
 
 const src = process.argv[2];
@@ -66,7 +68,7 @@ const GROUPS = [
 /** Side words can sit anywhere ("Long head of left biceps brachii"); groups match without them. */
 const unsided = (name) => name.replace(/\b(left|right) /gi, '');
 // Word-bounded so "hepatovenous segment" (liver tissue) isn't treated as a vessel.
-const VESSEL = /arter|\bvein|\bvenous/i;
+const VESSEL = /arter|\bvein|\bvenous|aorta|vena cava|(costo|thyro)cervical trunk/i;
 const VESSEL_GROUPS = new Set(['arteries', 'veins', 'cerebral-arteries']);
 /** Anything no pattern claims still goes in, grouped by its source system: the General model has every mesh. */
 const BY_SYSTEM = {
@@ -75,8 +77,9 @@ const BY_SYSTEM = {
   integumentary: 'skin', sensory: 'senses', nervous: 'brain', connective: 'ligaments',
 };
 const groupOf = (p) => GROUPS.find(([g, re, o]) => re.test(unsided(p.name)) && (!o.hn || p.bounds[0][1] > 1.3)
-  // Limb vessels share "of hand"/"of foot" names with the small muscles; only the vessel groups take them.
-  && (VESSEL_GROUPS.has(g) || !VESSEL.test(p.name)))?.[0] ?? BY_SYSTEM[p.system];
+  // Vessel groups take only vessels, and other groups never do: limb vessels share "of hand"/"of foot"
+  // names with small muscles, and brain-artery patterns ("cerebral", "angular gyrus") match brain tissue.
+  && (VESSEL_GROUPS.has(g) === VESSEL.test(p.name)))?.[0] ?? BY_SYSTEM[p.system];
 
 const chunks = atlas.chunks.map((c) => {
   const raw = readFileSync(join(src, 'public', c.gzip));
@@ -87,9 +90,17 @@ const picked = atlas.parts
   .map((p) => ({ ...p, group: groupOf(p) }))
   .filter((p) => p.group);
 
+const PHYSIOLOGY_GROUPS = [
+  'heart', 'arteries', 'cerebral-arteries', 'body-arteries', 'veins', 'body-veins', 'nerves', 'brain', 'airways', 'larynx', 'digestive', 'urogenital',
+  'suprahyoid', 'infrahyoid', 'tongue', 'palate-pharynx', 'eye-muscles', 'back-muscles', 'trunk-muscles', 'upper-limb-muscles', 'lower-limb-muscles',
+  'skull', 'mandible', 'maxilla', 'teeth', 'neck-bones', 'spine', 'thorax-bones', 'upper-limb-bones', 'lower-limb-bones',
+];
+
 /** Which groups each mode model contains. */
 const MODELS = {
   general: (g) => true,
+  // Keep in step with FUNCTION_LAYERS groups + FUNCTION_CONTEXT in src/content/function.ts (tested).
+  physiology: (g) => PHYSIOLOGY_GROUPS.includes(g),
   dental: (g) => ['teeth', 'gingiva', 'mandible', 'maxilla'].includes(g),
 };
 const SCALE = 100; // metres → centimetres so camera numbers stay readable
@@ -114,16 +125,23 @@ for (const [model, includes] of Object.entries(MODELS)) {
   const doc = new Document();
   const buffer = doc.createBuffer();
   const scene = doc.createScene(model);
-  for (const p of parts) {
+  const geometry = parts.map((p) => {
     const chunk = chunks[p.chunk];
     const pos = new Float32Array(chunk, p.positions, p.vertexCount * 3).slice();
     for (let i = 0; i < pos.length; i++) pos[i] = (pos[i] - centre[i % 3]) * SCALE;
     const nrm = Float32Array.from(new Int16Array(chunk, p.normals, p.vertexCount * 3), (v) => Math.max(v / 32767, -1));
     const idx = new Uint32Array(chunk, p.indices, p.indexCount).slice();
+    return { id: p.id, name: unsided(p.name).toLowerCase(), group: p.group, system: p.system, pos, nrm, idx };
+  });
+  const flows = model === 'physiology' ? computeFlows(geometry) : new Map();
+  for (const [i, p] of parts.entries()) {
+    const { pos, nrm, idx } = geometry[i];
     const prim = doc.createPrimitive()
       .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(pos).setBuffer(buffer))
       .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(nrm).setBuffer(buffer))
       .setIndices(doc.createAccessor().setType('SCALAR').setArray(idx).setBuffer(buffer));
+    // Signed distance along the part's network, read by the viewer as the `_flow` attribute.
+    if (flows.has(p.id)) prim.setAttribute('_FLOW', doc.createAccessor().setType('SCALAR').setArray(flows.get(p.id)).setBuffer(buffer));
     scene.addChild(doc.createNode(p.id).setMesh(doc.createMesh(p.id).addPrimitive(prim)));
 
     // Some structures are split across several source meshes; they share one key.
@@ -137,6 +155,73 @@ for (const [model, includes] of Object.entries(MODELS)) {
   writeFileSync(`public/models/${model}.glb`, glb);
   const tris = doc.getRoot().listMeshes().reduce((t, m) => t + m.listPrimitives()[0].getIndices().getCount() / 3, 0);
   console.log(`${model}.glb: ${parts.length} meshes, ${tris} triangles, ${(glb.byteLength / 1024 / 1024).toFixed(2)} MB`);
+}
+
+function computeFlows(geometry) {
+  const by = (re) => geometry.filter((g) => re.test(g.name));
+  const centroid = (list) => {
+    const c = [0, 0, 0]; let n = 0;
+    for (const g of list) for (let i = 0; i < g.pos.length; i += 3) { c[0] += g.pos[i]; c[1] += g.pos[i + 1]; c[2] += g.pos[i + 2]; n++; }
+    return c.map((v) => v / n);
+  };
+  const topY = new Map(geometry.map((g) => { let m = -Infinity; for (let i = 1; i < g.pos.length; i += 3) m = Math.max(m, g.pos[i]); return [g.id, m]; }));
+  // Points of the heart chambers, to find where the great vessels leave or enter the heart.
+  const near = (list, r) => {
+    const pts = [];
+    for (const g of list) for (let i = 0; i < g.pos.length; i += 9) pts.push([g.pos[i], g.pos[i + 1], g.pos[i + 2]]);
+    return (x) => pts.some((q) => Math.abs(q[0] - x[0]) < r && Math.abs(q[1] - x[1]) < r && Math.abs(q[2] - x[2]) < r && Math.hypot(q[0] - x[0], q[1] - x[1], q[2] - x[2]) < r);
+  };
+  const nearVentricle = near(by(/^(cavity|wall) of ventricle$/), 1.0);
+  const nearAtrium = near(by(/^(cavity|wall) of atrium$/), 1.0);
+
+  const out = new Map();
+  const report = (label, { flows, unreached }) => {
+    for (const [id, f] of flows) out.set(id, f);
+    console.log(`  flow ${label}: ${flows.size} meshes${unreached.length ? `, ${unreached.length} unreached: ${[...new Set(unreached)].join('; ')}` : ''}`);
+  };
+
+  // Blood leaves the ventricles through the aorta and pulmonary trunk ...
+  report('arteries', networkFlow(geometry.filter((g) => g.system === 'arterial'), {
+    isRoot: (p, x) => /^(ascending aorta|pulmonary trunk)$/.test(p.name) && nearVentricle(x),
+  }));
+  // ... and returns to the atria through the venae cavae, coronary sinus and pulmonary veins.
+  // The hepatic portal system is its own network: it reaches the venae cavae only through the liver
+  // sinusoids. Gut tributaries flow towards the portal trunk; its branches inside the liver flow away.
+  const PORTAL_TRUNK = /^(hepatic portal vein|pre-hepatic portal vein|trunk of portal vein)$/;
+  const INTRAHEPATIC = /^portal vein$|branch of portal vein$/;
+  const TRIBUTARY = /^(splenic|superior mesenteric|inferior mesenteric|gastric|gastroepiploic|colic|middle colic|ileal|ileocolic|sigmoid|superior rectal|pancreaticoduodenal) vein$/;
+  const portal = geometry.filter((g) => PORTAL_TRUNK.test(g.name) || INTRAHEPATIC.test(g.name) || TRIBUTARY.test(g.name));
+  const portalFlow = networkFlow(portal, { isRoot: (p) => PORTAL_TRUNK.test(p.name) });
+  for (const p of portal) if (TRIBUTARY.test(p.name)) portalFlow.flows.set(p.id, portalFlow.flows.get(p.id).map((d) => -d));
+  report('portal', portalFlow);
+  // (The liver's hepatovenous segments are filed under venous in the source but are liver tissue.)
+  report('veins', networkFlow(geometry.filter((g) => g.system === 'venous' && g.group !== 'digestive' && !portal.includes(g)), {
+    isRoot: (p, x) => /^((superior|inferior) vena cava|coronary sinus|(superior|inferior) pulmonary vein)$/.test(p.name) && nearAtrium(x),
+    sign: -1,
+  }));
+  // Inspired air runs down the trachea into the bronchial tree.
+  report('airways', networkFlow(geometry.filter((g) => g.group === 'airways' && !/cartilage$/.test(g.name)), {
+    isRoot: (p, x) => p.name === 'trachea' && x[1] > topY.get(p.id) - 0.5,
+  }));
+  // Urine runs from each ureter into the bladder and out through the urethra.
+  report('urine', networkFlow(by(/^(ureter|urinary bladder|urethra)$/), {
+    isRoot: (p, x) => p.name === 'ureter' && x[1] > topY.get(p.id) - 0.5,
+  }));
+  // Food follows the gut in order (the source has no caecum or sigmoid colon).
+  const GUT = ['esophagus', 'stomach', 'duodenum', 'proximal part of jejunum', 'middle part of jejunum', 'distal part of jejunum',
+    'proximal part of ileum', 'middle part of ileum', 'distal part of ileum', 'ileocecal junction', 'ascending colon', 'transverse colon',
+    'descending colon', 'rectum'];
+  report('food', chainFlow(GUT.flatMap((n) => by(new RegExp(`^${n}$`))), {
+    entry: (p, x) => x[1] > topY.get(p.id) - 0.5,
+  }));
+  // Nerve impulses: sensory fibres conduct towards the brainstem, motor fibres away from it.
+  // Anchored: "supratrochlear", "infratrochlear" and the sensory root of the ciliary ganglion are sensory.
+  const MOTOR = /\b(oculomotor|trochlear) nerve$|^short ciliary nerve$|^ciliary ganglion$/;
+  report('nerves', radialFlow(geometry.filter((g) => g.group === 'nerves'), {
+    origin: centroid(by(/^midbrain$/)),
+    signOf: (p) => (MOTOR.test(p.name) ? 1 : -1),
+  }));
+  return out;
 }
 
 writeFileSync('src/content/structures.generated.json', JSON.stringify([...records.values()], null, 1) + '\n');

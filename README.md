@@ -3,14 +3,15 @@
 A 3D atlas for dental students. Pick a subject, turn its model, click any part to read what it
 is, what supplies it and why it matters in the clinic.
 
-Twelve subjects are planned, grouped in the subject picker: Anatomy (General anatomy, Oral anatomy,
-Anatomy & physiology), Physiology (General physiology, Oral physiology & occlusion), Chemistry &
+Eleven subjects are planned, grouped in the subject picker: Anatomy (General anatomy, Oral anatomy),
+Physiology (Physiology, Oral physiology & occlusion), Chemistry &
 genetics (Biochemistry, Organic chemistry, Genetics), Micro, histo & path (Microbiology, General &
 oral histology, Pathology) and Dental (Cariology). These have models today:
 
 | Subject | Model (`public/models/`) | What you can do |
 | --- | --- | --- |
 | **General anatomy** | `general.glb`: every BodyParts3D mesh at full detail (2,234 meshes, 10.4 MB) | Filter by system (Skeleton, Muscles, Nerves, Vessels, Organs), toggle 37 layers, isolate a structure, read nerve supply and clinical links |
+| **Physiology** | `physiology.glb`: vessels, heart, brain and nerves, airways, gut, urinary tract and muscles, with the skeleton for orientation, plus per-vertex flow distances | Watch blood flow (oxygenated red, deoxygenated blue), nerve signals, breathing, digestion and urine, see a muscle's line of pull and brain areas by function, with play / pause / scrub / speed |
 | **Oral anatomy** | `dental.glb`: 28 permanent teeth, gingiva, maxillae and mandible (35 meshes, 0.2 MB) | Switch FDI / Universal / Palmer numbering, show one arch, open the bite, read roots, crown form and eruption age |
 | **General & oral histology** | `histology.glb`: a tooth in its socket cut along its long axis, modelled in Blender (9 tissues, 0.25 MB) | Enamel, dentin, pulp, neurovascular bundle, cementum, PDL, lamina dura, alveolar bone and gingiva, each with composition, cells, features and a clinical link |
 

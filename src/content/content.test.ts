@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GROUP_SYSTEM, GROUPS, noteFor } from './anatomy';
+import { baseName, GROUP_SYSTEM, GROUPS, noteFor } from './anatomy';
+import { bloodColour, brainArea, DEOXYGENATED, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, OXYGENATED } from './function';
 import { TISSUES } from './histology';
 import { MODES } from './modes';
 import { STRUCTURES } from './structures';
@@ -89,6 +90,53 @@ describe('mode models', () => {
   it('keeps the dental model to the dentition and jaws', () => {
     const groups = new Set(STRUCTURES.filter((s) => s.models.includes('dental')).map((s) => s.group));
     expect([...groups].sort()).toEqual(['gingiva', 'mandible', 'maxilla', 'teeth']);
+  });
+});
+
+describe('physiology functions', () => {
+  const buf = readFileSync(resolve(__dirname, '../../public/models/physiology.glb'));
+  const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+  const withFlow = new Set<string>(json.nodes
+    .filter((n: { mesh?: number }) => n.mesh !== undefined && '_FLOW' in json.meshes[n.mesh].primitives[0].attributes)
+    .map((n: { name: string }) => n.name));
+  const phys = STRUCTURES.filter((s) => s.models.includes('physiology'));
+  const fn = (s: (typeof phys)[number]) => flowFunction(s.group, baseName(s.sourceName));
+
+  it('bakes flow into every vessel and nerve, and only into structures a function animates', () => {
+    const missing = phys.filter((s) => ['blood', 'nerves'].includes(fn(s) ?? '') && s.group !== 'digestive' && !s.meshIds.every((id) => withFlow.has(id)));
+    expect(missing.map((s) => s.sourceName)).toEqual([]);
+    const stray = phys.filter((s) => s.meshIds.some((id) => withFlow.has(id)) && !fn(s));
+    expect(stray.map((s) => s.sourceName)).toEqual([]);
+    expect(withFlow.size).toBeGreaterThan(1200);
+  });
+
+  it('shows the groups of every function layer in the model', () => {
+    for (const f of FUNCTION_LAYERS) for (const g of f.groups) expect(phys.some((s) => s.group === g), `${f.id}: ${g}`).toBe(true);
+  });
+
+  it('contains only the function groups and the skeleton', () => {
+    const want = new Set([...FUNCTION_LAYERS.flatMap((f) => f.groups), ...FUNCTION_CONTEXT]);
+    expect([...new Set(phys.map((s) => s.group))].filter((g) => !want.has(g))).toEqual([]);
+    expect([...want].filter((g) => !phys.some((s) => s.group === g))).toEqual([]);
+  });
+
+  it('colours the pulmonary circulation the other way round', () => {
+    expect(bloodColour('body-arteries', 'pulmonary trunk')).toBe(DEOXYGENATED);
+    expect(bloodColour('body-arteries', 'apical segmental artery')).toBe(DEOXYGENATED);
+    expect(bloodColour('body-arteries', 'anterior superior segmental hepatic artery')).toBe(OXYGENATED);
+    expect(bloodColour('body-arteries', 'ascending aorta')).toBe(OXYGENATED);
+    expect(bloodColour('body-veins', 'superior pulmonary vein')).toBe(OXYGENATED);
+    expect(bloodColour('body-veins', 'hepatic portal vein')).toBe(DEOXYGENATED);
+    expect(bloodColour('heart', 'wall of ventricle')).toBeNull();
+  });
+
+  it('maps the main brain regions to a function', () => {
+    for (const n of ['precentral gyrus', 'postcentral gyrus', 'occipital lobe', 'cerebellum', 'hippocampus', 'medulla oblongata', 'putamen']) {
+      expect(brainArea(n), n).toBeDefined();
+    }
+    // Language areas only on the (usually dominant) left.
+    expect(brainArea('inferior frontal gyrus', 'Left inferior frontal gyrus')?.label).toBe('Language');
+    expect(brainArea('inferior frontal gyrus', 'Right inferior frontal gyrus')).toBeUndefined();
   });
 });
 

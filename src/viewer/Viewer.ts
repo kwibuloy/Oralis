@@ -17,6 +17,14 @@ const NO_GLOW = new THREE.Color(0x000000);
 const SHIFT_DESKTOP = 0;
 const SHIFT_PHONE = -0.04;
 
+/** Flow pulses: wavelength along the network (model units, cm), pulses per loop and loop length. */
+const FLOW_WAVELENGTH = 6;
+const FLOW_BANDS = 4;
+const LOOP_SECONDS = 3;
+const PULL_COLOUR = new THREE.Color('#f59e0b');
+/** One full auto-rotate turn. */
+const AUTO_ROTATE_SECONDS = 25;
+
 /** Room around a fitted model for the cards over the canvas (picker above, explode card below). */
 const FIT_PADDING = 1.35;
 
@@ -78,8 +86,19 @@ export class Viewer {
   private isolated = false;
   private explode = 0;
   private gridDirty = true;
+  private colourOverride: Map<string, string> | null = null;
+  // Animated flow: one clock shared by every flow material, 0..1 per loop.
+  private flowTime = { value: 0 };
+  private playing = false;
+  private speed = 1;
+  private lastTick = 0;
+  private lastFrame = performance.now();
+  private lastTimeReport = 0;
+  private pull: THREE.Group | null = null;
 
   onPick: (key: string | null) => void = () => {};
+  /** Playback position (0..1), reported about ten times a second while playing. */
+  onTime: (t: number) => void = () => {};
   onHover: (key: string | null, at: { x: number; y: number } | null) => void = () => {};
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -101,7 +120,10 @@ export class Viewer {
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.screenSpacePanning = true;
-    this.controls.autoRotateSpeed = 1.2;
+    // Wheel and pinch zoom towards the pointer / the midpoint of the two fingers, not the orbit centre.
+    this.controls.zoomToCursor = true;
+    // OrbitControls turns 2π/60 × speed radians per second when given elapsed time: 60 / 2.4 = one turn per 25 s.
+    this.controls.autoRotateSpeed = 60 / AUTO_ROTATE_SECONDS;
     this.controls.addEventListener('change', () => (this.needsRender = true));
 
     canvas.addEventListener('pointerdown', this.handleDown);
@@ -114,10 +136,14 @@ export class Viewer {
     this.loop();
   }
 
-  /** Load a Draco-compressed GLB; `describe` maps a node name to its structure, or null to drop it. */
-  async loadGLB(url: string, describe: (nodeName: string) => Pickable | null): Promise<void> {
+  /**
+   * Load a Draco-compressed GLB; `describe` maps a node name to its structure, or null to drop it.
+   * `onProgress` gets bytes downloaded and the total (null when the server sends no length).
+   */
+  async loadGLB(url: string, describe: (nodeName: string) => Pickable | null, onProgress?: (loaded: number, total: number | null) => void): Promise<void> {
     const draco = new DRACOLoader().setDecoderPath('/draco/');
-    const gltf = await new GLTFLoader().setDRACOLoader(draco).loadAsync(url);
+    const gltf = await new GLTFLoader().setDRACOLoader(draco)
+      .loadAsync(url, (e) => onProgress?.(e.loaded, e.lengthComputable && e.total ? e.total : null));
     draco.dispose();
     gltf.scene.updateMatrixWorld(true);
     const add: [THREE.Mesh, Pickable][] = [];
@@ -208,6 +234,67 @@ export class Viewer {
     this.frameKeys(this.visibleKeys(), FIT_PADDING, direction, 0);
   }
 
+  /** Replace part colours by key (e.g. oxygenation, brain areas); null restores the group colours. */
+  setColourOverrides(colours: Map<string, string> | null) {
+    this.colourOverride = colours;
+    this.apply();
+  }
+
+  /** Show flow pulses on these keys (only parts whose model carries flow data respond). */
+  setFlowKeys(keys: Set<string> | null) {
+    for (const m of this.meshes) {
+      const on = m.userData.flowOn as { value: number } | undefined;
+      if (on) on.value = keys?.has(m.userData.key) ? 1 : 0;
+    }
+    this.needsRender = true;
+  }
+
+  setPlaying(on: boolean) {
+    this.playing = on;
+    this.lastTick = performance.now();
+  }
+
+  setSpeed(speed: number) {
+    this.speed = speed;
+  }
+
+  /** Jump the flow clock (0..1 of a loop). */
+  setTime(t: number) {
+    this.flowTime.value = ((t % 1) + 1) % 1;
+    this.needsRender = true;
+  }
+
+  /**
+   * Show a muscle's line of pull: arrows at both ends of its long axis pointing inwards, because a
+   * muscle shortens and draws its attachments together. Null removes it.
+   */
+  setPullArrows(key: string | null) {
+    if (this.pull) { this.pull.removeFromParent(); this.pull.traverse((o) => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } }); this.pull = null; }
+    const mesh = key ? this.meshes.find((m) => m.userData.key === key) : undefined;
+    if (!mesh) { this.needsRender = true; return; }
+    const axis = principalAxis(mesh.geometry);
+    const length = axis.end.distanceTo(axis.start);
+    const r = Math.max(length * 0.035, 0.15);
+    const material = new THREE.MeshBasicMaterial({ color: PULL_COLOUR, depthTest: false, transparent: true, opacity: 0.95 });
+    const group = new THREE.Group();
+    const dir = axis.end.clone().sub(axis.start).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.3, r * 0.3, length * 0.7, 12), material);
+    shaft.position.copy(axis.start).lerp(axis.end, 0.5);
+    shaft.quaternion.setFromUnitVectors(up, dir);
+    group.add(shaft);
+    for (const [at, towards] of [[axis.start, dir], [axis.end, dir.clone().negate()]] as const) {
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, r * 2.6, 16), material.clone());
+      cone.position.copy(at).addScaledVector(towards, r * 1.3);
+      cone.quaternion.setFromUnitVectors(up, towards);
+      group.add(cone);
+    }
+    group.traverse((o) => { o.renderOrder = 10; });
+    mesh.add(group);
+    this.pull = group;
+    this.needsRender = true;
+  }
+
   dispose() {
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
@@ -233,6 +320,7 @@ export class Viewer {
     // Bake the world transform so offsets and framing live in one space.
     m.matrixWorld.decompose(m.position, m.quaternion, m.scale);
     m.userData = { key: info.key, group: info.group, base: new THREE.Color(info.color) };
+    if (m.geometry.getAttribute('_flow')) m.userData.flowOn = addFlow(material, this.flowTime);
     this.root.add(m);
     this.meshes.push(m);
     const box = new THREE.Box3().setFromObject(m);
@@ -264,6 +352,8 @@ export class Viewer {
       m.renderOrder = faded ? 1 : 0;
       // Keep each tissue's own hue readable; selection adds a blue glow rather than recolouring.
       const c = m.material.color.copy(base);
+      const override = this.colourOverride?.get(key);
+      if (override) c.set(override);
       if (key === this.selected) c.lerp(SELECT, SELECT_MIX);
       m.material.emissive.copy(key === this.selected ? SELECT_GLOW : key === this.hovered ? HOVER_GLOW : NO_GLOW);
     }
@@ -337,7 +427,8 @@ export class Viewer {
     const fit = Math.max(halfH / tan, halfW / (tan * this.camera.aspect)) + halfD;
     const distance = fit * padding;
     const to = sphere.center.clone().add(dir.multiplyScalar(distance));
-    this.controls.minDistance = sphere.radius * 0.4;
+    // Close enough to inspect a single tooth even when the whole body is framed.
+    this.controls.minDistance = Math.max(sphere.radius * 0.01, 0.5);
     this.controls.maxDistance = Math.max(distance * 4, 60);
     this.camera.near = Math.max(distance / 100, 0.05);
     this.camera.far = distance * 20;
@@ -404,10 +495,67 @@ export class Viewer {
   /** Render on demand: only while something changes, controls damp or the model auto-rotates. */
   private loop = () => {
     this.frame = requestAnimationFrame(this.loop);
-    const moving = this.controls.update();
+    const now = performance.now();
+    // Pass elapsed seconds so auto-rotate runs at the same speed on 60 Hz and 120 Hz screens.
+    const moving = this.controls.update(Math.min((now - this.lastFrame) / 1000, 0.25));
+    this.lastFrame = now;
+    if (this.playing) {
+      this.flowTime.value = (this.flowTime.value + ((now - this.lastTick) / 1000 / LOOP_SECONDS) * this.speed) % 1;
+      this.lastTick = now;
+      this.needsRender = true;
+      if (now - this.lastTimeReport > 100) { this.lastTimeReport = now; this.onTime(this.flowTime.value); }
+    }
     if (moving || this.needsRender || this.controls.autoRotate || gsap.globalTimeline.getChildren().length) {
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
     }
   };
+}
+
+/**
+ * Patch a standard material so the `_flow` vertex attribute (signed distance along the part's
+ * network, baked by scripts/lib/flow.mjs) drives travelling bright pulses. Returns the on/off uniform.
+ */
+function addFlow(material: THREE.MeshStandardMaterial, time: { value: number }) {
+  const on = { value: 0 };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFlowTime = time;
+    shader.uniforms.uFlowOn = on;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float _flow;\nvarying float vFlow;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlow = _flow;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uFlowTime;\nuniform float uFlowOn;\nvarying float vFlow;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        // Sharp leading edge, fading tail; the sign of vFlow sets the direction of travel.
+        float flowPhase = vFlow / ${FLOW_WAVELENGTH.toFixed(1)} - uFlowTime * ${FLOW_BANDS.toFixed(1)};
+        totalEmissiveRadiance += uFlowOn * pow(fract(flowPhase), 6.0) * vec3(0.85);`);
+  };
+  material.customProgramCacheKey = () => 'flow';
+  return on;
+}
+
+/** Long axis of a mesh (local space): principal component of its vertices, clipped to their extent. */
+function principalAxis(geometry: THREE.BufferGeometry) {
+  const pos = geometry.getAttribute('position');
+  const mean = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) mean.add(new THREE.Vector3().fromBufferAttribute(pos, i));
+  mean.divideScalar(pos.count);
+  const c = [0, 0, 0, 0, 0, 0]; // xx xy xz yy yz zz
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).sub(mean);
+    c[0] += v.x * v.x; c[1] += v.x * v.y; c[2] += v.x * v.z; c[3] += v.y * v.y; c[4] += v.y * v.z; c[5] += v.z * v.z;
+  }
+  // Power iteration for the dominant eigenvector of the covariance matrix.
+  const axis = new THREE.Vector3(1, 1, 1).normalize();
+  for (let k = 0; k < 32; k++) {
+    axis.set(c[0] * axis.x + c[1] * axis.y + c[2] * axis.z, c[1] * axis.x + c[3] * axis.y + c[4] * axis.z, c[2] * axis.x + c[4] * axis.y + c[5] * axis.z).normalize();
+  }
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const t = v.fromBufferAttribute(pos, i).sub(mean).dot(axis);
+    lo = Math.min(lo, t); hi = Math.max(hi, t);
+  }
+  return { start: mean.clone().addScaledVector(axis, lo), end: mean.clone().addScaledVector(axis, hi) };
 }
