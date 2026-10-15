@@ -1,7 +1,8 @@
 # Oralis
 
-A white-theme 3D atlas for dental students. Twelve subjects are listed in a grouped picker; the
-ones with a model so far — General anatomy, Oral anatomy, General & oral histology — each load
+A white-theme 3D atlas for dental students. Eleven subjects are listed in a grouped picker; the
+ones with a model so far — General anatomy, Physiology, Oral anatomy, General & oral histology —
+each load
 their own GLB, and the rest show a "model in progress" card. Every part is clickable, with study
 notes, layer toggles, views and an explode/inventory slider. React 18 + TypeScript + three.js,
 Vite, static deploy on Vercel. The app lives at the repo root (it moved out of `logibot/`).
@@ -29,6 +30,8 @@ This file points; it does not document. Read the files it names.
 | Structure index, colours | `src/content/structures.ts` (reads `structures.generated.json`) |
 | Layer groups, body systems, head and neck notes | `src/content/anatomy.ts` |
 | Whole-body notes (skeleton, muscles) / (organs, brain, vessels) | `src/content/body.ts`, `src/content/systems.ts` |
+| Physiology functions: layers, descriptions, oxygenation, brain areas | `src/content/function.ts`, `src/atlas/FunctionCard.tsx`, `src/atlas/Timeline.tsx` |
+| Flow distances baked into `physiology.glb` (`_FLOW` attribute) | `scripts/lib/flow.mjs`, `computeFlows` in `scripts/extract-bodyparts.mjs` |
 | Tooth numbering + morphology | `src/content/teeth.ts` |
 | Histology tissues | `src/content/histology.ts` |
 | Atlas screen (state, cards) | `src/atlas/Atlas.tsx`, `DetailCard.tsx`, `Search.tsx`, `controls.tsx` |
@@ -45,6 +48,8 @@ This file points; it does not document. Read the files it names.
 - **One GLB per mode.** A mode never loads another mode's model. General includes every
   BodyParts3D mesh at full detail: **never simplify or drop meshes to save size** — accuracy wins. Node names in the GLB are the
   content keys (BodyParts3D mesh ids, or tissue keys for Blender models); tests enforce the match.
+- **Flow animation is schematic.** Pulses run along real meshes in the right direction (arteries
+  from the heart, veins to it, sensory nerves inwards), but speed is not physiological; the UI says so.
 - **The Viewer never imports React or content.** React owns state; the Viewer takes keys,
   groups and colours. Part positions are `base + bite + explode`, computed only in `place()`.
 - **Don't invent anatomy.** BodyParts3D lacks the muscles of mastication, trigeminal

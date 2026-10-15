@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GROUP_SYSTEM, GROUPS, SYSTEMS, type SystemId } from '../content/anatomy';
+import { baseName, GROUP_SYSTEM, GROUPS, SYSTEMS, type SystemId } from '../content/anatomy';
+import { bloodColour, brainArea, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, type FunctionId } from '../content/function';
 import { TISSUES } from '../content/histology';
 import { modeById, type ModeId } from '../content/modes';
 import { BODYPARTS3D, SITE } from '../content/site';
@@ -10,16 +11,21 @@ import { Viewer, type View } from '../viewer/Viewer';
 import { Segmented, Switch } from './controls';
 import { archOf, labelFor } from './describe';
 import DetailCard from './DetailCard';
+import FunctionCard from './FunctionCard';
+import LoadingBar, { type LoadProgress } from './LoadingBar';
 import Icon from './Icon';
 import SubjectPicker from './SubjectPicker';
 import Search, { type SearchItem } from './Search';
+import Timeline from './Timeline';
 import './atlas.css';
 
 type ArchFilter = 'both' | 'upper' | 'lower';
 const BITE_OPEN = { x: 0, y: -1.6, z: 0.3 };
+const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const VIEWS: [View, string, string][] = [['front', 'F', 'Front'], ['side', 'S', 'Side'], ['back', 'B', 'Back'], ['top', 'T', 'Top']];
 const STAGE_LABEL: Record<ModeId, string> = {
   general: 'Whole body · adult male',
+  physiology: 'Function · schematic flow',
   dental: 'Permanent dentition',
   histology: 'Longitudinal section · schematic',
 };
@@ -44,6 +50,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
 
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<LoadProgress | null>(null);
   const [selected, setSelected] = useState<string | null>(initialSelected ?? null);
   const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
   const [visible, setVisible] = useState<string[]>(mode.defaultVisible);
@@ -56,9 +63,17 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [biteOpen, setBiteOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  // Physiology (function-only subject): which functions are on, whose description is open, playback.
+  const [functions, setFunctions] = useState<FunctionId[]>(['blood']);
+  const [openFunction, setOpenFunction] = useState<FunctionId | null>(null);
+  const [playing, setPlaying] = useState(!!mode.functionView && !REDUCED_MOTION);
+  const [time, setTime] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const inFunction = !!mode.functionView;
 
   const layers = useMemo(() => layersFor(modeId, modelName, !!mode.systems), [modeId, modelName, mode.systems]);
-  const context = (mode.context ?? []).filter((g) => !visible.includes(g));
+  // In the Function view the skeleton stays faded behind the systems for orientation.
+  const context = (inFunction ? FUNCTION_CONTEXT : mode.context ?? []).filter((g) => !visible.includes(g));
   const piecesVisible = layers.filter((l) => visible.includes(l.id)).reduce((t, l) => t + l.count, 0);
   const totalPieces = layers.reduce((t, l) => t + l.count, 0);
 
@@ -70,6 +85,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     if (import.meta.env.DEV) (window as unknown as { __viewer: Viewer }).__viewer = v;
     v.onHover = (key, at) => setHover(key && at ? { key, ...at } : null);
     v.onPick = (key) => setSelected(key);
+    v.onTime = setTime;
     let cancelled = false;
     v.loadGLB(mode.model, (node) => {
       if (modeId === 'histology') {
@@ -79,7 +95,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       const key = MESH_TO_KEY.get(node);
       const s = key ? structureByKey(key) : undefined;
       return s ? { key: s.key, group: s.group, color: GROUP_COLOR[s.group] ?? '#ddd' } : null;
-    })
+    }, (loaded, total) => !cancelled && setProgress({ loaded, total }))
       .then(() => !cancelled && setReady(true))
       .catch(() => !cancelled && setError('The 3D model could not be loaded. Check your connection and reload.'));
     return () => { cancelled = true; v.dispose(); viewer.current = null; };
@@ -98,9 +114,41 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   useEffect(() => {
     if (!ready) return;
     viewer.current?.select(selected);
+    if (selected) setOpenFunction(null);
     replaceSelection(modeId, selected ?? undefined);
     if (!selected) setIsolated(false);
   }, [selected, ready, modeId]);
+
+  // Function view: flow pulses, oxygenation and brain-area colours, muscle pull, playback.
+  const meta = useMemo(() => new Map(structuresIn(modelName).map((s) => [s.key, { group: s.group, name: baseName(s.sourceName), sided: s.sourceName }])), [modelName]);
+  useEffect(() => {
+    if (!ready) return;
+    const keys = inFunction ? [...meta].filter(([, m]) => functions.includes(flowFunction(m.group, m.name) as FunctionId)).map(([k]) => k) : [];
+    viewer.current?.setFlowKeys(new Set(keys));
+    let colours: Map<string, string> | null = null;
+    if (inFunction) {
+      colours = new Map();
+      for (const [k, m] of meta) {
+        const c = (functions.includes('blood') && bloodColour(m.group, m.name)) || (functions.includes('brain') && m.group === 'brain' && brainArea(m.name, m.sided)?.colour);
+        if (c) colours.set(k, c);
+      }
+    }
+    viewer.current?.setColourOverrides(colours);
+  }, [inFunction, functions.join(), ready, meta]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pullKey = inFunction && functions.includes('muscles') && selected && GROUP_SYSTEM[meta.get(selected)?.group ?? ''] === 'muscles' ? selected : null;
+  useEffect(() => { if (ready) viewer.current?.setPullArrows(pullKey); }, [pullKey, ready]);
+  useEffect(() => { viewer.current?.setPlaying(playing && inFunction); }, [playing, inFunction, ready]);
+  useEffect(() => { viewer.current?.setSpeed(speed); }, [speed, ready]);
+  const scrub = (t: number) => { setTime(t); viewer.current?.setTime(t); };
+  const groupsFor = (ids: FunctionId[]) => [...new Set(ids.flatMap((id) => FUNCTION_LAYERS.find((f) => f.id === id)!.groups))];
+  const toggleFunction = (id: FunctionId, on: boolean) => {
+    const next = on ? [...functions, id] : functions.filter((f) => f !== id);
+    setFunctions(next);
+    // Turning a function on shows what it does.
+    if (on) { setSelected(null); setOpenFunction(id); }
+    setVisible(groupsFor(next));
+    setPresetTick((t) => t + 1);
+  };
 
   // Refit once the slider settles; the inventory (past 50%) reads best face-on.
   useEffect(() => {
@@ -137,10 +185,10 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const goView = (v: View) => { setView(v); viewer.current?.setView(v); };
   const resetAll = () => {
     setSelected(null); setExplode(0); setIsolated(false); setBiteOpen(false); setArch('both');
-    setVisible(mode.defaultVisible); setAutoRotate(false); setView('front');
+    setVisible(inFunction ? groupsFor(functions) : mode.defaultVisible); setAutoRotate(false); setView('front');
     requestAnimationFrame(() => viewer.current?.setView('front'));
   };
-  const stageLabel = explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
+  const stageLabel = inFunction ? 'Function · schematic flow' : explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
 
   return (
     <div className="atlas" data-mode={modeId}>
@@ -148,7 +196,6 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         <span className="floor" aria-hidden="true" />
         <canvas ref={canvas} aria-label={`${mode.name} 3D model`} role="img" />
         <p className="floor__label" aria-hidden="true">{stageLabel}</p>
-        {!ready && !error && <p className="atlas__status">Loading the {mode.name.toLowerCase()} model…</p>}
         {error && <p className="atlas__status atlas__status--error" role="alert">{error}</p>}
         {hover && hover.key !== selected && (
           <p className="tag" style={{ transform: `translate(${hover.x}px, ${hover.y + 22}px) translateX(-50%)` }}>
@@ -173,14 +220,28 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       </div>
 
       <button className="card layers-toggle" aria-expanded={layersOpen} onClick={() => setLayersOpen((o) => !o)}>
-        <Icon name="layers" /> Layers
+        <Icon name="layers" /> {inFunction ? 'Functions' : 'Layers'}
       </button>
       <section className={`card layers${layersOpen ? ' is-open' : ''}`} aria-labelledby="layers-title">
         <div className="layers__head">
-          <h2 id="layers-title">{modeId === 'histology' ? 'Tissues' : 'Layers'}</h2>
-          <span className="count">{layers.length}</span>
+          <h2 id="layers-title">{inFunction ? 'Functions' : modeId === 'histology' ? 'Tissues' : 'Layers'}</h2>
+          <span className="count">{inFunction ? FUNCTION_LAYERS.length : layers.length}</span>
         </div>
-        {mode.systems ? (
+        {inFunction ? (
+          <>
+            <ul className="function-list">
+              {FUNCTION_LAYERS.map((f) => (
+                <li key={f.id}>
+                  <button className="function-list__label" aria-expanded={openFunction === f.id} onClick={() => { setSelected(null); setOpenFunction(f.id); }}>
+                    {f.label}<Icon name="chevron" size={14} />
+                  </button>
+                  <Switch label={`Show ${f.label}`} checked={functions.includes(f.id)} onChange={(on) => toggleFunction(f.id, on)} />
+                </li>
+              ))}
+            </ul>
+            <p className="schematic-note">Tap a name to read how it works.</p>
+          </>
+        ) : mode.systems ? (
           <div className="systems" role="group" aria-label="Body systems">
             {SYSTEMS.map((s) => (
               <button key={s.id} className="systems__chip" aria-pressed={systemOn(s.id)} onClick={() => toggleSystem(s.id)}>{s.label}</button>
@@ -190,7 +251,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           <Segmented label="Layer preset" value={activePreset} options={mode.presets.map((p) => [p.label, p.label])}
             onChange={(label) => { setVisible(mode.presets.find((p) => p.label === label)!.groups); setPresetTick((t) => t + 1); }} />
         )}
-        <ul className="layers__list">
+        {!inFunction && <ul className="layers__list">
           {layers.map((l) => (
             <li key={l.id}>
               <span className="dot" style={{ background: l.color }} aria-hidden="true" />
@@ -199,7 +260,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
               <Switch label={`Show ${l.label}`} checked={visible.includes(l.id)} onChange={(on) => toggle(l.id, on)} />
             </li>
           ))}
-        </ul>
+        </ul>}
         {modeId === 'dental' && (
           <div className="layers__extra">
             <p className="layers__caption">Numbering</p>
@@ -213,12 +274,12 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
             </div>
           </div>
         )}
-        <div className="layers__foot">
+        {!inFunction && <div className="layers__foot">
           <span>{piecesVisible} {modeId === 'histology' ? 'tissues' : 'pieces'} visible</span>
           <button className="text-button" onClick={() => setVisible(piecesVisible ? [] : layers.map((l) => l.id))}>
             {piecesVisible ? 'Hide all' : 'Show all'}
           </button>
-        </div>
+        </div>}
       </section>
 
       <div className="card toolbar" role="toolbar" aria-label="View">
@@ -235,6 +296,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         <button className="icon-button" aria-label="Reset everything" title="Reset" onClick={resetAll}><Icon name="reset" /></button>
       </div>
 
+      {inFunction ? (
+        <Timeline label="Function" playing={playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed} />
+      ) : (
       <section className="card explode" aria-labelledby="explode-title">
         <h2 id="explode-title">Explode</h2>
         <input id="explode-range" type="range" min={0} max={100} value={Math.round(explode * 100)} aria-valuetext={`${Math.round(explode * 100)}% exploded`}
@@ -244,7 +308,11 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           <Icon name="reset" />
         </button>
       </section>
+      )}
 
+      {inFunction && openFunction && !selected && (
+        <FunctionCard fn={FUNCTION_LAYERS.find((f) => f.id === openFunction)!} onClose={() => setOpenFunction(null)} />
+      )}
       {selected && (
         <DetailCard mode={modeId} selected={selected} isolated={isolated}
           onIsolate={() => setIsolated((i) => !i)} onClear={() => setSelected(null)} />
@@ -265,6 +333,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         </aside>
       )}
 
+      {/* Outside the stage so it sits above the floating cards and view rail. */}
+      {!ready && !error && <LoadingBar name={mode.name} progress={progress} />}
       <p className="hints" aria-hidden="true">Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect</p>
     </div>
   );
