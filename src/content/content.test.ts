@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { baseName, GROUP_SYSTEM, GROUPS, noteFor } from './anatomy';
 import { bloodColour, brainArea, DEOXYGENATED, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, OXYGENATED } from './function';
 import { TISSUES } from './histology';
+import { LANDMARKS, landmarkHasNote } from './carving';
 import { MODES } from './modes';
 import { STRUCTURES } from './structures';
 import { fdi, morphology, palmer, parseTooth, universal } from './teeth';
@@ -87,9 +88,9 @@ describe('mode models', () => {
     expect(expected.filter((n) => !names.has(n))).toEqual([]);
   });
 
-  it('keeps the dental model to the dentition and jaws', () => {
+  it('keeps the oral anatomy model to the skull, dentition and oral cavity', () => {
     const groups = new Set(STRUCTURES.filter((s) => s.models.includes('dental')).map((s) => s.group));
-    expect([...groups].sort()).toEqual(['gingiva', 'mandible', 'maxilla', 'teeth']);
+    expect([...groups].sort()).toEqual(['gingiva', 'glands', 'lips', 'mandible', 'maxilla', 'neck-bones', 'palate-pharynx', 'skull', 'suprahyoid', 'teeth', 'tongue']);
   });
 });
 
@@ -137,6 +138,34 @@ describe('physiology functions', () => {
     // Language areas only on the (usually dominant) left.
     expect(brainArea('inferior frontal gyrus', 'Left inferior frontal gyrus')?.label).toBe('Language');
     expect(brainArea('inferior frontal gyrus', 'Right inferior frontal gyrus')).toBeUndefined();
+  });
+});
+
+describe('carving tooth', () => {
+  it('has a name and note for every landmark, numbered 1…n', () => {
+    expect(LANDMARKS.filter((l) => !landmarkHasNote(l.id)).map((l) => l.id)).toEqual([]);
+    expect(LANDMARKS.map((l) => l.n)).toEqual(LANDMARKS.map((_, i) => i + 1));
+  });
+
+  it('is merged into the oral anatomy model', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/dental.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    const names = json.nodes.map((n: { name: string }) => n.name);
+    expect(names).toContain('carving-crown');
+    expect(names).toContain('carving-root');
+  });
+
+  it('matches Wheeler: lingual cusps higher than buccal, roots about 14 mm, contacts in the right thirds', () => {
+    const y = (id: string) => LANDMARKS.find((l) => l.id === id)!.position[1];
+    expect(y('mesiolingual-cusp')).toBeGreaterThan(y('mesiobuccal-cusp'));
+    expect(y('distolingual-cusp')).toBeGreaterThan(y('distobuccal-cusp'));
+    expect(y('distal-cusp')).toBeLessThan(y('distobuccal-cusp'));
+    expect(-y('mesial-apex')).toBeGreaterThan(13);
+    expect(-y('mesial-apex')).toBeLessThan(15.5);
+    expect(y('mesial-contact-area')).toBeGreaterThan(y('distal-contact-area'));
+    // Built as a left tooth: mesial is −x, buccal +z.
+    expect(LANDMARKS.find((l) => l.id === 'mesial-marginal-ridge')!.position[0]).toBeLessThan(0);
+    expect(LANDMARKS.find((l) => l.id === 'buccal-pit')!.position[2]).toBeGreaterThan(0);
   });
 });
 

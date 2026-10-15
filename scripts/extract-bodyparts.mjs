@@ -4,6 +4,7 @@
 //   git clone --depth 1 https://github.com/ashemag/human-atlas ../human-atlas
 //   node scripts/extract-bodyparts.mjs ../human-atlas
 //
+// Run scripts/build-carving-tooth.mjs first: the Oral anatomy model includes its carving molar.
 // Writes public/models/general.glb (every BodyParts3D mesh), public/models/physiology.glb (only what the
 // Physiology functions show, plus the skeleton for orientation, with per-vertex flow distances) and public/models/dental.glb (dentition and
 // jaws). The histology model is authored in Blender instead: scripts/blender/build_histology.py.
@@ -101,7 +102,8 @@ const MODELS = {
   general: (g) => true,
   // Keep in step with FUNCTION_LAYERS groups + FUNCTION_CONTEXT in src/content/function.ts (tested).
   physiology: (g) => PHYSIOLOGY_GROUPS.includes(g),
-  dental: (g) => ['teeth', 'gingiva', 'mandible', 'maxilla'].includes(g),
+  // Oral anatomy: the dentition, the whole skull and the oral cavity (the carving tooth is merged in below).
+  dental: (g) => ['teeth', 'gingiva', 'mandible', 'maxilla', 'skull', 'neck-bones', 'tongue', 'palate-pharynx', 'suprahyoid', 'glands', 'lips'].includes(g),
 };
 const SCALE = 100; // metres → centimetres so camera numbers stay readable
 
@@ -149,12 +151,33 @@ for (const [model, includes] of Object.entries(MODELS)) {
     r.models.push(model);
     records.set(p.id, r);
   }
+  if (model === 'dental') await addCarvingTooth(doc, buffer, scene, (max[0] - centre[0]) * SCALE);
   await doc.transform(weld());
   doc.createExtension(KHRDracoMeshCompression).setRequired(true).setEncoderOptions({ method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER });
   const glb = await io.writeBinary(doc);
   writeFileSync(`public/models/${model}.glb`, glb);
   const tris = doc.getRoot().listMeshes().reduce((t, m) => t + m.listPrimitives()[0].getIndices().getCount() / 3, 0);
   console.log(`${model}.glb: ${parts.length} meshes, ${tris} triangles, ${(glb.byteLength / 1024 / 1024).toFixed(2)} MB`);
+}
+
+/**
+ * Merge the carving tooth (models-src/carving-molar.glb, from scripts/build-carving-tooth.mjs, in mm)
+ * into the Oral anatomy model: scaled to the model's centimetres and placed beside the skull, so one
+ * GLB still serves the whole subject. The Carving tooth view shows only these two nodes.
+ */
+async function addCarvingTooth(doc, buffer, scene, skullRightEdge) {
+  const tooth = await io.read('models-src/carving-molar.glb');
+  for (const node of tooth.getRoot().listNodes()) {
+    const src = node.getMesh().listPrimitives()[0];
+    const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setBuffer(buffer);
+    const prim = doc.createPrimitive()
+      .setAttribute('POSITION', copy(src.getAttribute('POSITION')))
+      .setAttribute('NORMAL', copy(src.getAttribute('NORMAL')))
+      .setIndices(copy(src.getIndices()));
+    scene.addChild(doc.createNode(node.getName()).setMesh(doc.createMesh(node.getName()).addPrimitive(prim))
+      .setScale([0.1, 0.1, 0.1]).setTranslation([skullRightEdge + 6, 0, 0]));
+  }
+  console.log('  merged carving tooth into dental.glb');
 }
 
 function computeFlows(geometry) {

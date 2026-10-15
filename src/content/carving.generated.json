@@ -1,0 +1,466 @@
+{
+ "tooth": "left mandibular first molar (FDI 36)",
+ "units": "mm",
+ "wheeler": {
+  "crownLength": 7.5,
+  "rootLength": 14,
+  "crownMD": 11,
+  "cervixMD": 9,
+  "crownBL": 10.5,
+  "cervixBL": 9,
+  "cervicalCurveMesial": 1,
+  "cervicalCurveDistal": 0
+ },
+ "landmarks": [
+  {
+   "id": "mesiobuccal-cusp",
+   "kind": "cusp",
+   "n": 1,
+   "position": [
+    -3,
+    7.5,
+    2.3
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "id": "distobuccal-cusp",
+   "kind": "cusp",
+   "n": 2,
+   "position": [
+    0.75,
+    7.25,
+    2.55
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "id": "distal-cusp",
+   "kind": "cusp",
+   "n": 3,
+   "position": [
+    3.85,
+    6.752,
+    1.5
+   ],
+   "normal": [
+    0.042,
+    0.999,
+    0.001
+   ]
+  },
+  {
+   "id": "mesiolingual-cusp",
+   "kind": "cusp",
+   "n": 4,
+   "position": [
+    -2.65,
+    8,
+    -2.3
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "id": "distolingual-cusp",
+   "kind": "cusp",
+   "n": 5,
+   "position": [
+    2.2,
+    7.75,
+    -2.4
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "id": "mesial-marginal-ridge",
+   "kind": "ridge",
+   "n": 6,
+   "position": [
+    -4.75,
+    6.669,
+    0
+   ],
+   "normal": [
+    -0.072,
+    0.991,
+    0.111
+   ]
+  },
+  {
+   "id": "distal-marginal-ridge",
+   "kind": "ridge",
+   "n": 7,
+   "position": [
+    4.4,
+    6.57,
+    -1
+   ],
+   "normal": [
+    0.183,
+    0.975,
+    0.125
+   ]
+  },
+  {
+   "id": "buccal-cervical-ridge",
+   "kind": "ridge",
+   "n": 8,
+   "position": [
+    -1.6,
+    1.3,
+    5.232
+   ],
+   "normal": [
+    -0.071,
+    -0.372,
+    0.926
+   ]
+  },
+  {
+   "id": "central-groove",
+   "kind": "groove",
+   "n": 9,
+   "position": [
+    -2.2,
+    5.44,
+    0.35
+   ],
+   "normal": [
+    0.15,
+    0.929,
+    -0.34
+   ]
+  },
+  {
+   "id": "mesiobuccal-groove",
+   "kind": "groove",
+   "n": 10,
+   "position": [
+    -0.95,
+    5.92,
+    2.399
+   ],
+   "normal": [
+    -0.096,
+    0.971,
+    0.218
+   ]
+  },
+  {
+   "id": "distobuccal-groove",
+   "kind": "groove",
+   "n": 11,
+   "position": [
+    2.55,
+    5.837,
+    2
+   ],
+   "normal": [
+    0.117,
+    0.979,
+    0.17
+   ]
+  },
+  {
+   "id": "lingual-groove",
+   "kind": "groove",
+   "n": 12,
+   "position": [
+    -0.25,
+    5.719,
+    -2.4
+   ],
+   "normal": [
+    0.185,
+    0.97,
+    -0.158
+   ]
+  },
+  {
+   "id": "central-fossa",
+   "kind": "fossa",
+   "n": 13,
+   "position": [
+    0.6,
+    5.427,
+    0.001
+   ],
+   "normal": [
+    -0.143,
+    0.585,
+    -0.799
+   ]
+  },
+  {
+   "id": "mesial-triangular-fossa",
+   "kind": "fossa",
+   "n": 14,
+   "position": [
+    -3.3,
+    6.529,
+    0.6
+   ],
+   "normal": [
+    0.086,
+    0.354,
+    -0.931
+   ]
+  },
+  {
+   "id": "distal-triangular-fossa",
+   "kind": "fossa",
+   "n": 15,
+   "position": [
+    3.55,
+    6.463,
+    -0.701
+   ],
+   "normal": [
+    0.166,
+    0.894,
+    0.415
+   ]
+  },
+  {
+   "id": "central-pit",
+   "kind": "pit",
+   "n": 16,
+   "position": [
+    -0.55,
+    4.807,
+    0.15
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "id": "mesial-pit",
+   "kind": "pit",
+   "n": 17,
+   "position": [
+    -3.75,
+    4.807,
+    0.05
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "id": "distal-pit",
+   "kind": "pit",
+   "n": 18,
+   "position": [
+    3.15,
+    4.807,
+    -0.15
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  {
+   "id": "buccal-pit",
+   "kind": "pit",
+   "n": 19,
+   "position": [
+    -1,
+    3.2,
+    4.443
+   ],
+   "normal": [
+    -0.004,
+    0.18,
+    0.984
+   ]
+  },
+  {
+   "id": "buccal-height-of-contour",
+   "kind": "contour",
+   "n": 20,
+   "position": [
+    0.5,
+    1.4,
+    5.299
+   ],
+   "normal": [
+    0.007,
+    -0.161,
+    0.987
+   ]
+  },
+  {
+   "id": "lingual-height-of-contour",
+   "kind": "contour",
+   "n": 21,
+   "position": [
+    -1.5,
+    3.5,
+    -5.192
+   ],
+   "normal": [
+    -0.007,
+    0.154,
+    -0.988
+   ]
+  },
+  {
+   "id": "mesial-contact-area",
+   "kind": "contour",
+   "n": 22,
+   "position": [
+    -5.36,
+    4.999,
+    0.4
+   ],
+   "normal": [
+    -0.91,
+    0.357,
+    -0.211
+   ]
+  },
+  {
+   "id": "distal-contact-area",
+   "kind": "contour",
+   "n": 23,
+   "position": [
+    5.481,
+    4.3,
+    0.199
+   ],
+   "normal": [
+    0.905,
+    0.256,
+    -0.34
+   ]
+  },
+  {
+   "id": "cervical-line",
+   "kind": "cervix",
+   "n": 24,
+   "position": [
+    -3,
+    0.05,
+    4.536
+   ],
+   "normal": [
+    -0.46,
+    -0.326,
+    0.826
+   ]
+  },
+  {
+   "id": "root-trunk",
+   "kind": "root",
+   "n": 25,
+   "position": [
+    0.2,
+    -1.6,
+    4.173
+   ],
+   "normal": [
+    0.001,
+    -0.26,
+    0.966
+   ]
+  },
+  {
+   "id": "furcation",
+   "kind": "root",
+   "n": 26,
+   "position": [
+    0,
+    -2.993,
+    2.5
+   ],
+   "normal": [
+    0,
+    -0.998,
+    0.068
+   ]
+  },
+  {
+   "id": "mesial-root",
+   "kind": "root",
+   "n": 27,
+   "position": [
+    -3.487,
+    -7.499,
+    2.496
+   ],
+   "normal": [
+    0,
+    -0.229,
+    0.974
+   ]
+  },
+  {
+   "id": "distal-root",
+   "kind": "root",
+   "n": 28,
+   "position": [
+    3.5,
+    -6.999,
+    2.269
+   ],
+   "normal": [
+    0,
+    -0.238,
+    0.971
+   ]
+  },
+  {
+   "id": "mesial-apex",
+   "kind": "root",
+   "n": 29,
+   "position": [
+    -3,
+    -14,
+    0.15
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ]
+  },
+  {
+   "id": "distal-apex",
+   "kind": "root",
+   "n": 30,
+   "position": [
+    4.5,
+    -13.6,
+    -0.1
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ]
+  }
+ ]
+}
