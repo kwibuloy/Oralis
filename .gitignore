@@ -25,7 +25,6 @@ dist-ssr
 
 # Vercel and tooling
 .vercel
-.taste-skill
 coverage
 tsconfig.tsbuildinfo
 .shots

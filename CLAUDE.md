@@ -61,8 +61,7 @@ This file points; it does not document. Read the files it names.
 - **Every structure needs a note.** `content.test.ts` fails otherwise. Repeated structures may
   share a family note (regex, first match wins — order matters), but never a catch-all.
 - **Design reference is the Human Atlas UI** (white canvas, rounded white cards, soft shadows,
-  toggles, F/S/B/T rail, explode card). The user chose it over the vendored taste-skill house
-  rules, which now apply only to any future marketing page. Use tokens from `base.css`.
+  toggles, F/S/B/T rail, explode card). Use tokens from `base.css`.
 - **Look before claiming a UI or 3D fix:** shoot and read the screenshots (`visual-check` skill).
   In dev, `window.__viewer` exposes the live viewer for probes.
 - **Windows + Git Bash:** route arguments starting with `/` or `#/` get mangled, which is why
@@ -76,7 +75,6 @@ This file points; it does not document. Read the files it names.
 | Skill | `blender-model` | Author or fix a model in headless Blender |
 | Skill | `add-structure` | New BodyParts3D meshes, groups or notes |
 | Skill | `add-mode` | A new study mode with its own model |
-| Skill | `taste-skill`, `redesign-skill` | Marketing-page design only (vendored; `.claude/skills/VENDORED.md`) |
 | Agent | `anatomy-reviewer` | Accuracy review of `src/content/` and the histology model |
 | Agent | `viewer-engineer` | three.js / Viewer work and 3D bugs |
 | Agent | `ui-critic` | Visual critique at 1440/768/390 before committing |
