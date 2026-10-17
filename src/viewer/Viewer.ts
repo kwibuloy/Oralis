@@ -85,6 +85,9 @@ type PartMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
  * drawing (faded context, the selection, the hovered part) is hidden in its batch and drawn on its own
  * with its own material instead.
  */
+/** Depth-buffer steps between draw layers. Neighbouring tissue zones overlap on a cut face, and a few steps are lost to rounding at grazing angles (white streaks); 150 per layer is not. */
+const LAYER_UNITS = 150;
+
 interface Batch {
   mesh: THREE.BatchedMesh;
   parts: PartMesh[]; // by instance id
@@ -432,7 +435,7 @@ export class Viewer {
       side: THREE.DoubleSide, transparent: !opaque, vertexColors: vertexColours,
       ...(info.overlay ? { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 } : {}),
       // A tiny constant offset only: enough to settle coincident walls, never enough to push a part behind another.
-      ...(info.layer ? { polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: info.layer } : {}),
+      ...(info.layer ? { polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: info.layer * LAYER_UNITS } : {}),
     };
     // A clearcoat (enamel's gloss) needs the physical material; everything else stays standard.
     const material = info.surface?.clearcoat
