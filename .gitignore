@@ -31,3 +31,6 @@ tsconfig.tsbuildinfo
 
 # Blender backups
 *.blend1
+
+# Intermediate model rebuilt by scripts/build-cariology.mjs (34 MB, uncompressed); only public/models/cariology.glb ships
+models-src/cariology.glb

@@ -5,6 +5,7 @@ import { baseName, GROUP_SYSTEM, GROUPS, noteFor } from './anatomy';
 import { bloodColour, brainArea, DEOXYGENATED, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, OXYGENATED } from './function';
 import { TISSUES } from './histology';
 import { LANDMARKS, landmarkHasNote } from './carving';
+import { LESION_MODEL, LESION_TYPES, mineralAt, PERIO_ZONES, perioGroup, plaquePH, PROCESS_PARTS, SITE_PINS, SITES, staticGroup, stageGroup, ZONES } from './cariology';
 import { MODES } from './modes';
 import { STRUCTURES } from './structures';
 import { fdi, morphology, palmer, parseTooth, universal } from './teeth';
@@ -63,7 +64,8 @@ describe('content coverage', () => {
   it('labels every group used by the model and by the modes', () => {
     for (const s of STRUCTURES) expect(GROUPS[s.group], s.group).toBeDefined();
     const tissueKeys = new Set(TISSUES.map((t) => t.key));
-    for (const m of MODES) {
+    // Cariology's groups are its authored lesion parts (checked in its own tests below).
+    for (const m of MODES.filter((x) => x.id !== 'cariology')) {
       for (const g of [...m.defaultVisible, ...(m.context ?? [])]) {
         expect(m.source === 'blender' ? tissueKeys.has(g) : g in GROUPS, `${m.id}: ${g}`).toBe(true);
       }
@@ -166,6 +168,74 @@ describe('carving tooth', () => {
     // Built as a left tooth: mesial is −x, buccal +z.
     expect(LANDMARKS.find((l) => l.id === 'mesial-marginal-ridge')!.position[0]).toBeLessThan(0);
     expect(LANDMARKS.find((l) => l.id === 'buccal-pit')!.position[2]).toBeGreaterThan(0);
+  });
+});
+
+describe('cariology', () => {
+  const buf = readFileSync(resolve(__dirname, '../../public/models/cariology.glb'));
+  const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+  const nodes = new Set<string>(json.nodes.map((n: { name: string }) => n.name));
+
+  it('has a model stage, with named zones, for every lesion stage in the content', () => {
+    for (const L of LESION_TYPES) {
+      const model = LESION_MODEL[L.id];
+      expect(model.stages.length, L.id).toBe(L.stages.length);
+      for (const z of model.staticParts) expect(nodes.has(`${staticGroup(L.id)}-${z}`), z).toBe(true);
+      for (const z of PERIO_ZONES) expect(nodes.has(`${perioGroup(L.id)}-${z}`), `${L.id} ${z}`).toBe(true);
+      model.stages.forEach((st, i) => {
+        for (const z of st.parts) {
+          expect(ZONES[z], z).toBeDefined();
+          expect(nodes.has(`${stageGroup(L.id, i)}-${z}`), `${L.id} ${i} ${z}`).toBe(true);
+        }
+        for (const pin of st.pins) expect(st.parts, `${L.id} ${i} pin`).toContain(pin.region);
+      });
+    }
+  });
+
+  it('opens every lesion sound, then adds lesion zones, then cavitates', () => {
+    for (const L of LESION_TYPES) {
+      const stages = LESION_MODEL[L.id].stages;
+      expect(stages[0].parts.filter((z) => !['enamel', 'dentin', 'cementum', 'pulp'].includes(z)), L.id).toEqual([]);
+      expect(stages[stages.length - 1].parts, L.id).toContain('infected-dentin');
+      // The surface zone of an enamel lesion is gone once the lesion has cavitated.
+      if (L.id !== 'root') expect(stages[stages.length - 1].parts).not.toContain('enamel-surface-zone');
+    }
+  });
+
+  it('gives every tissue and zone a note, a natural colour and a study colour', () => {
+    for (const [k, z] of Object.entries(ZONES)) {
+      expect(z.note.length, k).toBeGreaterThan(40);
+      expect(z.real, k).toMatch(/^#[0-9a-f]{6}$/);
+      expect(z.colour, k).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  it('pairs ICDAS codes with ICCMS stages', () => {
+    const iccms = { 'ICDAS 0': 'Sound', 'ICDAS 1–2': 'Initial', 'ICDAS 3': 'Moderate', 'ICDAS 4': 'Moderate', 'ICDAS 5': 'Extensive', 'ICDAS 6': 'Extensive' } as Record<string, string>;
+    for (const L of LESION_TYPES.filter((l) => l.id !== 'root')) for (const st of L.stages) expect(st.iccms, `${L.id} ${st.icdas}`).toBe(iccms[st.icdas]);
+  });
+
+  it('paints every caries site on the arch, with a pin', () => {
+    for (const s of SITES) {
+      expect(nodes.has(`site-${s.id}`), s.id).toBe(true);
+      expect(SITE_PINS.some((p) => p.id === s.id), s.id).toBe(true);
+    }
+    expect(nodes.has('site-restoration')).toBe(true);
+  });
+
+  it('has the process block parts', () => {
+    for (const k of Object.keys(PROCESS_PARTS)) expect(nodes.has(k), k).toBe(true);
+  });
+
+  it('follows the Stephan curve: a drop below 5.5 within minutes, recovery within about 40', () => {
+    expect(plaquePH(0, 'single')).toBeCloseTo(6.8, 1);
+    const min = Math.min(...Array.from({ length: 30 }, (_, t) => plaquePH(t, 'single')));
+    expect(min).toBeLessThan(5.5);
+    expect(min).toBeGreaterThanOrEqual(4.5);
+    expect(plaquePH(40, 'single')).toBeGreaterThan(6.5);
+    // Frequent sugar keeps the pH down and costs more mineral than one intake.
+    expect(mineralAt(120, 'frequent')).toBeLessThan(mineralAt(120, 'single'));
+    expect(mineralAt(120, 'single')).toBeGreaterThan(0.97);
   });
 });
 

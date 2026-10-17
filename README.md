@@ -13,6 +13,7 @@ oral histology, Pathology) and Dental (Cariology). These have models today:
 | **General anatomy** | `general.glb`: every BodyParts3D mesh at full detail (2,234 meshes, 10.4 MB) | Filter by system (Skeleton, Muscles, Nerves, Vessels, Organs), toggle 37 layers, isolate a structure, read nerve supply and clinical links |
 | **Physiology** | `physiology.glb`: vessels, heart, brain and nerves, airways, gut, urinary tract and muscles, with the skeleton for orientation, plus per-vertex flow distances | Watch blood flow (oxygenated red, deoxygenated blue), nerve signals, breathing, digestion and urine, see a muscle's line of pull and brain areas by function, with play / pause / scrub / speed |
 | **Oral anatomy** | `dental.glb`: the skull, the oral cavity (tongue, palate and pharynx, floor of the mouth, salivary glands, lips) and the 28 permanent teeth, plus a carving tooth (1.1 MB) | **Skull & arches:** switch FDI / Universal / Palmer numbering, show one arch, open the bite, read roots, crown form and eruption age. **Carving tooth:** an idealised left mandibular first molar (36) to Wheeler's proportions, with O / B / L / M / D surface views, 30 numbered landmarks (cusps, ridges, grooves, fossae, pits, contours, roots) and Wheeler's measurements |
+| **Cariology** | `cariology.glb`: a left mandibular first molar (the carving tooth's shape) with a quarter cut away at every stage of three lesions, in its alveolar bone and gingiva, with rod, tubule and growth-line textures; the 28 teeth with caries sites painted on; and a magnified enamel-and-biofilm block (7.8 MB) | **Lesion:** natural colours, or study colours with **Zones**; pit & fissure, smooth-surface and root lesions from sound to deep dentin on a timeline, each stage with its ICDAS code, ICCMS stage and management; tap a zone (surface zone, body, dark and translucent zones; infected, affected, sclerotic and tertiary dentin). **Sites:** G.V. Black Class I–VI, root and secondary caries on the arch. **Process:** the plaque pH (Stephan) curve for one sugary snack or frequent snacks, with enamel losing and regaining mineral |
 | **General & oral histology** | `histology.glb`: a tooth in its socket cut along its long axis, modelled in Blender (9 tissues, 0.25 MB) | Enamel, dentin, pulp, neurovascular bundle, cementum, PDL, lamina dura, alveolar bone and gingiva, each with composition, cells, features and a clinical link |
 
 The other subjects show what their model will contain until it is built.
@@ -40,10 +41,11 @@ Import the repository, leave **Root Directory** at the repo root, and keep the d
 ## Rebuilding the models
 
 ```bash
-# The carving tooth (merged into the Oral anatomy model by the next step)
+# The carving tooth and the cariology lesion molar (merged into their models by the next step)
 node scripts/build-carving-tooth.mjs
+node scripts/build-cariology.mjs
 
-# General, Physiology and Oral anatomy, from BodyParts3D as packaged by human-atlas
+# General, Physiology, Oral anatomy and Cariology, from BodyParts3D as packaged by human-atlas
 git clone --depth 1 https://github.com/ashemag/human-atlas ../human-atlas
 node scripts/extract-bodyparts.mjs ../human-atlas
 
@@ -73,6 +75,7 @@ stylised for teaching.
 - General and Oral anatomy: [BodyParts3D 4.0](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/),
   Database Center for Life Science, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), via
   [ashemag/human-atlas](https://github.com/ashemag/human-atlas), which also inspired the interface.
-- Histology model: authored for Oralis in Blender.
+- Histology model: authored for Oralis in Blender. Cariology's lesion molar and process block:
+  authored for Oralis in code (`scripts/build-cariology.mjs`); lesion sizes are schematic.
 
 For education only. Not for diagnosis or treatment planning.

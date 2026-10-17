@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { addSurface, type SurfaceStyle } from './surface';
+
+export type { SurfaceStyle };
 
 const SELECT = new THREE.Color('#2563eb');
 const SELECT_MIX = 0.22;
@@ -47,6 +50,8 @@ export interface Pin {
   title: string;
   position: [number, number, number];
   normal: [number, number, number];
+  /** The part this pin sits on, when not the one passed to setPins. */
+  key?: string;
 }
 
 /** Pixels of each canvas edge hidden behind cards. */
@@ -60,6 +65,15 @@ export interface Pickable {
   key: string;
   group: string;
   color: string;
+  /** Painted just off another part's surface (e.g. a lesion on a tooth): drawn over it without flicker. */
+  overlay?: boolean;
+  /** Procedural texture and finish (see surface.ts). */
+  surface?: SurfaceStyle;
+  /**
+   * Depth priority where parts overlap on the same plane (e.g. zones on a cut face): higher draws
+   * behind lower. 0 or absent: no offset.
+   */
+  layer?: number;
 }
 
 type PartMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
@@ -272,13 +286,14 @@ export class Viewer {
     this.frameKeys(this.visibleKeys(), FIT_PADDING, dir);
   }
 
-  /** Pin numbered markers to points on the part with `key`; an empty list removes them. */
+  /** Pin numbered markers to points on the part with `key` (or each pin's own key); an empty list removes them. */
   setPins(key: string | null, pins: Pin[]) {
     for (const p of this.pins) p.el.remove();
     this.pins = [];
-    const mesh = key ? this.meshes.find((m) => m.userData.key === key) : undefined;
-    if (!mesh) return;
     for (const pin of pins) {
+      const k = pin.key ?? key;
+      const mesh = k ? this.meshes.find((m) => m.userData.key === k) : undefined;
+      if (!mesh) continue;
       const el = document.createElement('button');
       el.className = 'pin is-hidden'; // shown by placePins once placed (and once the camera lands)
       el.textContent = pin.label;
@@ -382,10 +397,17 @@ export class Viewer {
   // ---------- internals ----------
 
   private register(mesh: THREE.Mesh, info: Pickable) {
-    const material = new THREE.MeshStandardMaterial({
-      color: info.color, roughness: info.group === 'teeth' || info.group === 'enamel' ? 0.3 : 0.6, metalness: 0,
+    const options: THREE.MeshPhysicalMaterialParameters = {
+      color: info.color, roughness: info.surface?.roughness ?? (info.group === 'teeth' || info.group === 'enamel' ? 0.3 : 0.6), metalness: 0,
       side: THREE.DoubleSide, transparent: true,
-    });
+      ...(info.overlay ? { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 } : {}),
+      ...(info.layer ? { polygonOffset: true, polygonOffsetFactor: info.layer * 0.6, polygonOffsetUnits: info.layer * 2 } : {}),
+    };
+    // A clearcoat (enamel's gloss) needs the physical material; everything else stays standard.
+    const material = info.surface?.clearcoat
+      ? new THREE.MeshPhysicalMaterial({ ...options, clearcoat: info.surface.clearcoat, clearcoatRoughness: 0.18 })
+      : new THREE.MeshStandardMaterial(options);
+    if (info.surface) addSurface(material, info.surface);
     (mesh.material as THREE.Material).dispose();
     const m = mesh as unknown as PartMesh;
     m.material = material;
