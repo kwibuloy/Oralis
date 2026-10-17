@@ -15,7 +15,7 @@ import FunctionCard from './FunctionCard';
 import { LandmarkCard, ToothCard } from './CarvingCards';
 import { CARVING_TOOTH, KIND_LABEL, LANDMARKS, landmarkById, MEASUREMENTS, type LandmarkKind } from '../content/carving';
 import {
-  bandColour, biofilmColour, LESION_MODEL, lesionType, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
+  bandColour, biofilmColour, LESION_MODEL, lesionType, PERIO_ZONES, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
   stageGroup, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
 } from '../content/cariology';
 import { CariologyPanel, lesionPartLook, LesionHead, PhTrack, ProcessCard, ProcessHead, SiteCard, StageCard, stageAt, stageTime, VIEW_OPTIONS, ZoneCard } from './Cariology';
@@ -63,7 +63,7 @@ function cariologyPart(node: string): Pickable | null {
     const zone = zoneOfPart(node);
     return { key: node, group: node.slice(0, node.length - zone.length - 1), ...lesionPartLook(node) };
   }
-  if (node.startsWith('site-')) return { key: node, group: 'sites', color: node === 'site-restoration' ? SITE_COLOUR.restoration : SITE_COLOUR.site, overlay: true };
+  if (node.startsWith('site-')) return { key: node, group: 'sites', color: node === 'site-restoration' ? SITE_COLOUR.restoration : SITE_COLOUR.site, surface: { roughness: node === 'site-restoration' ? 0.35 : 0.7 } };
   if (node.startsWith('pr-')) {
     const group = node.startsWith('pr-band') ? 'pr-enamel' : node === 'pr-biofilm-matrix' ? 'pr-biofilm' : node === 'pr-pellicle' ? 'pr-pellicle' : 'pr-bacteria';
     return { key: node, group, color: PROCESS_PARTS[node]?.colour ?? '#ddd' };
@@ -192,9 +192,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   // shows, and the jaws left out so the teeth fill the screen); or the process block with the
   // biofilm faded so the bacteria inside show.
   const shown = !cario ? { visible, context } : cariView === 'lesion'
-    ? lesionKind === 'root'
-      ? { visible: [staticGroup(lesionKind), stageGroup(lesionKind, stage), perioGroup(lesionKind)], context: [] }
-      : { visible: [staticGroup(lesionKind), stageGroup(lesionKind, stage)], context: [perioGroup(lesionKind)] }
+    ? { visible: [staticGroup(lesionKind), stageGroup(lesionKind, stage), perioGroup(lesionKind)], context: [] }
     : cariView === 'sites' ? { visible: ['teeth', 'sites'], context: ['gingiva'] }
       : { visible: ['pr-enamel', 'pr-pellicle', 'pr-bacteria'], context: ['pr-biofilm'] };
   useEffect(() => { viewer.current?.setVisibleGroups(shown.visible, shown.context); }, [shown.visible.join(), shown.context.join(), ready]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -202,7 +200,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [presetTick, setPresetTick] = useState(0);
   useEffect(() => { if (presetTick) viewer.current?.fit(); }, [presetTick]);
   useEffect(() => { viewer.current?.setFilter(arch === 'both' ? () => true : (key) => archOf(key) === arch); }, [arch, ready]);
-  useEffect(() => { viewer.current?.setOffset((key) => archOf(key) === 'lower', biteOpen ? BITE_OPEN : { x: 0, y: 0, z: 0 }); }, [biteOpen, ready]);
+  // Cariology's Sites view opens the bite, so the occlusal lesions (Class I, secondary caries) can be seen.
+  const openBite = biteOpen || (cario && cariView === 'sites');
+  useEffect(() => { viewer.current?.setOffset((key) => archOf(key) === 'lower', openBite ? BITE_OPEN : { x: 0, y: 0, z: 0 }); }, [openBite, ready]);
   useEffect(() => { viewer.current?.setExplode(explode); }, [explode, ready]);
   useEffect(() => { viewer.current?.setAutoRotate(autoRotate); }, [autoRotate, ready]);
   useEffect(() => { viewer.current?.setIsolated(isolated); }, [isolated, ready]);
@@ -235,7 +235,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   }, [inFunction, functions.join(), ready, meta]); // eslint-disable-line react-hooks/exhaustive-deps
   const pullKey = inFunction && functions.includes('muscles') && selected && GROUP_SYSTEM[meta.get(selected)?.group ?? ''] === 'muscles' ? selected : null;
   useEffect(() => { if (ready) viewer.current?.setPullArrows(pullKey); }, [pullKey, ready]);
-  useEffect(() => { viewer.current?.setPlaying(playing && (inFunction || cariTimeline)); }, [playing, inFunction, cariTimeline, ready]);
+  // Playback starts only once the model is in (the timeline would otherwise run over an empty stage).
+  useEffect(() => { viewer.current?.setPlaying(ready && playing && (inFunction || cariTimeline)); }, [playing, inFunction, cariTimeline, ready]);
   // Cariology plays slower than the 3 s flow loop: a few seconds per lesion stage, or two hours in 24 s.
   const loopScale = !cario ? 1 : cariView === 'process' ? 3 / PROCESS_SECONDS : 3 / (lesionType(lesionKind).stages.length * STAGE_SECONDS);
   useEffect(() => { viewer.current?.setSpeed(speed * loopScale); }, [speed, loopScale, ready]);
@@ -278,7 +279,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     if (!ready || !cario) return;
     if (cariView === 'lesion') {
       // Show zones: the study colours instead of the natural ones.
-      const keys = [...LESION_MODEL[lesionKind].staticParts.map((z) => `${staticGroup(lesionKind)}-${z}`), ...LESION_MODEL[lesionKind].stages[stage].parts.map((z) => `${stageGroup(lesionKind, stage)}-${z}`), ...['alveolar-bone', 'gingiva'].map((z) => `${perioGroup(lesionKind)}-${z}`)];
+      const keys = [...LESION_MODEL[lesionKind].staticParts.map((z) => `${staticGroup(lesionKind)}-${z}`), ...LESION_MODEL[lesionKind].stages[stage].parts.map((z) => `${stageGroup(lesionKind, stage)}-${z}`), ...PERIO_ZONES.map((z) => `${perioGroup(lesionKind)}-${z}`)];
       viewer.current?.setColourOverrides(showZones ? new Map(keys.map((k) => [k, ZONES[zoneOfPart(k)]?.colour ?? '#ddd'])) : null);
       return;
     }
@@ -529,19 +530,19 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         </div>
       )}
       {cario ? (cariView === 'lesion' ? (
-        <Timeline label="Lesion stage" playing={playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed}
+        <Timeline label="Lesion stage" playing={ready && playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed}
           valueText={`Stage ${stage + 1}: ${lesionType(lesionKind).stages[stage].name}`}
           marks={lesionType(lesionKind).stages.slice(1).map((_, i) => (i + 1) / lesionType(lesionKind).stages.length)}>
           <LesionHead kind={lesionKind} stage={stage} onInfo={() => { setSelected(null); setStageOpen(true); }} showZones={showZones} onShowZones={setShowZones}
             onKind={(k) => { switchCariView('lesion', k); scrub(stageTime(k, 0)); }} />
         </Timeline>
       ) : cariView === 'process' ? (
-        <Timeline label="Caries process" playing={playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed}
+        <Timeline label="Caries process" playing={ready && playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed}
           valueText={`${Math.round(minute)} minutes, pH ${plaquePH(minute, scenario).toFixed(1)}`} track={<PhTrack scenario={scenario} />}>
           <ProcessHead minute={minute} scenario={scenario} onScenario={setScenario} />
         </Timeline>
       ) : null) : carving ? null : inFunction ? (
-        <Timeline label="Function" playing={playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed} />
+        <Timeline label="Function" playing={ready && playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed} />
       ) : (
       <section className="card explode" aria-labelledby="explode-title">
         <h2 id="explode-title">Explode</h2>
@@ -589,7 +590,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       )}
 
       {/* Outside the stage so it sits above the floating cards and view rail. */}
-      {!ready && !error && <LoadingBar name={mode.name} progress={progress} />}
+      {!ready && !error && <LoadingBar name={mode.name} model={mode.model} progress={progress} />}
       <p className="hints" aria-hidden="true">Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect</p>
     </div>
   );

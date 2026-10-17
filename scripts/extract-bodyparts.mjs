@@ -9,7 +9,7 @@
 // Writes public/models/general.glb (every BodyParts3D mesh), public/models/physiology.glb (only what the
 // Physiology functions show, plus the skeleton for orientation, with per-vertex flow distances),
 // public/models/dental.glb (dentition and jaws) and public/models/cariology.glb (the arches with caries
-// sites painted on their teeth, plus the authored parts), and src/content/cariology-sites.generated.json.
+// sites carved into their teeth, plus the authored parts), and src/content/cariology-sites.generated.json.
 // The histology model is authored in Blender instead: scripts/blender/build_histology.py.
 import { Document, NodeIO } from '@gltf-transform/core';
 import { KHRDracoMeshCompression } from '@gltf-transform/extensions';
@@ -18,6 +18,9 @@ import draco3d from 'draco3dgltf';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { chainFlow, networkFlow, radialFlow } from './lib/flow.mjs';
+import { smoothMesh, snapVertices } from './lib/mesh-tools.mjs';
+import { surfaceNets } from './lib/molar.mjs';
+import { fbm } from './lib/noise.mjs';
 import { join } from 'node:path';
 
 const src = process.argv[2];
@@ -141,6 +144,8 @@ for (const [model, includes] of Object.entries(MODELS)) {
     return { id: p.id, name: unsided(p.name).toLowerCase(), sided: p.name.toLowerCase(), group: p.group, system: p.system, pos, nrm, idx };
   });
   const flows = model === 'physiology' ? computeFlows(geometry) : new Map();
+  // Cariology: carve the caries sites into their teeth (adds the lesion parts, recolours those teeth).
+  const sites = model === 'cariology' ? carveSites(geometry) : [];
   for (const [i, p] of parts.entries()) {
     const { pos, nrm, idx } = geometry[i];
     const prim = doc.createPrimitive()
@@ -149,6 +154,7 @@ for (const [model, includes] of Object.entries(MODELS)) {
       .setIndices(doc.createAccessor().setType('SCALAR').setArray(idx).setBuffer(buffer));
     // Signed distance along the part's network, read by the viewer as the `_flow` attribute.
     if (flows.has(p.id)) prim.setAttribute('_FLOW', doc.createAccessor().setType('SCALAR').setArray(flows.get(p.id)).setBuffer(buffer));
+    if (geometry[i].col) prim.setAttribute('COLOR_0', doc.createAccessor().setType('VEC3').setArray(geometry[i].col).setBuffer(buffer));
     scene.addChild(doc.createNode(p.id).setMesh(doc.createMesh(p.id).addPrimitive(prim)));
 
     // Some structures are split across several source meshes; they share one key.
@@ -158,7 +164,14 @@ for (const [model, includes] of Object.entries(MODELS)) {
   }
   if (model === 'dental') await addCarvingTooth(doc, buffer, scene, (max[0] - centre[0]) * SCALE);
   if (model === 'cariology') {
-    addCariesSites(doc, buffer, scene, geometry.filter((g) => g.group === 'teeth'));
+    for (const x of sites) {
+      const prim = doc.createPrimitive()
+        .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(x.pos).setBuffer(buffer))
+        .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(x.nrm).setBuffer(buffer))
+        .setAttribute('COLOR_0', doc.createAccessor().setType('VEC3').setArray(x.col).setBuffer(buffer))
+        .setIndices(doc.createAccessor().setType('SCALAR').setArray(x.idx).setBuffer(buffer));
+      scene.addChild(doc.createNode(x.name).setMesh(doc.createMesh(x.name).addPrimitive(prim)));
+    }
     await addCariologyParts(doc, buffer, scene, (max[0] - centre[0]) * SCALE);
   }
   await doc.transform(weld());
@@ -190,85 +203,257 @@ async function addCarvingTooth(doc, buffer, scene, skullRightEdge) {
 }
 
 /**
- * Caries sites painted on the real teeth: for each site, the triangles of one tooth that lie in the
- * site's region (from the tooth's own frame: occlusal, mesial and buccal directions and its crown
- * length), copied as a thin overlay just off the surface. Writes each site's pin.
+ * Caries sites carved into the real teeth. Each tooth that carries a site is rebuilt from a fine signed
+ * distance field of its scanned mesh (0.08 mm), the lesion is cut out of that field as a cavity with an
+ * irregular outline, and the result is meshed with surface nets, every vertex snapped back onto the
+ * field: even, well-shaped triangles, the scanned shape kept outside the lesion. Vertices are coloured
+ * in the site's typical clinical look (stained cavity walls, chalky halo of an active lesion; a grey
+ * filling with a stained, ditched margin for secondary caries), and the lesion's faces become their own
+ * part (site-<id>) so they can be tapped. Mutates the site teeth in `geometry`, returns the extra parts
+ * and writes each site's pin.
  */
-function addCariesSites(doc, buffer, scene, teeth) {
+function carveSites(geometry) {
+  const teeth = geometry.filter((g) => g.group === 'teeth');
   const POS = [[/central .*incisor/, 1], [/lateral .*incisor/, 2], [/canine/, 3], [/first .*premolar/, 4], [/second .*premolar/, 5], [/first .*molar/, 6], [/second .*molar/, 7]];
   const all = teeth.map((g) => ({ g, arch: /upper/.test(g.sided) ? 'upper' : 'lower', side: /left/.test(g.sided) ? 'left' : 'right', pos: POS.find(([re]) => re.test(g.sided))?.[1] }));
   const find = (arch, side, pos) => all.find((t) => t.arch === arch && t.side === side && t.pos === pos);
   const centroid = (pos) => { const c = [0, 0, 0]; for (let i = 0; i < pos.length; i += 3) for (let k = 0; k < 3; k++) c[k] += pos[i + k]; return c.map((v) => v / (pos.length / 3)); };
-  const sub = (a, b) => a.map((v, i) => v - b[i]), dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const flat = (v) => { const l = Math.hypot(v[0], v[2]) || 1; return [v[0] / l, 0, v[2] / l]; };
-  // Typical crown lengths (cm), from Wheeler.
-  const CROWN = { upper: [0, 1.05, 0.9, 1.0, 0.85, 0.8, 0.75, 0.7], lower: [0, 0.9, 0.95, 1.1, 0.85, 0.8, 0.75, 0.7] };
+  const sub = (a, b) => a.map((v, i) => v - b[i]), add = (a, b) => a.map((v, i) => v + b[i]), mul = (a, s) => a.map((v) => v * s);
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+  const flat = (v) => unit([v[0], 0, v[2]]);
+  const CROWN = { upper: [0, 1.05, 0.9, 1.0, 0.85, 0.8, 0.75, 0.7], lower: [0, 0.9, 0.95, 1.1, 0.85, 0.8, 0.75, 0.7] }; // cm, Wheeler
   const frame = (t) => {
-    const c = centroid(t.g.pos);
+    const P = t.g.pos, c = centroid(P);
     const o = t.arch === 'lower' ? [0, 1, 0] : [0, -1, 0];
     const neighbour = t.pos === 1 ? find(t.arch, t.side === 'left' ? 'right' : 'left', 1) : find(t.arch, t.side, t.pos - 1);
     const m = flat(sub(centroid(neighbour.g.pos), c)); // mesial: towards the next tooth along the arch
     const archCentre = centroid(all.filter((a) => a.arch === t.arch).flatMap((a) => centroid(a.g.pos)));
-    let b = [m[2], 0, -m[0]]; // buccal/labial: across the arch, away from its middle
-    if (dot(b, sub(c, archCentre)) < 0) b = b.map((v) => -v);
-    let tip = -Infinity, corner = null, cornerScore = -Infinity;
-    for (let i = 0; i < t.g.pos.length; i += 3) {
-      const v = [t.g.pos[i], t.g.pos[i + 1], t.g.pos[i + 2]];
-      tip = Math.max(tip, dot(v, o));
-      const score = dot(sub(v, c), m) + dot(v, o);
-      if (score > cornerScore) { cornerScore = score; corner = v; }
-    }
-    return { c, o, m, b, tip, corner, crown: CROWN[t.arch][t.pos] };
+    let b = [m[2], 0, -m[0]]; // buccal/labial
+    if (dot(b, sub(c, archCentre)) < 0) b = mul(b, -1);
+    let tip = -Infinity;
+    for (let i = 0; i < P.length; i += 3) tip = Math.max(tip, dot([P[i], P[i + 1], P[i + 2]], o));
+    return { c, o, m, b, tip, crown: CROWN[t.arch][t.pos] };
   };
-  // [site, tooth (arch, side, position), test on a triangle: q its centre, n its normal, f the tooth's frame,
-  //  h depth below the cusp tip or incisal edge, r distance from the tooth's long axis]
-  const SITES = [
-    ['class-1', ['lower', 'right', 6], (q, n, f, h, r) => dot(n, f.o) > 0.3 && h > 0.05 && h < 0.3 && r < 0.3],
-    ['class-2', ['upper', 'right', 4], (q, n, f, h) => dot(n, f.m) > 0.4 && h > f.crown * 0.3 && h < f.crown * 0.75 && Math.abs(dot(sub(q, f.c), f.b)) < 0.22],
-    ['class-3', ['upper', 'left', 1], (q, n, f, h) => dot(n, f.m) > 0.3 && h > f.crown * 0.3 && h < f.crown * 0.7 && dot(sub(q, f.c), f.b) > -0.1],
-    ['class-4', ['upper', 'right', 1], (q, n, f, h) => Math.hypot(...sub(q, f.corner)) < 0.25 && h < f.crown * 0.5],
-    ['class-5', ['lower', 'right', 3], (q, n, f, h) => dot(n, f.b) > 0.45 && h > f.crown * 0.68 && h < f.crown * 0.97],
-    ['class-6', ['upper', 'left', 3], (q, n, f, h) => h < 0.07],
-    ['root', ['lower', 'left', 4], (q, n, f, h) => dot(n, f.b) > 0.35 && h > f.crown + 0.02 && h < f.crown + 0.25],
-    ['secondary', ['upper', 'left', 6], (q, n, f, h, r) => dot(n, f.o) > 0.25 && h > 0.04 && r >= 0.2 && r < 0.27],
-    ['restoration', ['upper', 'left', 6], (q, n, f, h, r) => dot(n, f.o) > 0.25 && h > 0.06 && r < 0.2],
-  ];
-  const OFFSET = 0.004; // 0.04 mm off the tooth surface
-  const pins = [];
-  for (const [id, [arch, side, pos], test] of SITES) {
-    const t = find(arch, side, pos);
-    const f = frame(t);
-    const { pos: P, nrm: N, idx } = t.g;
-    const map = new Map(), outP = [], outN = [], outI = [];
-    for (let i = 0; i < idx.length; i += 3) {
-      const tri = [idx[i], idx[i + 1], idx[i + 2]];
-      const q = [0, 1, 2].map((k) => (P[tri[0] * 3 + k] + P[tri[1] * 3 + k] + P[tri[2] * 3 + k]) / 3);
-      const n = [0, 1, 2].map((k) => N[tri[0] * 3 + k] + N[tri[1] * 3 + k] + N[tri[2] * 3 + k]);
-      const nl = Math.hypot(...n) || 1;
-      const h = f.tip - dot(q, f.o), r = Math.hypot(q[0] - f.c[0], q[2] - f.c[2]);
-      if (!test(q, n.map((v) => v / nl), f, h, r)) continue;
-      for (const v of tri) {
-        if (!map.has(v)) { map.set(v, outP.length / 3); for (let k = 0; k < 3; k++) { outP.push(P[v * 3 + k] + N[v * 3 + k] * OFFSET); outN.push(N[v * 3 + k]); } }
-        outI.push(map.get(v));
+
+  // ---------- Signed distance to a closed triangle mesh, on a grid ----------
+  const closestOnTriangle = (p, a, b, c) => {
+    // Ericson, Real-Time Collision Detection 5.1.5.
+    const ab = sub(b, a), ac = sub(c, a), ap = sub(p, a);
+    const d1 = dot(ab, ap), d2 = dot(ac, ap);
+    if (d1 <= 0 && d2 <= 0) return a;
+    const bp = sub(p, b), d3 = dot(ab, bp), d4 = dot(ac, bp);
+    if (d3 >= 0 && d4 <= d3) return b;
+    const vc = d1 * d4 - d3 * d2;
+    if (vc <= 0 && d1 >= 0 && d3 <= 0) return add(a, mul(ab, d1 / (d1 - d3)));
+    const cp = sub(p, c), d5 = dot(ab, cp), d6 = dot(ac, cp);
+    if (d6 >= 0 && d5 <= d6) return c;
+    const vb = d5 * d2 - d1 * d6;
+    if (vb <= 0 && d2 >= 0 && d6 <= 0) return add(a, mul(ac, d2 / (d2 - d6)));
+    const va = d3 * d6 - d5 * d4;
+    if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return add(b, mul(sub(c, b), (d4 - d3) / (d4 - d3 + (d5 - d6))));
+    const den = 1 / (va + vb + vc);
+    return add(a, add(mul(ab, vb * den), mul(ac, vc * den)));
+  };
+  function meshSDF(P, N, I, step) {
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], P[i + k]); hi[k] = Math.max(hi[k], P[i + k]); }
+    const pad = step * 6, min = lo.map((v) => v - pad);
+    const n = hi.map((v, k) => Math.ceil((v + pad - min[k]) / step) + 1);
+    const idx = (i, j, k) => (k * n[1] + j) * n[0] + i;
+    const dist = new Float32Array(n[0] * n[1] * n[2]).fill(1e9), sgn = new Int8Array(dist.length);
+    const band = step * 2.5;
+    for (let t = 0; t < I.length; t += 3) {
+      const [a, b, c] = [I[t], I[t + 1], I[t + 2]].map((v) => [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]]);
+      // Outward by the vertex normals (the source's normals point out; its winding is not relied on).
+      const fn = unit([0, 1, 2].map((k) => N[I[t] * 3 + k] + N[I[t + 1] * 3 + k] + N[I[t + 2] * 3 + k]));
+      const g0 = [0, 1, 2].map((k) => Math.max(0, Math.floor((Math.min(a[k], b[k], c[k]) - band - min[k]) / step)));
+      const g1 = [0, 1, 2].map((k) => Math.min(n[k] - 1, Math.ceil((Math.max(a[k], b[k], c[k]) + band - min[k]) / step)));
+      for (let k = g0[2]; k <= g1[2]; k++) for (let j = g0[1]; j <= g1[1]; j++) for (let i = g0[0]; i <= g1[0]; i++) {
+        const p = [min[0] + i * step, min[1] + j * step, min[2] + k * step];
+        const q = closestOnTriangle(p, a, b, c);
+        const d = Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+        const id = idx(i, j, k);
+        if (d < dist[id]) { dist[id] = d; sgn[id] = dot(sub(p, q), fn) >= 0 ? 1 : -1; }
       }
     }
-    if (!outI.length) throw new Error(`site ${id}: no triangles matched`);
-    const key = `site-${id}`;
-    const prim = doc.createPrimitive()
-      .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(new Float32Array(outP)).setBuffer(buffer))
-      .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(new Float32Array(outN)).setBuffer(buffer))
-      .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(outI)).setBuffer(buffer));
-    scene.addChild(doc.createNode(key).setMesh(doc.createMesh(key).addPrimitive(prim)));
-    console.log(`  site ${id}: ${outI.length / 3} triangles on ${t.g.sided}`);
-    if (id === 'restoration') continue;
-    // Pin on the patch vertex nearest its middle, facing out.
-    const mid = centroid(outP);
-    let best = 0, bestD = Infinity;
-    for (let v = 0; v < outP.length; v += 3) { const d = Math.hypot(outP[v] - mid[0], outP[v + 1] - mid[1], outP[v + 2] - mid[2]); if (d < bestD) { bestD = d; best = v; } }
-    const n = centroid(outN), nl = Math.hypot(...n) || 1;
-    pins.push({ id, key, position: [outP[best], outP[best + 1], outP[best + 2]].map((v) => +v.toFixed(4)), normal: n.map((v) => +(v / nl).toFixed(3)) });
+    // Outside = reachable from the grid's corner without crossing the band.
+    const outside = new Uint8Array(dist.length), queue = [0];
+    outside[0] = 1;
+    while (queue.length) {
+      const id = queue.pop();
+      const i = id % n[0], j = Math.floor(id / n[0]) % n[1], k = Math.floor(id / (n[0] * n[1]));
+      for (const [di, dj, dk] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        const a = i + di, b = j + dj, c = k + dk;
+        if (a < 0 || b < 0 || c < 0 || a >= n[0] || b >= n[1] || c >= n[2]) continue;
+        const nid = idx(a, b, c);
+        if (outside[nid] || dist[nid] < band) continue;
+        outside[nid] = 1; queue.push(nid);
+      }
+    }
+    const field = new Float32Array(dist.length);
+    for (let id = 0; id < field.length; id++) field[id] = dist[id] < band ? sgn[id] * dist[id] : outside[id] ? band : -band;
+    const sample = (p) => {
+      const f = [0, 1, 2].map((k) => Math.min(n[k] - 1.001, Math.max(0, (p[k] - min[k]) / step)));
+      const i0 = f.map(Math.floor), t = f.map((v, k) => v - i0[k]);
+      let s = 0;
+      for (let dk = 0; dk < 2; dk++) for (let dj = 0; dj < 2; dj++) for (let di = 0; di < 2; di++) {
+        s += field[idx(i0[0] + di, i0[1] + dj, i0[2] + dk)] * (di ? t[0] : 1 - t[0]) * (dj ? t[1] : 1 - t[1]) * (dk ? t[2] : 1 - t[2]);
+      }
+      return s;
+    };
+    return { min, n, step, field, sample };
   }
+
+  // ---------- Colours (linear, as glTF vertex colours are) ----------
+  const lin = (hex) => [1, 3, 5].map((i) => { const c = parseInt(hex.slice(i, i + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const ENAMEL = lin('#f6f1e7'); // the teeth's colour in the model (GROUP_COLOR.teeth)
+  const CHALK = lin('#fdfbf3'), WALL = lin('#a87a40'), FLOOR = lin('#4a2c14'), STAIN = lin('#2b1a0d'), LEATHER = lin('#b98b4d'), LEATHER_DEEP = lin('#7a5128');
+  const SHADOW = lin('#cbbfa9'), SHADOW_DEEP = lin('#86735d'), AMALGAM = lin('#8d9299'), AMALGAM_DARK = lin('#646970');
+  const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * Math.min(1, Math.max(0, t)));
+
+  /**
+   * Sites (sizes in cm): centre on the scanned surface, outline radii along u and the other tangent,
+   * depth, halo (fraction of the radius), look. `out` lifts the cavity's centre off the surface (a
+   * broken incisal angle is centred just outside the corner).
+   */
+  const near = (P, N, test, score) => { let best = -1, bs = Infinity; for (let i = 0; i < P.length; i += 3) { const v = [P[i], P[i + 1], P[i + 2]], nv = [N[i], N[i + 1], N[i + 2]]; if (!test(v, nv)) continue; const s = score(v); if (s < bs) { bs = s; best = i / 3; } } return best; };
+  const SITES = [
+    { id: 'class-1', tooth: ['lower', 'right', 6], ru: 0.14, rv: 0.11, depth: 0.13, halo: 0.45, look: 'stained', u: (f) => f.m,
+      centre: (f, P, N) => near(P, N, (v, n) => dot(n, f.o) > 0.6 && Math.hypot(v[0] - f.c[0], v[2] - f.c[2]) < 0.12, (v) => dot(v, f.o)) },
+    { id: 'class-2', tooth: ['upper', 'right', 4], ru: 0.12, rv: 0.1, depth: 0.1, halo: 0.4, look: 'stained', u: (f) => f.b,
+      centre: (f, P, N) => near(P, N, (v, n) => dot(n, f.m) > 0.6, (v) => Math.abs(f.tip - dot(v, f.o) - f.crown * 0.5) + Math.abs(dot(sub(v, f.c), f.b)) * 0.5) },
+    { id: 'class-3', tooth: ['upper', 'left', 1], ru: 0.09, rv: 0.11, depth: 0.07, halo: 0.45, look: 'shadow', u: (f) => f.b,
+      centre: (f, P, N) => near(P, N, (v, n) => dot(n, f.m) > 0.45, (v) => Math.abs(f.tip - dot(v, f.o) - f.crown * 0.45) - dot(sub(v, f.c), f.b) * 0.3) },
+    { id: 'class-4', tooth: ['upper', 'right', 1], ru: 0.19, rv: 0.19, depth: 0.19, halo: 0.25, look: 'leather', out: 0.06, u: (f) => f.b,
+      centre: (f, P, N) => near(P, N, () => true, (v) => -(dot(sub(v, f.c), f.m) + dot(v, f.o))) },
+    { id: 'class-5', tooth: ['lower', 'right', 3], ru: 0.2, rv: 0.075, depth: 0.065, halo: 0.6, look: 'leather', u: (f) => f.m,
+      centre: (f, P, N) => near(P, N, (v, n) => dot(n, f.b) > 0.7, (v) => Math.abs(f.tip - dot(v, f.o) - f.crown * 0.86) + Math.abs(dot(sub(v, f.c), f.m)) * 0.5) },
+    { id: 'class-6', tooth: ['upper', 'left', 3], ru: 0.055, rv: 0.055, depth: 0.04, halo: 0.6, look: 'stained', u: (f) => f.m,
+      centre: (f, P, N) => near(P, N, () => true, (v) => -dot(v, f.o)) },
+    { id: 'root', tooth: ['lower', 'left', 4], ru: 0.19, rv: 0.085, depth: 0.045, halo: 0.25, look: 'leather', u: (f) => f.m,
+      centre: (f, P, N) => near(P, N, (v, n) => dot(n, f.b) > 0.6, (v) => Math.abs(f.tip - dot(v, f.o) - (f.crown + 0.12)) + Math.abs(dot(sub(v, f.c), f.m)) * 0.5) },
+    { id: 'secondary', tooth: ['upper', 'left', 6], ru: 0.16, rv: 0.13, depth: 0.12, halo: 0.35, look: 'restoration', u: (f) => f.m,
+      centre: (f, P, N) => near(P, N, (v, n) => dot(n, f.o) > 0.6 && Math.hypot(v[0] - f.c[0], v[2] - f.c[2]) < 0.12, (v) => dot(v, f.o)) },
+  ];
+  const STEP = 0.01; // 0.1 mm: finer than the scans themselves, smooth enough for the cavity walls
+
+  // Each site's cavity as a field (negative inside): a half-ellipsoid under the surface, outline and
+  // floor made irregular with smooth noise.
+  for (const [si, s] of SITES.entries()) {
+    const t = find(...s.tooth), f = frame(t), P = t.g.pos, N = t.g.nrm;
+    const ci = s.centre(f, P, N);
+    const nc = unit([N[ci * 3], N[ci * 3 + 1], N[ci * 3 + 2]]);
+    const c = add([P[ci * 3], P[ci * 3 + 1], P[ci * 3 + 2]], mul(nc, s.out ?? 0));
+    const u = unit(sub(s.u(f), mul(nc, dot(s.u(f), nc)))), w = cross(nc, u);
+    const R = Math.min(s.ru, s.rv, s.depth), seed = si * 13.7;
+    Object.assign(s, { t, c, nc, u, w, R, surface: [P[ci * 3], P[ci * 3 + 1], P[ci * 3 + 2]] });
+    s.cavity = (p) => {
+      const d = sub(p, c);
+      const r = Math.hypot(dot(d, u) / s.ru, dot(d, w) / s.rv, dot(d, nc) / s.depth);
+      return (r - 1 - 0.22 * fbm(p, 26, 3, seed)) * R - 0.005 * fbm(p, 55, 2, seed + 5);
+    };
+    // Distance outside the cavity's outline along the surface, for the halo (≈ 0 at the rim).
+    s.rim = (p) => { const d = sub(p, c); return Math.hypot(dot(d, u) / s.ru, dot(d, w) / s.rv) * (1 + 0.22 * fbm(p, 26, 3, seed)) - 1; };
+  }
+
+  const extra = [];
+  const byTooth = new Map();
+  for (const s of SITES) { if (!byTooth.has(s.t)) byTooth.set(s.t, []); byTooth.get(s.t).push(s); }
+  for (const [t, sites] of byTooth) {
+    const sdf = meshSDF(t.g.pos, t.g.nrm, t.g.idx, STEP);
+    const { min, n, field } = sdf;
+    const restoration = sites.find((s) => s.look === 'restoration');
+    // The tooth: the scanned shape minus every cavity (and a restoration's ditched margin);
+    // the filling: the restoration's cavity within the scanned shape, minus the ditch.
+    const ditch = (s, p) => Math.max(Math.abs(s.cavity(p)) - 0.012, -(sdf.sample(p) + 0.05));
+    const toothF = (p, base) => {
+      let v = base;
+      for (const s of sites) v = Math.max(v, -s.cavity(p));
+      if (restoration) v = Math.max(v, -ditch(restoration, p));
+      return v;
+    };
+    const fillF = (p, base) => Math.max(base, restoration.cavity(p), -ditch(restoration, p));
+    const regions = [['tooth', toothF], ...(restoration ? [['filling', fillF]] : [])];
+    const built = {};
+    for (const [name, fn] of regions) {
+      const grid = new Float32Array(field.length);
+      let id = 0;
+      for (let k = 0; k < n[2]; k++) for (let j = 0; j < n[1]; j++) for (let i = 0; i < n[0]; i++, id++) {
+        const base = field[id];
+        if (Math.abs(base) > 0.4) { grid[id] = name === 'tooth' ? base : Math.max(base, 0.1); continue; }
+        grid[id] = fn([min[0] + i * STEP, min[1] + j * STEP, min[2] + k * STEP], base);
+      }
+      const { positions, quads } = surfaceNets(STEP, { grid: { min, n, field: grid }, snap: null });
+      // Snap onto the true surface (the scanned field with the cavities cut out), then a light smoothing.
+      const f = (p) => fn(p, sdf.sample(p));
+      snapVertices(positions, [], f, f, STEP);
+      smoothMesh(positions, quads, [], STEP, 6);
+      built[name] = { positions, quads };
+    }
+    // Colour, normals and parts.
+    for (const [name, { positions, quads }] of Object.entries(built)) {
+      const nv = positions.length / 3;
+      const col = new Float32Array(positions.length), owner = new Int16Array(nv).fill(-1);
+      for (let v = 0; v < nv; v++) {
+        const p = [positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]];
+        let c = ENAMEL;
+        if (name === 'filling') { c = mix(AMALGAM, AMALGAM_DARK, (fbm(p, 60, 2, 9) + 1) * 0.3); owner[v] = SITES.indexOf(restoration); col.set(c, v * 3); continue; }
+        const depth = -sdf.sample(p); // how far inside the scanned surface: > 0 on a cavity wall
+        for (const s of sites) {
+          const k = (fbm(p, 90, 2, SITES.indexOf(s) * 3.1) + 1) / 2; // mottling
+          const rim = s.rim(p);
+          if (s.look === 'restoration') {
+            if (depth > 0.004 && Math.abs(s.cavity(p)) < 0.03) { c = mix(LEATHER, STAIN, 0.6 + 0.4 * k); owner[v] = SITES.indexOf(s); }
+            else if (rim > -0.1 && rim < s.halo) { c = mix(mix(CHALK, LEATHER, 0.2), ENAMEL, Math.max(0, rim) / s.halo); owner[v] = SITES.indexOf(s); }
+            continue;
+          }
+          if (depth > 0.004 && s.cavity(p) > -0.02 && Math.hypot(...sub(p, s.c)) < Math.max(s.ru, s.rv) * 1.6) {
+            // How deep into the cavity, measured from the original surface along the lesion's normal.
+            const tt = Math.min(1, Math.max(0, dot(sub(s.surface, p), s.nc) / s.depth) * 1.3);
+            c = s.look === 'shadow' ? mix(SHADOW, SHADOW_DEEP, tt * 0.9 + k * 0.2) : s.look === 'leather' ? mix(LEATHER, LEATHER_DEEP, tt * 0.8 + k * 0.25) : mix(WALL, FLOOR, tt * 0.9 + k * 0.25);
+            owner[v] = SITES.indexOf(s);
+          } else if (rim > -0.15 && rim < s.halo && Math.hypot(...sub(p, s.c)) < Math.max(s.ru, s.rv) * (2 + s.halo)) {
+            // Chalky, demineralised enamel around an active lesion, fading into sound enamel.
+            const tt = Math.max(0, rim) / s.halo;
+            c = mix(s.look === 'leather' ? mix(CHALK, LEATHER, 0.3) : CHALK, ENAMEL, tt ** 1.4);
+            owner[v] = SITES.indexOf(s);
+          }
+        }
+        col.set(c, v * 3);
+      }
+      const nrm = new Float32Array(positions.length), tris = [];
+      for (const q of quads) tris.push([q[0], q[1], q[2]], [q[0], q[2], q[3]]);
+      for (const [a, b, c] of tris) {
+        const e1 = [0, 1, 2].map((k) => positions[b * 3 + k] - positions[a * 3 + k]), e2 = [0, 1, 2].map((k) => positions[c * 3 + k] - positions[a * 3 + k]);
+        const fn = cross(e1, e2);
+        for (const v of [a, b, c]) for (let k = 0; k < 3; k++) nrm[v * 3 + k] += fn[k];
+      }
+      for (let v = 0; v < nv; v++) { const l = Math.hypot(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]) || 1; for (let k = 0; k < 3; k++) nrm[v * 3 + k] /= l; }
+      const groups = new Map();
+      for (const tri of tris) {
+        const o = tri.map((v) => owner[v]);
+        const s = o.every((x) => x === o[0]) && o[0] >= 0 ? SITES[o[0]] : null;
+        const part = name === 'filling' ? 'site-restoration' : s ? `site-${s.id}` : t.g.id;
+        if (!groups.has(part)) groups.set(part, []);
+        groups.get(part).push(...tri);
+      }
+      for (const [part, list] of groups) {
+        const map = new Map(), P = [], NN = [], C = [], I = [];
+        for (const v of list) {
+          if (!map.has(v)) { map.set(v, P.length / 3); P.push(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]); NN.push(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]); C.push(col[v * 3], col[v * 3 + 1], col[v * 3 + 2]); }
+          I.push(map.get(v));
+        }
+        const geo = { pos: new Float32Array(P), nrm: new Float32Array(NN), idx: new Uint32Array(I), col: new Float32Array(C) };
+        if (part === t.g.id) Object.assign(t.g, geo); else extra.push({ name: part, ...geo });
+      }
+    }
+    console.log(`  carved ${sites.map((s) => s.id).join(' + ')} into ${t.g.sided} (${t.g.idx.length / 3} triangles)`);
+  }
+  const pins = SITES.map((s) => ({ id: s.id, key: `site-${s.id}`, position: add(s.surface, mul(s.nc, 0.003)).map((v) => +v.toFixed(4)), normal: s.nc.map((v) => +v.toFixed(3)) }));
   writeFileSync('src/content/cariology-sites.generated.json', JSON.stringify(pins, null, 1) + '\n');
+  return extra;
 }
 
 /**

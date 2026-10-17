@@ -330,7 +330,10 @@ export const PERIO = {
 // Periodontal ligament space between root and bone (the root field underestimates distance on its broad
 // buccal and lingual sides, so this gives roughly 0.2 mm there).
 const PDL = 0.1;
-export const PERIO_REGIONS = ['alveolar-bone', 'gingiva'];
+export const PERIO_REGIONS = ['alveolar-bone', 'pdl', 'gingiva'];
+// Soft tissue and the ligament reach a little under the tooth's surface (and the ligament under the
+// bone's): the viewer draws the tooth in front, so the section shows no gaps where they meet.
+const TUCK = 0.04;
 
 /** Bone and gingiva fields for a lesion's model (negative inside), given p and the tooth field T there. */
 export function perioFields(kind, { cut: withCut = true } = {}) {
@@ -343,10 +346,13 @@ export function perioFields(kind, { cut: withCut = true } = {}) {
     const boneSolid = Math.max(process, p[1] - crestY, PDL - T);
     // Gingiva: a cuff from the margin down to just past the crest, thickening apically, outside the bone.
     const gw = lerp(0.35, 1.5, clamp((margin - p[1]) / (margin - crest + 0.8), 0, 1));
-    const cuff = Math.max(T - gw, 0.02 - T, p[1] - margin - cejY(p[0], p[2]), crest - 0.8 - p[1],
+    const cuff = Math.max(T - gw, -TUCK - T, p[1] - margin - cejY(p[0], p[2]), crest - 0.8 - p[1],
       roundBox([p[0], 0, p[2]], [0, 0, 0], [7.2, 1, 5.4], 1.6)); // within the bone block's footprint
+    // Periodontal ligament: the space between root and socket wall, below the crest.
+    const pdl = Math.max(-TUCK - T, T - PDL - TUCK, p[1] - crestY, process);
     return {
       'alveolar-bone': Math.max(boneSolid, cut(p)),
+      pdl: Math.max(pdl, cut(p)),
       gingiva: Math.max(cuff, -boneSolid, cut(p)),
     };
   };

@@ -498,6 +498,7 @@
       "tertiary-dentin",
       "enamel",
       "dentin",
+      "cementum",
       "pulp"
      ],
      "pins": [
@@ -626,7 +627,8 @@
    "staticParts": [
     "enamel",
     "dentin",
-    "cementum"
+    "cementum",
+    "pulp"
    ],
    "perio": "cl-smooth-surface-perio",
    "view": [
@@ -981,7 +983,8 @@
       "tertiary-dentin",
       "enamel",
       "dentin",
-      "cementum"
+      "cementum",
+      "pulp"
      ],
      "pins": [
       {

@@ -78,6 +78,21 @@ export interface Pickable {
 
 type PartMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
 
+/**
+ * Parts that look alike (same material settings and vertex attributes) are drawn together in one
+ * BatchedMesh: a handful of draw calls instead of one per part (General anatomy has 2,234 parts).
+ * Each part keeps its own visibility, colour and position in the batch. A part that needs special
+ * drawing (faded context, the selection, the hovered part) is hidden in its batch and drawn on its own
+ * with its own material instead.
+ */
+interface Batch {
+  mesh: THREE.BatchedMesh;
+  parts: PartMesh[]; // by instance id
+  flowOn?: { value: number };
+  /** A see-through batch for faded context parts (built when parts first fade). */
+  faded?: boolean;
+}
+
 interface PartState {
   base: THREE.Vector3; // position as authored
   center: THREE.Vector3; // bounding-box centre in the authored pose
@@ -102,6 +117,7 @@ export class Viewer {
   private controls: OrbitControls;
   private root = new THREE.Group();
   private meshes: PartMesh[] = [];
+  private batches: Batch[] = [];
   private state = new Map<PartMesh, PartState>();
   private modelCenter = new THREE.Vector3();
   private raycaster = new THREE.Raycaster();
@@ -201,6 +217,7 @@ export class Viewer {
       if (info) add.push([mesh, info]);
     });
     for (const [mesh, info] of add) this.register(mesh, info);
+    this.buildBatches();
 
     const all = new THREE.Box3();
     for (const m of this.meshes) all.expandByObject(m);
@@ -211,6 +228,7 @@ export class Viewer {
       s.radial = d.multiplyScalar(0.9).add(d.clone().normalize().multiplyScalar(all.getSize(new THREE.Vector3()).length() * 0.06));
     }
     this.apply();
+    this.place();
     this.frameAll();
   }
 
@@ -332,6 +350,8 @@ export class Viewer {
       const on = m.userData.flowOn as { value: number } | undefined;
       if (on) on.value = keys?.has(m.userData.key) ? 1 : 0;
     }
+    // A batch pulses when any of its parts does (parts not pulsing are the hidden ones).
+    for (const b of this.batches) if (b.flowOn) b.flowOn.value = b.parts.some((m) => keys?.has(m.userData.key)) ? 1 : 0;
     this.needsRender = true;
   }
 
@@ -390,38 +410,82 @@ export class Viewer {
     this.canvas.removeEventListener('pointermove', this.handleMove);
     this.canvas.removeEventListener('pointerleave', this.handleLeave);
     for (const [m, s] of this.state) { gsap.killTweensOf(s.bite); m.geometry.dispose(); m.material.dispose(); }
+    for (const b of this.batches) { b.mesh.dispose(); (b.mesh.material as THREE.Material).dispose(); }
     this.controls.dispose();
     this.renderer.dispose();
   }
 
   // ---------- internals ----------
 
-  private register(mesh: THREE.Mesh, info: Pickable) {
+  /** The material for a part (or, opaque, for a batch of parts that look alike). */
+  private makeMaterial(info: Pickable, vertexColours: boolean, opaque: boolean) {
     const options: THREE.MeshPhysicalMaterialParameters = {
-      color: info.color, roughness: info.surface?.roughness ?? (info.group === 'teeth' || info.group === 'enamel' ? 0.3 : 0.6), metalness: 0,
-      side: THREE.DoubleSide, transparent: true,
+      color: vertexColours || opaque ? '#ffffff' : info.color, roughness: info.surface?.roughness ?? (info.group === 'teeth' || info.group === 'enamel' ? 0.3 : 0.6), metalness: 0,
+      side: THREE.DoubleSide, transparent: !opaque, vertexColors: vertexColours,
       ...(info.overlay ? { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 } : {}),
-      ...(info.layer ? { polygonOffset: true, polygonOffsetFactor: info.layer * 0.6, polygonOffsetUnits: info.layer * 2 } : {}),
+      // A tiny constant offset only: enough to settle coincident walls, never enough to push a part behind another.
+      ...(info.layer ? { polygonOffset: true, polygonOffsetFactor: 0, polygonOffsetUnits: info.layer } : {}),
     };
     // A clearcoat (enamel's gloss) needs the physical material; everything else stays standard.
     const material = info.surface?.clearcoat
       ? new THREE.MeshPhysicalMaterial({ ...options, clearcoat: info.surface.clearcoat, clearcoatRoughness: 0.18 })
       : new THREE.MeshStandardMaterial(options);
     if (info.surface) addSurface(material, info.surface);
+    return material;
+  }
+
+  private register(mesh: THREE.Mesh, info: Pickable) {
+    // A part with its own vertex colours (e.g. a tooth with a lesion painted on) shows them as they are.
+    const vertexColours = !!mesh.geometry.getAttribute('color');
+    const material = this.makeMaterial(info, vertexColours, false);
     (mesh.material as THREE.Material).dispose();
     const m = mesh as unknown as PartMesh;
     m.material = material;
     // Bake the world transform so offsets and framing live in one space.
     m.matrixWorld.decompose(m.position, m.quaternion, m.scale);
-    m.userData = { key: info.key, group: info.group, base: new THREE.Color(info.color) };
+    m.removeFromParent();
+    m.userData = { key: info.key, group: info.group, base: new THREE.Color(vertexColours ? '#ffffff' : info.color), info, vertexColours };
     if (m.geometry.getAttribute('_flow')) m.userData.flowOn = addFlow(material, this.flowTime);
-    this.root.add(m);
+    // Parts are drawn through their batch; a part only joins the scene itself when drawn specially.
     this.meshes.push(m);
     const box = new THREE.Box3().setFromObject(m);
     this.state.set(m, {
       base: m.position.clone(), center: box.getCenter(new THREE.Vector3()), size: box.getSize(new THREE.Vector3()),
       bite: new THREE.Vector3(), radial: new THREE.Vector3(), grid: null,
     });
+  }
+
+  /** Group parts that look alike into batches (see Batch); `faded` builds see-through ones for context parts. */
+  private buildBatches(parts = this.meshes, faded = false) {
+    const groups = new Map<string, PartMesh[]>();
+    for (const m of parts) {
+      const { info, vertexColours } = m.userData as { info: Pickable; vertexColours: boolean };
+      const attrs = Object.entries(m.geometry.attributes).map(([n, a]) => `${n}:${a.itemSize}:${a.normalized}`).sort().join();
+      const sig = JSON.stringify([info.surface ?? null, !!info.overlay, info.layer ?? 0, m.material.roughness, vertexColours, attrs, !!m.geometry.index]);
+      if (!groups.has(sig)) groups.set(sig, []);
+      groups.get(sig)!.push(m);
+    }
+    for (const parts of groups.values()) {
+      const first = parts[0];
+      const vertices = parts.reduce((t, m) => t + m.geometry.getAttribute('position').count, 0);
+      const indices = parts.reduce((t, m) => t + (m.geometry.index?.count ?? 0), 0);
+      const material = this.makeMaterial(first.userData.info as Pickable, first.userData.vertexColours as boolean, !faded);
+      if (faded) { material.opacity = 0.18; material.depthWrite = false; }
+      const mesh = new THREE.BatchedMesh(parts.length, vertices, indices, material);
+      mesh.sortObjects = false; // opaque: no per-frame depth sort (faded parts are too faint to need one)
+      if (faded) mesh.renderOrder = 1;
+      const batch: Batch = { mesh, parts: [], faded };
+      if (first.geometry.getAttribute('_flow')) batch.flowOn = addFlow(material, this.flowTime);
+      for (const m of parts) {
+        const id = mesh.addInstance(mesh.addGeometry(m.geometry));
+        batch.parts[id] = m;
+        m.userData[faded ? 'fadedBatch' : 'batch'] = batch;
+        m.userData[faded ? 'fadedInstance' : 'instance'] = id;
+        if (faded) mesh.setMatrixAt(id, m.matrixWorld);
+      }
+      this.root.add(mesh);
+      this.batches.push(batch);
+    }
   }
 
   private shown(m: PartMesh): boolean {
@@ -437,17 +501,35 @@ export class Viewer {
   }
 
   private apply() {
+    const colour = new THREE.Color();
+    const isFaded = (m: PartMesh) => this.context.has(m.userData.group) && !this.visible.has(m.userData.group) && m.userData.key !== this.selected;
+    // Parts fading for the first time get a see-through batch.
+    const newlyFaded = this.meshes.filter((m) => !m.userData.fadedBatch && isFaded(m) && this.shown(m));
+    if (newlyFaded.length) this.buildBatches(newlyFaded, true);
     for (const m of this.meshes) {
-      const { key, group, base } = m.userData as { key: string; group: string; base: THREE.Color };
-      m.visible = this.shown(m);
-      const faded = this.context.has(group) && !this.visible.has(group) && key !== this.selected;
-      m.material.opacity = faded ? 0.18 : 1;
-      m.material.depthWrite = !faded;
-      m.renderOrder = faded ? 1 : 0;
-      // Keep each tissue's own hue readable; selection adds a blue glow rather than recolouring.
-      const c = m.material.color.copy(base);
+      const { key, base, batch, instance, fadedBatch, fadedInstance } = m.userData as { key: string; base: THREE.Color; batch: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
+      const shown = this.shown(m);
+      m.visible = shown;
+      const faded = isFaded(m);
       const override = this.colourOverride?.get(key);
-      if (override) c.set(override);
+      colour.copy(base);
+      if (override) colour.set(override);
+      // In the see-through batch when faded; drawn on its own (with its own material, for the glow)
+      // when selected or hovered; otherwise in its batch.
+      const special = shown && !faded && (key === this.selected || key === this.hovered);
+      batch.mesh.setVisibleAt(instance, shown && !special && !faded);
+      batch.mesh.setColorAt(instance, colour);
+      if (fadedBatch) {
+        fadedBatch.mesh.setVisibleAt(fadedInstance!, shown && faded);
+        fadedBatch.mesh.setColorAt(fadedInstance!, colour);
+      }
+      if (special && m.parent !== this.root) this.root.add(m);
+      if (!special && m.parent) m.removeFromParent();
+      if (!special) continue;
+      m.material.opacity = 1;
+      m.material.depthWrite = true;
+      // Keep each tissue's own hue readable; selection adds a blue glow rather than recolouring.
+      const c = m.material.color.copy(colour);
       if (key === this.selected) c.lerp(SELECT, SELECT_MIX);
       m.material.emissive.copy(key === this.selected ? SELECT_GLOW : key === this.hovered ? HOVER_GLOW : NO_GLOW);
     }
@@ -489,6 +571,10 @@ export class Viewer {
     for (const [m, s] of this.state) {
       const p = m.position.copy(s.base).add(s.bite).addScaledVector(s.radial, ease(spread));
       if (g > 0 && s.grid) p.lerp(s.base.clone().add(s.grid), g);
+      m.updateMatrixWorld();
+      const { batch, instance, fadedBatch, fadedInstance } = m.userData as { batch: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
+      batch.mesh.setMatrixAt(instance, m.matrixWorld);
+      fadedBatch?.mesh.setMatrixAt(fadedInstance!, m.matrixWorld);
     }
     this.needsRender = true;
   }
@@ -550,8 +636,12 @@ export class Viewer {
     const rect = this.canvas.getBoundingClientRect();
     const p = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(p, this.camera);
-    const targets = this.meshes.filter((m) => m.visible && m.material.opacity > 0.5);
-    return (this.raycaster.intersectObjects(targets, false)[0]?.object.userData.key as string) ?? null;
+    // The solid batches (their hidden parts are skipped) and the parts drawn on their own; faded parts can't be picked.
+    const targets: THREE.Object3D[] = [...this.batches.filter((b) => !b.faded).map((b) => b.mesh), ...this.meshes.filter((m) => m.parent && m.visible)];
+    const hit = this.raycaster.intersectObjects(targets, false)[0];
+    if (!hit) return null;
+    const batch = this.batches.find((b) => b.mesh === hit.object);
+    return ((batch ? batch.parts[hit.batchId ?? -1] : hit.object)?.userData.key as string) ?? null;
   }
 
   private handleDown = (e: PointerEvent) => { this.down = { x: e.clientX, y: e.clientY }; };

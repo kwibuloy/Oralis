@@ -14,6 +14,7 @@
 import { Document, NodeIO } from '@gltf-transform/core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { CUTS, enamelThickness, frameOf, LESIONS, onFace, PERIO, PERIO_REGIONS, perioFields, pulp, REGIONS, stageFields, uncarved } from './lib/caries-lesions.mjs';
+import { smoothMesh, snapVertices } from './lib/mesh-tools.mjs';
 import { sdf, surfaceNets } from './lib/molar.mjs';
 
 const STEP = Number(process.env.STEP ?? 0.08);
@@ -113,127 +114,6 @@ function finishTooth(positions, quads, planes, tissue, step) {
   };
 }
 
-// ---------- Snapping: vertices onto the true boundaries ----------
-/**
- * Surface nets leave each vertex where grid edges cross the boundary, which shows as a staircase when
- * zoomed in, and neighbouring regions end slightly apart on a cut face. Move each vertex onto its
- * region's true boundary, as the outer surface of the carving tooth is: on a cut face it stays on the
- * plane and slides within it onto the zone's edge (both neighbours land on the same curve, so the
- * hairline gaps close); elsewhere it moves in 3D. Steps are capped and only kept when they get closer.
- */
-function snapVertices(positions, planes, field3D, fieldInPlane, step) {
-  const e = 0.004, maxMove = step * 0.75;
-  const newton = (p, f, axes, onlyNear) => {
-    const start = [...p];
-    let d = f(p);
-    for (let it = 0; it < 6 && Math.abs(d) > 1e-5; it++) {
-      const g = [0, 0, 0];
-      for (const a of axes) { const q = [...p], r = [...p]; q[a] += e; r[a] -= e; g[a] = (f(q) - f(r)) / (2 * e); }
-      const gl = Math.hypot(...g);
-      if (gl < 1e-6) return;
-      // A vertex well inside a cut face (not on a zone edge) stays where it is.
-      if (it === 0 && onlyNear && Math.abs(d) / gl > step) return;
-      const move = Math.max(-maxMove, Math.min(maxMove, d / gl));
-      const next = p.map((v, k) => v - (g[k] / gl) * move);
-      const nd = f(next);
-      if (Math.abs(nd) >= Math.abs(d) || Math.hypot(next[0] - start[0], next[1] - start[1], next[2] - start[2]) > maxMove) return;
-      p.splice(0, 3, ...next); d = nd;
-    }
-  };
-  for (let v = 0; v < positions.length; v += 3) {
-    const p = [positions[v], positions[v + 1], positions[v + 2]];
-    const i = planes.findIndex((_, k) => onFace(planes, k, p, step * 0.6));
-    if (i >= 0) {
-      p[planes[i].axis] = planes[i].at;
-      newton(p, fieldInPlane, [0, 1, 2].filter((a) => a !== planes[i].axis), true);
-    } else newton(p, field3D, [0, 1, 2], false);
-    positions[v] = p[0]; positions[v + 1] = p[1]; positions[v + 2] = p[2];
-  }
-}
-
-/**
- * Smooth what snapping leaves behind: a vertex that settled on the wrong side of a corner (where a
- * zone meets the cavity or two other zones) folds its triangles into a flake. Taubin smoothing (a
- * shrink step then an inflate step) removes such spikes without shrinking the shape. Vertices on the
- * open edge of a mesh (a zone's edge on a cut face) are smoothed along that edge only, so the edge line
- * straightens and its neighbour, smoothed the same way, still meets it; vertices on a cut face stay on it.
- */
-function smoothMesh(positions, quads, planes, step, iterations = 6) {
-  const n = positions.length / 3;
-  const edgeCount = new Map();
-  const key = (a, b) => (a < b ? a * n + b : b * n + a);
-  for (const q of quads) for (let i = 0; i < 4; i++) { const k = key(q[i], q[(i + 1) % 4]); edgeCount.set(k, (edgeCount.get(k) ?? 0) + 1); }
-  const nbr = Array.from({ length: n }, () => new Set());
-  const open = new Uint8Array(n);
-  for (const [k, c] of edgeCount) {
-    const a = Math.floor(k / n), b = k % n;
-    if (c === 1) { open[a] = 1; open[b] = 1; }
-  }
-  for (const [k, c] of edgeCount) {
-    const a = Math.floor(k / n), b = k % n;
-    // Along the open edge only for vertices on it; across the surface for the rest.
-    if (open[a] && open[b] && c !== 1) continue;
-    if (!open[a] || c === 1) nbr[a].add(b);
-    if (!open[b] || c === 1) nbr[b].add(a);
-  }
-  const plane = new Int8Array(n).fill(-1);
-  for (let v = 0; v < n; v++) plane[v] = planes.findIndex((_, i) => onFace(planes, i, [positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]], step * 0.05));
-  const next = new Float32Array(positions.length);
-  const pass = (lambda) => {
-    for (let v = 0; v < n; v++) {
-      const ns = nbr[v];
-      for (let k = 0; k < 3; k++) next[v * 3 + k] = positions[v * 3 + k];
-      if (ns.size < 2) continue;
-      const c = [0, 0, 0];
-      for (const u of ns) for (let k = 0; k < 3; k++) c[k] += positions[u * 3 + k];
-      for (let k = 0; k < 3; k++) next[v * 3 + k] += lambda * (c[k] / ns.size - positions[v * 3 + k]);
-      if (plane[v] >= 0) next[v * 3 + planes[plane[v]].axis] = planes[plane[v]].at;
-    }
-    positions.set(next);
-  };
-  for (let i = 0; i < iterations; i++) { pass(0.5); pass(-0.53); }
-}
-
-/**
- * Close the hairline gaps between neighbouring zones on a cut face: move each vertex on a zone's edge
- * there (an open edge of the mesh lying in the plane) outwards within the plane by `by`, so the zone
- * slightly overlaps its neighbour. The viewer draws the zones at fixed depth priorities, so the
- * overlap never flickers.
- */
-function overlapCutEdges(positions, quads, planes, by) {
-  const n = positions.length / 3;
-  const P = (v) => [positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]];
-  const planeOf = (v) => planes.findIndex((_, i) => onFace(planes, i, P(v), 1e-4));
-  const edges = new Map();
-  const key = (a, b) => (a < b ? a * n + b : b * n + a);
-  for (const q of quads) for (const t of [[q[0], q[1], q[2]], [q[0], q[2], q[3]]]) for (let i = 0; i < 3; i++) {
-    const a = t[i], b = t[(i + 1) % 3], c = t[(i + 2) % 3], k = key(a, b);
-    const e = edges.get(k);
-    if (e) e.count++; else edges.set(k, { a, b, c, count: 1 });
-  }
-  const push = new Float32Array(positions.length);
-  for (const { a, b, c, count } of edges.values()) {
-    if (count !== 1) continue;
-    const i = planeOf(a);
-    if (i < 0 || planeOf(b) !== i || planeOf(c) !== i) continue;
-    const axis = planes[i].axis;
-    const pa = P(a), pb = P(b), pc = P(c);
-    // In-plane perpendicular to the edge, pointing away from the triangle.
-    const d = pb.map((v, k) => v - pa[k]);
-    let out = [0, 0, 0];
-    const [u, w] = [0, 1, 2].filter((k) => k !== axis);
-    out[u] = d[w]; out[w] = -d[u];
-    const mid = pa.map((v, k) => (v + pb[k]) / 2);
-    if (out.reduce((s2, v, k) => s2 + v * (pc[k] - mid[k]), 0) > 0) out = out.map((v) => -v);
-    const l = Math.hypot(...out) || 1;
-    for (const v of [a, b]) for (let k = 0; k < 3; k++) push[v * 3 + k] += out[k] / l;
-  }
-  for (let v = 0; v < n; v++) {
-    const l = Math.hypot(push[v * 3], push[v * 3 + 1], push[v * 3 + 2]);
-    if (l > 0) for (let k = 0; k < 3; k++) positions[v * 3 + k] += (push[v * 3 + k] / l) * by;
-  }
-}
-
 // ---------- Lesion molar ----------
 // Only the part of the tooth around a lesion changes from stage to stage. Each lesion type has a box
 // that holds every stage of it: outside the box the cut tooth is built once ("static"), and each stage
@@ -300,12 +180,13 @@ function buildRegions(kind, stage, part, prefix) {
   for (const r of REGIONS) {
     const field = fields[r];
     if (!field.some((v) => v < 0)) continue;
-    const { positions, quads } = surfaceNets(STEP, { grid: { min: g.min, n: g.n, field }, snap: null, exposed: (idx) => S[idx] >= 0 });
+    // Solid wherever it can be seen: every face within a few cells of open air (the outer surface, the
+    // cut faces, cavity walls) is kept, so no angle and no stage shows a hole; only walls buried deep
+    // between two tissues, which no camera can reach, are left out.
+    const { positions, quads } = surfaceNets(STEP, { grid: { min: g.min, n: g.n, field }, snap: null, exposed: (idx) => S[idx] >= -4 * STEP });
     if (!quads.length) continue;
     snapVertices(positions, planes, region(f, r), region(fCut, r), STEP);
     smoothMesh(positions, quads, planes, STEP);
-    overlapCutEdges(positions, quads, planes, STEP * 0.35);
-    smoothMesh(positions, quads, planes, STEP, 2); // even out the pushed edge
     const m = finishTooth(positions, quads, planes, tissueOf(r), STEP);
     addMesh(`${prefix}-${r}`, m.positions, m.tris, m.normals, m.extra);
     made.push(r);
@@ -328,14 +209,11 @@ function buildPerio(kind) {
     const r = f(p, T);
     for (const name of PERIO_REGIONS) fields[name][i] = r[name];
   }
-  const air = (idx) => PERIO_REGIONS.every((name) => fields[name][idx] >= 0);
   const fCut = perioFields(kind, { cut: false });
   for (const r of PERIO_REGIONS) {
-    const { positions, quads } = surfaceNets(PERIO_STEP, { grid: { min: box.min, n, field: fields[r] }, snap: null, exposed: air });
+    const { positions, quads } = surfaceNets(PERIO_STEP, { grid: { min: box.min, n, field: fields[r] }, snap: null });
     snapVertices(positions, CUTS[kind], (p) => f(p, sdf(p))[r], (p) => fCut(p, sdf(p))[r], PERIO_STEP);
     smoothMesh(positions, quads, CUTS[kind], PERIO_STEP);
-    overlapCutEdges(positions, quads, CUTS[kind], PERIO_STEP * 0.35);
-    smoothMesh(positions, quads, CUTS[kind], PERIO_STEP, 2);
     const m = finishTooth(positions, quads, CUTS[kind], 'perio', PERIO_STEP);
     addMesh(`cl-${kind}-perio-${r}`, m.positions, m.tris, m.normals, m.extra);
   }

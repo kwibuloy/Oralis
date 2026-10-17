@@ -95,6 +95,7 @@ export const ZONES: Record<string, { name: string; note: string; colour: string;
   'affected-dentin': { name: 'Affected dentin', note: 'Inner carious dentin: demineralised but with intact collagen and few bacteria; leathery to firm. It can remineralise, so over the pulp it is left in place (selective removal).', colour: '#b98a4f', real: '#a5773d' },
   'sclerotic-dentin': { name: 'Sclerotic (transparent) dentin', note: 'At the advancing front the tubules fill with mineral, which makes the dentin transparent and less permeable: a defence that slows the lesion.', colour: '#f2e2b8', real: '#d4b373' },
   'alveolar-bone': { name: 'Alveolar bone', note: 'The bone of the tooth socket: a thin cortical lining (lamina dura) around the periodontal ligament space, and cancellous bone between. Its crest normally lies about 1.5–2 mm apical to the CEJ, and follows the gingiva when it recedes.', colour: '#d9cfc0', real: '#e2d6bf' },
+  pdl: { name: 'Periodontal ligament', note: 'The ligament in the narrow space (about 0.15–0.38 mm) between the root and the socket wall: collagen fibres anchored in cementum and bone (Sharpey’s fibres), with fibroblasts, vessels and nerves. It holds the tooth, cushions biting forces and senses pressure.', colour: '#e6b8b8', real: '#d99a96' },
   gingiva: { name: 'Gingiva', note: 'Healthy gingiva sits about 1 mm coronal to the CEJ and covers the root. With recession (from periodontal disease or toothbrushing trauma) the root surface is exposed, which is where root caries starts.', colour: '#e8a0a0', real: '#e49a9b' },
   'tertiary-dentin': { name: 'Tertiary dentin', note: 'Laid down on the pulp wall beneath the lesion: reactionary dentin from surviving odontoblasts, or reparative dentin from new odontoblast-like cells. It moves the pulp away from the lesion.', colour: '#d8bb86', real: '#dbbf86' },
 };
@@ -114,7 +115,7 @@ export const LESION_MODEL = generated.lesions as unknown as Record<LesionKind, {
 export const stageGroup = (kind: LesionKind, stage: number) => `cl-${kind}-${stage}`;
 export const staticGroup = (kind: LesionKind) => LESION_MODEL[kind].static;
 export const perioGroup = (kind: LesionKind) => LESION_MODEL[kind].perio;
-export const PERIO_ZONES = ['alveolar-bone', 'gingiva'];
+export const PERIO_ZONES = ['alveolar-bone', 'pdl', 'gingiva'];
 
 // ---------- Sites on the arch ----------
 export interface Site {
@@ -122,19 +123,21 @@ export interface Site {
   label: string;
   /** The class or name shown on the pin. */
   short: string;
+  /** The arch of the tooth it is shown on (the lesion moves with it when the bite opens). */
+  arch: 'upper' | 'lower';
   where: string;
   note: string;
   management: string;
 }
 export const SITES: Site[] = [
-  { id: 'class-1', label: 'Class I', short: 'I', where: 'Pits and fissures: occlusal surfaces of premolars and molars, buccal and lingual pits of molars, lingual pits of maxillary incisors. Shown on 46.', note: 'The commonest site in children and adolescents. Fissures trap biofilm, and the lesion starts on the fissure walls (see the pit & fissure lesion).', management: 'Sealants prevent and arrest early lesions; cavitated lesions need a conservative occlusal restoration.' },
-  { id: 'class-2', label: 'Class II', short: 'II', where: 'Proximal surfaces of premolars and molars, just cervical to the contact area. Shown on 14.', note: 'Hidden below the contact: detected with bitewing radiographs (see the smooth-surface lesion).', management: 'Early lesions: interdental cleaning, fluoride, resin infiltration. Cavitated: a Class II (box, slot or tunnel) restoration.' },
-  { id: 'class-3', label: 'Class III', short: 'III', where: 'Proximal surfaces of incisors and canines, not involving the incisal angle. Shown on 21.', note: 'Often seen by transillumination as a shadow from the labial or palatal side.', management: 'Usually restored with composite from the palatal or lingual side to save the labial enamel.' },
-  { id: 'class-4', label: 'Class IV', short: 'IV', where: 'Proximal surfaces of incisors and canines involving the incisal angle. Shown on 11.', note: 'A Class III lesion that has undermined the incisal angle, or a fracture.', management: 'Composite restoration rebuilding the incisal angle.' },
-  { id: 'class-5', label: 'Class V', short: 'V', where: 'Gingival third of the facial or lingual surface of any tooth. Shown on 43.', note: 'Plaque collects along the gingival margin. Cervical lesions may extend onto the root.', management: 'Plaque control and fluoride for early lesions; glass ionomer or composite when cavitated.' },
-  { id: 'class-6', label: 'Class VI', short: 'VI', where: 'Incisal edges of anterior teeth and cusp tips of posterior teeth (added to Black’s classes by Simon, 1956). Shown on 23.', note: 'Rare as caries; cusp tips are self-cleansing. Defects here are often wear or developmental.', management: 'Small composite restoration if needed.' },
-  { id: 'root', label: 'Root caries', short: 'R', where: 'Root surfaces exposed by gingival recession, at or below the CEJ. Shown on 34.', note: 'Common in older adults, with recession and a dry mouth (see the root lesion).', management: 'High-fluoride toothpaste, fluoride varnish or silver diamine fluoride; glass ionomer when it must be restored.' },
-  { id: 'secondary', label: 'Secondary caries', short: 'S', where: 'At the margin of an existing restoration. Shown around an occlusal restoration on 26.', note: 'A new (recurrent) lesion at the restoration margin, where biofilm collects in a gap or ledge. The commonest reason restorations are replaced; most often at the gingival margin of Class II and V restorations.', management: 'Small, accessible lesions can be repaired or sealed; otherwise the restoration is replaced.' },
+  { id: 'class-1', label: 'Class I', short: 'I', arch: 'lower', where: 'Pits and fissures: occlusal surfaces of premolars and molars, buccal and lingual pits of molars, lingual pits of maxillary incisors. Shown on 46.', note: 'The commonest site in children and adolescents. Fissures trap biofilm, and the lesion starts on the fissure walls (see the pit & fissure lesion).', management: 'Sealants prevent and arrest early lesions; cavitated lesions need a conservative occlusal restoration.' },
+  { id: 'class-2', label: 'Class II', short: 'II', arch: 'upper', where: 'Proximal surfaces of premolars and molars, just cervical to the contact area. Shown on 14.', note: 'Hidden below the contact: detected with bitewing radiographs (see the smooth-surface lesion).', management: 'Early lesions: interdental cleaning, fluoride, resin infiltration. Cavitated: a Class II (box, slot or tunnel) restoration.' },
+  { id: 'class-3', label: 'Class III', short: 'III', arch: 'upper', where: 'Proximal surfaces of incisors and canines, not involving the incisal angle. Shown on 21.', note: 'Often seen by transillumination as a shadow from the labial or palatal side.', management: 'Usually restored with composite from the palatal or lingual side to save the labial enamel.' },
+  { id: 'class-4', label: 'Class IV', short: 'IV', arch: 'upper', where: 'Proximal surfaces of incisors and canines involving the incisal angle. Shown on 11.', note: 'A Class III lesion that has undermined the incisal angle, or a fracture.', management: 'Composite restoration rebuilding the incisal angle.' },
+  { id: 'class-5', label: 'Class V', short: 'V', arch: 'lower', where: 'Gingival third of the facial or lingual surface of any tooth. Shown on 43.', note: 'Plaque collects along the gingival margin. Cervical lesions may extend onto the root.', management: 'Plaque control and fluoride for early lesions; glass ionomer or composite when cavitated.' },
+  { id: 'class-6', label: 'Class VI', short: 'VI', arch: 'upper', where: 'Incisal edges of anterior teeth and cusp tips of posterior teeth (added to Black’s classes by Simon, 1956). Shown on 23.', note: 'Rare as caries; cusp tips are self-cleansing. Defects here are often wear or developmental.', management: 'Small composite restoration if needed.' },
+  { id: 'root', label: 'Root caries', short: 'R', arch: 'lower', where: 'Root surfaces exposed by gingival recession, at or below the CEJ. Shown on 34.', note: 'Common in older adults, with recession and a dry mouth (see the root lesion).', management: 'High-fluoride toothpaste, fluoride varnish or silver diamine fluoride; glass ionomer when it must be restored.' },
+  { id: 'secondary', label: 'Secondary caries', short: 'S', arch: 'upper', where: 'At the margin of an existing restoration. Shown around an occlusal restoration on 26.', note: 'A new (recurrent) lesion at the restoration margin, where biofilm collects in a gap or ledge. The commonest reason restorations are replaced; most often at the gingival margin of Class II and V restorations.', management: 'Small, accessible lesions can be repaired or sealed; otherwise the restoration is replaced.' },
 ];
 export const siteById = (id: string) => SITES.find((s) => s.id === id);
 /** Site patches on the arch are named site-<id>; a secondary-caries site also has its restoration. */
