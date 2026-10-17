@@ -180,10 +180,9 @@ function buildRegions(kind, stage, part, prefix) {
   for (const r of REGIONS) {
     const field = fields[r];
     if (!field.some((v) => v < 0)) continue;
-    // Solid wherever it can be seen: every face within a few cells of open air (the outer surface, the
-    // cut faces, cavity walls) is kept, so no angle and no stage shows a hole; only walls buried deep
-    // between two tissues, which no camera can reach, are left out.
-    const { positions, quads } = surfaceNets(STEP, { grid: { min: g.min, n: g.n, field }, snap: null, exposed: (idx) => S[idx] >= -4 * STEP });
+    // Every region is a closed solid. An earlier shortcut kept only faces near open air, which left the
+    // enamel hollow behind its cut faces and cavity walls.
+    const { positions, quads } = surfaceNets(STEP, { grid: { min: g.min, n: g.n, field }, snap: null });
     if (!quads.length) continue;
     snapVertices(positions, planes, region(f, r), region(fCut, r), STEP);
     smoothMesh(positions, quads, planes, STEP);

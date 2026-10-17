@@ -309,8 +309,10 @@ function carveSites(geometry) {
   // ---------- Colours (linear, as glTF vertex colours are) ----------
   const lin = (hex) => [1, 3, 5].map((i) => { const c = parseInt(hex.slice(i, i + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
   const ENAMEL = lin('#f6f1e7'); // the teeth's colour in the model (GROUP_COLOR.teeth)
-  const CHALK = lin('#fdfbf3'), WALL = lin('#a87a40'), FLOOR = lin('#4a2c14'), STAIN = lin('#2b1a0d'), LEATHER = lin('#b98b4d'), LEATHER_DEEP = lin('#7a5128');
+  const CHALK = lin('#fdfbf3'), WALL = lin('#8e5f2b'), FLOOR = lin('#4a2c14'), STAIN = lin('#2b1a0d'), LEATHER = lin('#b98b4d'), LEATHER_DEEP = lin('#7a5128');
   const SHADOW = lin('#cbbfa9'), SHADOW_DEEP = lin('#86735d'), AMALGAM = lin('#8d9299'), AMALGAM_DARK = lin('#646970');
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const GLINT = lin('#c99a55'), STAINB = lin('#6a4220');
   const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * Math.min(1, Math.max(0, t)));
 
   /**
@@ -349,13 +351,25 @@ function carveSites(geometry) {
     const u = unit(sub(s.u(f), mul(nc, dot(s.u(f), nc)))), w = cross(nc, u);
     const R = Math.min(s.ru, s.rv, s.depth), seed = si * 13.7;
     Object.assign(s, { t, c, nc, u, w, R, surface: [P[ci * 3], P[ci * 3 + 1], P[ci * 3 + 2]] });
+    // A main lobe and two smaller satellites along the long axis, wider at depth than at the opening
+    // (undermined enamel), with a rough floor: a real cavity is not a smooth bowl.
+    const h = (k) => { const x = Math.sin(k * 127.1 + seed * 311.7) * 43758.5453; return x - Math.floor(x); };
+    const under = { stained: 0.32, shadow: 0.2, leather: 0.15, restoration: 0.1 }[s.look];
+    s.lobes = [[0, 0, 1, 1], [s.ru * (0.55 + 0.25 * h(1)), s.rv * (h(2) - 0.5) * 0.8, 0.5 + 0.12 * h(3), 0.6 + 0.2 * h(4)], [-s.ru * (0.5 + 0.25 * h(5)), s.rv * (h(6) - 0.5) * 0.8, 0.42 + 0.12 * h(7), 0.5 + 0.25 * h(8)]];
     s.cavity = (p) => {
-      const d = sub(p, c);
-      const r = Math.hypot(dot(d, u) / s.ru, dot(d, w) / s.rv, dot(d, nc) / s.depth);
-      return (r - 1 - 0.22 * fbm(p, 26, 3, seed)) * R - 0.005 * fbm(p, 55, 2, seed + 5);
+      const d = sub(p, c), du = dot(d, u), dw = dot(d, w), dn = dot(d, nc);
+      const wide = 1 + under * Math.min(1, Math.max(0, -dn / s.depth));
+      let best = Infinity;
+      for (const [ou, ow, rs, ds] of s.lobes) best = Math.min(best, Math.hypot((du - ou) / (s.ru * rs * wide), (dw - ow) / (s.rv * rs * wide), dn / (s.depth * ds)));
+      return (best - 1 - 0.22 * fbm(p, 26, 3, seed) - 0.07 * fbm(p, 75, 3, seed + 2)) * R - 0.005 * fbm(p, 55, 2, seed + 5);
     };
-    // Distance outside the cavity's outline along the surface, for the halo (≈ 0 at the rim).
-    s.rim = (p) => { const d = sub(p, c); return Math.hypot(dot(d, u) / s.ru, dot(d, w) / s.rv) * (1 + 0.22 * fbm(p, 26, 3, seed)) - 1; };
+    // Distance outside the cavity's outline along the surface, for the stain and the halo (≈ 0 at the rim).
+    s.rim = (p) => {
+      const d = sub(p, c), du = dot(d, u), dw = dot(d, w);
+      let best = Infinity;
+      for (const [ou, ow, rs] of s.lobes) best = Math.min(best, Math.hypot((du - ou) / (s.ru * rs), (dw - ow) / (s.rv * rs)));
+      return best * (1 + 0.22 * fbm(p, 26, 3, seed)) - 1;
+    };
   }
 
   const extra = [];
@@ -409,15 +423,32 @@ function carveSites(geometry) {
             else if (rim > -0.1 && rim < s.halo) { c = mix(mix(CHALK, LEATHER, 0.2), ENAMEL, Math.max(0, rim) / s.halo); owner[v] = SITES.indexOf(s); }
             continue;
           }
-          if (depth > 0.004 && s.cavity(p) > -0.02 && Math.hypot(...sub(p, s.c)) < Math.max(s.ru, s.rv) * 1.6) {
+          const reach = Math.max(s.ru, s.rv);
+          // A cavity wall lies on the cavity's own surface; intact enamel only grazes depth 0 and must not match.
+          if (depth > 0.004 && Math.abs(s.cavity(p)) < 0.03 && Math.hypot(...sub(p, s.c)) < reach * 1.6) {
             // How deep into the cavity, measured from the original surface along the lesion's normal.
-            const tt = Math.min(1, Math.max(0, dot(sub(s.surface, p), s.nc) / s.depth) * 1.3);
+            const tt = Math.min(1, Math.max(0, dot(sub(s.surface, p), s.nc) / s.depth) * 1.3) ** 0.6;
+            const seed = SITES.indexOf(s) * 3.1;
+            const n2 = (fbm(p, 220, 2, seed + 7) + 1) / 2, n3 = (fbm(p, 45, 3, seed + 3) + 1) / 2;
             c = s.look === 'shadow' ? mix(SHADOW, SHADOW_DEEP, tt * 0.9 + k * 0.2) : s.look === 'leather' ? mix(LEATHER, LEATHER_DEEP, tt * 0.8 + k * 0.25) : mix(WALL, FLOOR, tt * 0.9 + k * 0.25);
+            // Patches of lighter and darker carious dentin, glossy amber glints near the rim, black pitting low down.
+            c = mix(c, c.map((x) => x * 0.55), smooth(0.4, 0.7, n3) * 0.6);
+            c = mix(c, GLINT, smooth(0.7, 0.9, n2) * 0.55 * (1 - tt));
+            c = mix(c, STAIN, smooth(0.62, 0.85, n2) * (0.25 + 0.6 * tt));
             owner[v] = SITES.indexOf(s);
-          } else if (rim > -0.15 && rim < s.halo && Math.hypot(...sub(p, s.c)) < Math.max(s.ru, s.rv) * (2 + s.halo)) {
-            // Chalky, demineralised enamel around an active lesion, fading into sound enamel.
-            const tt = Math.max(0, rim) / s.halo;
-            c = mix(s.look === 'leather' ? mix(CHALK, LEATHER, 0.3) : CHALK, ENAMEL, tt ** 1.4);
+          } else if (rim > -0.15 && rim < s.halo * 1.5 && Math.hypot(...sub(p, s.c)) < reach * (2.2 + s.halo)
+            // The outline is measured in the plane across the lesion's normal, so a point far along the normal
+            // (round the tooth) can land inside it: keep the stain to the surface beside the cavity.
+            && Math.abs(dot(sub(p, s.c), s.nc)) < s.depth + 0.08) {
+            // Stain creeping into the enamel in irregular fingers, then the chalky edge of the lesion, then sound enamel.
+            const seed = SITES.indexOf(s) * 3.1;
+            const edge = Math.max(0, rim) / (s.halo * 1.5);
+            const fingers = (fbm(p, 40, 3, seed + 11) + 1) / 2;
+            const power = s.look === 'shadow' ? 0.25 : s.look === 'leather' ? 0.55 : 1;
+            const stained = smooth(0.3, 0.8, 1.05 - edge * 1.15 + (fingers - 0.55) * 0.9) * power;
+            const chalk = smooth(0.45, 0.8, edge) * (1 - smooth(0.85, 1, edge)) * 0.9;
+            c = mix(ENAMEL, s.look === 'shadow' ? SHADOW : s.look === 'leather' ? mix(STAINB, LEATHER, 0.5) : mix(STAINB, STAIN, smooth(0.6, 1, stained) * 0.45), stained);
+            c = mix(c, CHALK, chalk * (1 - stained));
             owner[v] = SITES.indexOf(s);
           }
         }
@@ -449,6 +480,7 @@ function carveSites(geometry) {
         if (part === t.g.id) Object.assign(t.g, geo); else extra.push({ name: part, ...geo });
       }
     }
+   
     console.log(`  carved ${sites.map((s) => s.id).join(' + ')} into ${t.g.sided} (${t.g.idx.length / 3} triangles)`);
   }
   const pins = SITES.map((s) => ({ id: s.id, key: `site-${s.id}`, position: add(s.surface, mul(s.nc, 0.003)).map((v) => +v.toFixed(4)), normal: s.nc.map((v) => +v.toFixed(3)) }));
