@@ -7,7 +7,8 @@
   "fma": "FMA59763",
   "models": [
    "general",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -18,7 +19,8 @@
   "fma": "FMA59764",
   "models": [
    "general",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -30,7 +32,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -42,7 +45,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -54,7 +58,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -66,7 +71,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -78,7 +84,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -90,7 +97,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -102,7 +110,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -114,7 +123,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -126,7 +136,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -138,7 +149,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -150,7 +162,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -162,7 +175,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -174,7 +188,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -186,7 +201,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -198,7 +214,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -210,7 +227,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -222,7 +240,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -234,7 +253,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -246,7 +266,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -258,7 +279,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -270,7 +292,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -282,7 +305,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -294,7 +318,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -306,7 +331,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -318,7 +344,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -330,7 +357,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -342,7 +370,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -354,7 +383,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -21025,7 +21055,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -21071,7 +21102,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -21251,7 +21283,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -22190,7 +22223,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {
@@ -22236,7 +22270,8 @@
   "models": [
    "general",
    "physiology",
-   "dental"
+   "dental",
+   "cariology"
   ]
  },
  {

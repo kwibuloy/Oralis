@@ -17,6 +17,8 @@ const RULES = [
   [/^models-src\/.+\.blend$/, 'It is saved by scripts/blender/build_histology.py; change the script instead.'],
   [/^models-src\/carving-molar\.glb$/, 'It is built by scripts/build-carving-tooth.mjs; change the script, then re-run it and extract-bodyparts.mjs.'],
   [/^src\/content\/carving\.generated\.json$/, 'Landmark positions come from scripts/build-carving-tooth.mjs; names and notes live in src/content/carving.ts.'],
+  [/^models-src\/cariology\.glb$/, 'It is built by scripts/build-cariology.mjs (shapes in scripts/lib/caries-lesions.mjs); change the script, then re-run it and extract-bodyparts.mjs.'],
+  [/^src\/content\/cariology(-sites)?\.generated\.json$/, 'Written by scripts/build-cariology.mjs (lesion stages and pins) and extract-bodyparts.mjs (site pins); names and notes live in src/content/cariology.ts.'],
 ];
 
 const hit = RULES.find(([re]) => re.test(rel));

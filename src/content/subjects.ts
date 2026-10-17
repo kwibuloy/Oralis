@@ -5,7 +5,7 @@ export type SubjectId =
   | ModeId
   | 'occlusion'
   | 'biochem' | 'orgchem' | 'genetics'
-  | 'microbio' | 'pathology' | 'cariology';
+  | 'microbio' | 'pathology';
 
 export interface Subject {
   id: SubjectId;
@@ -29,7 +29,7 @@ export const SUBJECTS: Subject[] = [
   { id: 'microbio', name: 'Microbiology', group: 'Micro, histo & path', planned: 'Streptococcus mutans and other bacteria, virus shapes, and a biofilm.' },
   { id: 'histology', name: 'General & oral histology', group: 'Micro, histo & path', planned: 'Layered tissue blocks: enamel, dentin, pulp and periodontal ligament.' },
   { id: 'pathology', name: 'Pathology', group: 'Micro, histo & path', planned: 'Healthy and diseased tissue side by side: an ulcer, a cyst, a tumour.' },
-  { id: 'cariology', name: 'Cariology', group: 'Dental', planned: 'A tooth with a slider from white-spot lesion through enamel and dentin to the pulp.' },
+  { id: 'cariology', name: 'Cariology', group: 'Dental', planned: 'Lesion stages in a sectioned molar (pit & fissure, smooth surface, root) with ICDAS and ICCMS codes, caries sites by G.V. Black class, and the biofilm and pH behind it.' },
 ];
 
 export const subjectById = (id: string) => SUBJECTS.find((s) => s.id === id);

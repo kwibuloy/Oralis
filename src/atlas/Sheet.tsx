@@ -70,8 +70,11 @@ export default function Sheet({ labelledBy, children }: { labelledBy: string; ch
       const area = (el.offsetParent ?? document.body).getBoundingClientRect();
       setInset({ right: area.right - el.getBoundingClientRect().left, bottom: 0 });
     } else if (dragY === null) {
+      // From the sheet's settled top (its layout position, not mid-slide) to the bottom of the stage,
+      // so a sheet raised above another bar (a timeline) covers that bar too.
       const height = el.offsetHeight;
-      setInset({ right: 0, bottom: height + 8 - (collapsed ? Math.max(0, height - peekOf(el)) : 0) });
+      const top = el.offsetTop + (collapsed ? Math.max(0, height - peekOf(el)) : 0);
+      setInset({ right: 0, bottom: (el.offsetParent as HTMLElement | null ?? document.body).clientHeight - top });
     }
   }, [phone, collapsed, dragY, size, setInset]);
   useEffect(() => () => setInset({ right: 0, bottom: 0 }), [setInset]);

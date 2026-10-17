@@ -1,7 +1,7 @@
 # Oralis
 
 A white-theme 3D atlas for dental students. Eleven subjects are listed in a grouped picker; the
-ones with a model so far — General anatomy, Physiology, Oral anatomy, General & oral histology —
+ones with a model so far — General anatomy, Physiology, Oral anatomy, General & oral histology, Cariology —
 each load
 their own GLB, and the rest show a "model in progress" card. Every part is clickable, with study
 notes, layer toggles, views and an explode/inventory slider. React 18 + TypeScript + three.js,
@@ -19,7 +19,8 @@ This file points; it does not document. Read the files it names.
 | Screenshots | `node scripts/shoot.mjs --widths 1440,1024,768,390 general dental histology/enamel` |
 | Touch check (selection + card) | `node scripts/touch-check.mjs` (usage in its header) |
 | Carving tooth (run before extract) | `node scripts/build-carving-tooth.mjs` → `models-src/carving-molar.glb`, `src/content/carving.generated.json` |
-| General, Physiology + Oral anatomy models | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
+| Cariology lesion molar + process block (run before extract) | `node scripts/build-cariology.mjs` → `models-src/cariology.glb`, `src/content/cariology.generated.json` |
+| General, Physiology, Oral anatomy + Cariology models | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
 | Histology model | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_histology.py -- public/models/histology.glb models-src/histology.blend` |
 
 ## Where things are
@@ -37,6 +38,7 @@ This file points; it does not document. Read the files it names.
 | Tooth numbering + morphology | `src/content/teeth.ts` |
 | Carving tooth (Oral anatomy): landmarks, notes, Wheeler measurements | `src/content/carving.ts`, `src/atlas/CarvingCards.tsx`; geometry from `scripts/build-carving-tooth.mjs` |
 | Histology tissues | `src/content/histology.ts` |
+| Cariology: lesion stages, codes, zones, sites, pH | `src/content/cariology.ts`, `src/atlas/Cariology.tsx`; shapes in `scripts/lib/caries-lesions.mjs`, sites in `extract-bodyparts.mjs` |
 | Atlas screen (state, cards) | `src/atlas/Atlas.tsx`, `DetailCard.tsx`, `Search.tsx`, `controls.tsx` |
 | 3D viewer (framework-free) | `src/viewer/Viewer.ts` |
 | Models and their sources | `public/models/*.glb`, `models-src/*.blend`, `scripts/` |

@@ -4,10 +4,13 @@
 //   git clone --depth 1 https://github.com/ashemag/human-atlas ../human-atlas
 //   node scripts/extract-bodyparts.mjs ../human-atlas
 //
-// Run scripts/build-carving-tooth.mjs first: the Oral anatomy model includes its carving molar.
+// Run scripts/build-carving-tooth.mjs and scripts/build-cariology.mjs first: the Oral anatomy model
+// includes the carving molar, the Cariology model the lesion molar and the process block.
 // Writes public/models/general.glb (every BodyParts3D mesh), public/models/physiology.glb (only what the
-// Physiology functions show, plus the skeleton for orientation, with per-vertex flow distances) and public/models/dental.glb (dentition and
-// jaws). The histology model is authored in Blender instead: scripts/blender/build_histology.py.
+// Physiology functions show, plus the skeleton for orientation, with per-vertex flow distances),
+// public/models/dental.glb (dentition and jaws) and public/models/cariology.glb (the arches with caries
+// sites painted on their teeth, plus the authored parts), and src/content/cariology-sites.generated.json.
+// The histology model is authored in Blender instead: scripts/blender/build_histology.py.
 import { Document, NodeIO } from '@gltf-transform/core';
 import { KHRDracoMeshCompression } from '@gltf-transform/extensions';
 import { weld } from '@gltf-transform/functions';
@@ -104,6 +107,8 @@ const MODELS = {
   physiology: (g) => PHYSIOLOGY_GROUPS.includes(g),
   // Oral anatomy: the dentition, the whole skull and the oral cavity (the carving tooth is merged in below).
   dental: (g) => ['teeth', 'gingiva', 'mandible', 'maxilla', 'skull', 'neck-bones', 'tongue', 'palate-pharynx', 'suprahyoid', 'glands', 'lips'].includes(g),
+  // Cariology: the arches for the caries sites (the lesion molar and process block are merged in below).
+  cariology: (g) => ['teeth', 'gingiva', 'mandible', 'maxilla'].includes(g),
 };
 const SCALE = 100; // metres → centimetres so camera numbers stay readable
 
@@ -133,7 +138,7 @@ for (const [model, includes] of Object.entries(MODELS)) {
     for (let i = 0; i < pos.length; i++) pos[i] = (pos[i] - centre[i % 3]) * SCALE;
     const nrm = Float32Array.from(new Int16Array(chunk, p.normals, p.vertexCount * 3), (v) => Math.max(v / 32767, -1));
     const idx = new Uint32Array(chunk, p.indices, p.indexCount).slice();
-    return { id: p.id, name: unsided(p.name).toLowerCase(), group: p.group, system: p.system, pos, nrm, idx };
+    return { id: p.id, name: unsided(p.name).toLowerCase(), sided: p.name.toLowerCase(), group: p.group, system: p.system, pos, nrm, idx };
   });
   const flows = model === 'physiology' ? computeFlows(geometry) : new Map();
   for (const [i, p] of parts.entries()) {
@@ -152,6 +157,10 @@ for (const [model, includes] of Object.entries(MODELS)) {
     records.set(p.id, r);
   }
   if (model === 'dental') await addCarvingTooth(doc, buffer, scene, (max[0] - centre[0]) * SCALE);
+  if (model === 'cariology') {
+    addCariesSites(doc, buffer, scene, geometry.filter((g) => g.group === 'teeth'));
+    await addCariologyParts(doc, buffer, scene, (max[0] - centre[0]) * SCALE);
+  }
   await doc.transform(weld());
   doc.createExtension(KHRDracoMeshCompression).setRequired(true).setEncoderOptions({ method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER });
   const glb = await io.writeBinary(doc);
@@ -178,6 +187,109 @@ async function addCarvingTooth(doc, buffer, scene, skullRightEdge) {
       .setScale([0.1, 0.1, 0.1]).setTranslation([skullRightEdge + 6, 0, 0]));
   }
   console.log('  merged carving tooth into dental.glb');
+}
+
+/**
+ * Caries sites painted on the real teeth: for each site, the triangles of one tooth that lie in the
+ * site's region (from the tooth's own frame: occlusal, mesial and buccal directions and its crown
+ * length), copied as a thin overlay just off the surface. Writes each site's pin.
+ */
+function addCariesSites(doc, buffer, scene, teeth) {
+  const POS = [[/central .*incisor/, 1], [/lateral .*incisor/, 2], [/canine/, 3], [/first .*premolar/, 4], [/second .*premolar/, 5], [/first .*molar/, 6], [/second .*molar/, 7]];
+  const all = teeth.map((g) => ({ g, arch: /upper/.test(g.sided) ? 'upper' : 'lower', side: /left/.test(g.sided) ? 'left' : 'right', pos: POS.find(([re]) => re.test(g.sided))?.[1] }));
+  const find = (arch, side, pos) => all.find((t) => t.arch === arch && t.side === side && t.pos === pos);
+  const centroid = (pos) => { const c = [0, 0, 0]; for (let i = 0; i < pos.length; i += 3) for (let k = 0; k < 3; k++) c[k] += pos[i + k]; return c.map((v) => v / (pos.length / 3)); };
+  const sub = (a, b) => a.map((v, i) => v - b[i]), dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const flat = (v) => { const l = Math.hypot(v[0], v[2]) || 1; return [v[0] / l, 0, v[2] / l]; };
+  // Typical crown lengths (cm), from Wheeler.
+  const CROWN = { upper: [0, 1.05, 0.9, 1.0, 0.85, 0.8, 0.75, 0.7], lower: [0, 0.9, 0.95, 1.1, 0.85, 0.8, 0.75, 0.7] };
+  const frame = (t) => {
+    const c = centroid(t.g.pos);
+    const o = t.arch === 'lower' ? [0, 1, 0] : [0, -1, 0];
+    const neighbour = t.pos === 1 ? find(t.arch, t.side === 'left' ? 'right' : 'left', 1) : find(t.arch, t.side, t.pos - 1);
+    const m = flat(sub(centroid(neighbour.g.pos), c)); // mesial: towards the next tooth along the arch
+    const archCentre = centroid(all.filter((a) => a.arch === t.arch).flatMap((a) => centroid(a.g.pos)));
+    let b = [m[2], 0, -m[0]]; // buccal/labial: across the arch, away from its middle
+    if (dot(b, sub(c, archCentre)) < 0) b = b.map((v) => -v);
+    let tip = -Infinity, corner = null, cornerScore = -Infinity;
+    for (let i = 0; i < t.g.pos.length; i += 3) {
+      const v = [t.g.pos[i], t.g.pos[i + 1], t.g.pos[i + 2]];
+      tip = Math.max(tip, dot(v, o));
+      const score = dot(sub(v, c), m) + dot(v, o);
+      if (score > cornerScore) { cornerScore = score; corner = v; }
+    }
+    return { c, o, m, b, tip, corner, crown: CROWN[t.arch][t.pos] };
+  };
+  // [site, tooth (arch, side, position), test on a triangle: q its centre, n its normal, f the tooth's frame,
+  //  h depth below the cusp tip or incisal edge, r distance from the tooth's long axis]
+  const SITES = [
+    ['class-1', ['lower', 'right', 6], (q, n, f, h, r) => dot(n, f.o) > 0.3 && h > 0.05 && h < 0.3 && r < 0.3],
+    ['class-2', ['upper', 'right', 4], (q, n, f, h) => dot(n, f.m) > 0.4 && h > f.crown * 0.3 && h < f.crown * 0.75 && Math.abs(dot(sub(q, f.c), f.b)) < 0.22],
+    ['class-3', ['upper', 'left', 1], (q, n, f, h) => dot(n, f.m) > 0.3 && h > f.crown * 0.3 && h < f.crown * 0.7 && dot(sub(q, f.c), f.b) > -0.1],
+    ['class-4', ['upper', 'right', 1], (q, n, f, h) => Math.hypot(...sub(q, f.corner)) < 0.25 && h < f.crown * 0.5],
+    ['class-5', ['lower', 'right', 3], (q, n, f, h) => dot(n, f.b) > 0.45 && h > f.crown * 0.68 && h < f.crown * 0.97],
+    ['class-6', ['upper', 'left', 3], (q, n, f, h) => h < 0.07],
+    ['root', ['lower', 'left', 4], (q, n, f, h) => dot(n, f.b) > 0.35 && h > f.crown + 0.02 && h < f.crown + 0.25],
+    ['secondary', ['upper', 'left', 6], (q, n, f, h, r) => dot(n, f.o) > 0.25 && h > 0.04 && r >= 0.2 && r < 0.27],
+    ['restoration', ['upper', 'left', 6], (q, n, f, h, r) => dot(n, f.o) > 0.25 && h > 0.06 && r < 0.2],
+  ];
+  const OFFSET = 0.004; // 0.04 mm off the tooth surface
+  const pins = [];
+  for (const [id, [arch, side, pos], test] of SITES) {
+    const t = find(arch, side, pos);
+    const f = frame(t);
+    const { pos: P, nrm: N, idx } = t.g;
+    const map = new Map(), outP = [], outN = [], outI = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      const tri = [idx[i], idx[i + 1], idx[i + 2]];
+      const q = [0, 1, 2].map((k) => (P[tri[0] * 3 + k] + P[tri[1] * 3 + k] + P[tri[2] * 3 + k]) / 3);
+      const n = [0, 1, 2].map((k) => N[tri[0] * 3 + k] + N[tri[1] * 3 + k] + N[tri[2] * 3 + k]);
+      const nl = Math.hypot(...n) || 1;
+      const h = f.tip - dot(q, f.o), r = Math.hypot(q[0] - f.c[0], q[2] - f.c[2]);
+      if (!test(q, n.map((v) => v / nl), f, h, r)) continue;
+      for (const v of tri) {
+        if (!map.has(v)) { map.set(v, outP.length / 3); for (let k = 0; k < 3; k++) { outP.push(P[v * 3 + k] + N[v * 3 + k] * OFFSET); outN.push(N[v * 3 + k]); } }
+        outI.push(map.get(v));
+      }
+    }
+    if (!outI.length) throw new Error(`site ${id}: no triangles matched`);
+    const key = `site-${id}`;
+    const prim = doc.createPrimitive()
+      .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(new Float32Array(outP)).setBuffer(buffer))
+      .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(new Float32Array(outN)).setBuffer(buffer))
+      .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(outI)).setBuffer(buffer));
+    scene.addChild(doc.createNode(key).setMesh(doc.createMesh(key).addPrimitive(prim)));
+    console.log(`  site ${id}: ${outI.length / 3} triangles on ${t.g.sided}`);
+    if (id === 'restoration') continue;
+    // Pin on the patch vertex nearest its middle, facing out.
+    const mid = centroid(outP);
+    let best = 0, bestD = Infinity;
+    for (let v = 0; v < outP.length; v += 3) { const d = Math.hypot(outP[v] - mid[0], outP[v + 1] - mid[1], outP[v + 2] - mid[2]); if (d < bestD) { bestD = d; best = v; } }
+    const n = centroid(outN), nl = Math.hypot(...n) || 1;
+    pins.push({ id, key, position: [outP[best], outP[best + 1], outP[best + 2]].map((v) => +v.toFixed(4)), normal: n.map((v) => +(v / nl).toFixed(3)) });
+  }
+  writeFileSync('src/content/cariology-sites.generated.json', JSON.stringify(pins, null, 1) + '\n');
+}
+
+/**
+ * Merge the authored Cariology parts (models-src/cariology.glb, from scripts/build-cariology.mjs): the
+ * lesion molar (mm) and the process block (µm), scaled to the model's centimetres and set beside the
+ * arches. Each view shows only its own parts.
+ */
+async function addCariologyParts(doc, buffer, scene, archRightEdge) {
+  const src = await io.read('models-src/cariology.glb');
+  for (const node of src.getRoot().listNodes()) {
+    const name = node.getName();
+    const p = node.getMesh().listPrimitives()[0];
+    const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setBuffer(buffer);
+    // Every attribute, including the texture ones (_DIR, _DEPTH, _CUT) the viewer reads.
+    const prim = doc.createPrimitive().setIndices(copy(p.getIndices()));
+    for (const semantic of p.listSemantics()) prim.setAttribute(semantic, copy(p.getAttribute(semantic)));
+    const lesion = name.startsWith('cl-');
+    scene.addChild(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim))
+      .setScale(lesion ? [0.1, 0.1, 0.1] : [0.05, 0.05, 0.05]).setTranslation([archRightEdge + (lesion ? 4 : 10), 0, 0]));
+  }
+  console.log(`  merged ${src.getRoot().listNodes().length} cariology parts`);
 }
 
 function computeFlows(geometry) {
