@@ -213,6 +213,8 @@
 /* ---------- Detail card (right) ---------- */
 .detail { position: absolute; right: 108px; top: 104px; width: 380px; max-height: calc(100svh - 280px); display: flex; flex-direction: column; gap: 10px; padding: 28px 28px 18px; animation: card-in 260ms var(--ease-out); }
 @keyframes card-in { from { opacity: 0; transform: translateY(8px); } }
+/* The bottom sheet positions itself with transform, so it only fades in. */
+@keyframes sheet-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .detail { animation: none; } }
 .detail__close { position: absolute; top: 14px; right: 14px; }
 .detail__bar { width: 28px; height: 4px; border-radius: 4px; }
@@ -272,6 +274,14 @@
   .toolbar .icon-button, .toolbar__view { width: 40px; height: 40px; }
   .explode, .timeline { left: 16px; right: 16px; bottom: 16px; transform: none; width: auto; }
   .floor, .floor__label, .hints { display: none; }
-  .detail { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 62svh; z-index: 7; box-shadow: var(--shadow-pop); padding: 22px 20px 12px; }
+  .detail { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 62svh; z-index: 7; box-shadow: var(--shadow-pop); padding: 26px 20px 12px; }
+  /* Bottom sheet: drag anywhere but the scrolling text; it settles open or as a peek of its title. */
+  .sheet { touch-action: none; transition: transform 320ms var(--ease-out); animation-name: sheet-in; }
+  .sheet.is-dragging { transition: none; }
+  .sheet .detail__scroll { touch-action: pan-y; overscroll-behavior: contain; }
+  .sheet__handle { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 88px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: grab; }
+  .sheet__handle span { width: 40px; height: 5px; border-radius: 3px; background: var(--faint); opacity: 0.45; }
+  .sheet.is-collapsed { cursor: pointer; }
   .credits { left: 16px; right: 16px; width: auto; top: 70px; }
 }
+@media (max-width: 860px) and (prefers-reduced-motion: reduce) { .sheet { transition: none; } }

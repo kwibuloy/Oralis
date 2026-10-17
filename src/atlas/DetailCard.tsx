@@ -4,6 +4,7 @@ import type { ModeId } from '../content/modes';
 import { GROUP_COLOR, structureByKey } from '../content/structures';
 import { fdi, morphology, palmer, universal } from '../content/teeth';
 import Icon from './Icon';
+import Sheet from './Sheet';
 
 interface Props {
   mode: ModeId;
@@ -83,7 +84,7 @@ export default function DetailCard({ mode, selected, isolated, onIsolate, onClea
   const b = body(mode, selected);
   if (!b) return null;
   return (
-    <aside className="card detail" aria-labelledby="detail-title">
+    <Sheet labelledBy="detail-title">
       <button className="icon-button detail__close" onClick={onClear} aria-label="Close details"><Icon name="close" /></button>
       <span className="detail__bar" style={{ background: b.color }} aria-hidden="true" />
       <p className="detail__group">{b.group}</p>
@@ -101,6 +102,6 @@ export default function DetailCard({ mode, selected, isolated, onIsolate, onClea
         <Icon name="chevron" size={16} />
       </button>
       <button className="text-button" onClick={onClear}>Clear selection</button>
-    </aside>
+    </Sheet>
   );
 }

@@ -16,7 +16,8 @@ This file points; it does not document. Read the files it names.
 | Dev server (:5173) | `npm run dev` (or the `oralis` entry in `.claude/launch.json`) |
 | Typecheck / tests | `npm run typecheck` · `npm test` |
 | Production build | `npm run build` → `dist/` |
-| Screenshots | `node scripts/shoot.mjs --widths 1440,390 general dental histology/enamel` |
+| Screenshots | `node scripts/shoot.mjs --widths 1440,1024,768,390 general dental histology/enamel` |
+| Touch check (selection + card) | `node scripts/touch-check.mjs` (usage in its header) |
 | Carving tooth (run before extract) | `node scripts/build-carving-tooth.mjs` → `models-src/carving-molar.glb`, `src/content/carving.generated.json` |
 | General, Physiology + Oral anatomy models | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
 | Histology model | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_histology.py -- public/models/histology.glb models-src/histology.blend` |
@@ -62,6 +63,7 @@ This file points; it does not document. Read the files it names.
   share a family note (regex, first match wins — order matters), but never a catch-all.
 - **Design reference is the Human Atlas UI** (white canvas, rounded white cards, soft shadows,
   toggles, F/S/B/T rail, explode card). Use tokens from `base.css`.
+- **Phones and tablets first;** selection and card rules live in the `visual-check` skill.
 - **Look before claiming a UI or 3D fix:** shoot and read the screenshots (`visual-check` skill).
   In dev, `window.__viewer` exposes the live viewer for probes.
 - **Windows + Git Bash:** route arguments starting with `/` or `#/` get mangled, which is why

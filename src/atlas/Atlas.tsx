@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { baseName, GROUP_SYSTEM, GROUPS, SYSTEMS, type SystemId } from '../content/anatomy';
 import { bloodColour, brainArea, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, type FunctionId } from '../content/function';
 import { TISSUES } from '../content/histology';
@@ -15,6 +15,7 @@ import FunctionCard from './FunctionCard';
 import { LandmarkCard, ToothCard } from './CarvingCards';
 import { CARVING_TOOTH, KIND_LABEL, LANDMARKS, landmarkById, MEASUREMENTS, type LandmarkKind } from '../content/carving';
 import LoadingBar, { type LoadProgress } from './LoadingBar';
+import { SheetInset, type SheetCover } from './Sheet';
 import Icon from './Icon';
 import SubjectPicker from './SubjectPicker';
 import Search, { type SearchItem } from './Search';
@@ -121,6 +122,14 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       .catch(() => !cancelled && setError('The 3D model could not be loaded. Check your connection and reload.'));
     return () => { cancelled = true; v.dispose(); viewer.current = null; };
   }, [mode.model, modeId]);
+
+  // Keep framed parts clear of the detail card: above the phone bottom sheet, or between the layers
+  // card and the detail card on wider screens.
+  const setSheetInset = useCallback((cover: SheetCover) => {
+    const layers = document.querySelector<HTMLElement>('.atlas .layers');
+    const left = cover.right && layers && layers.offsetParent ? layers.getBoundingClientRect().right : 0;
+    viewer.current?.setInsets({ left, ...cover });
+  }, []);
 
   // Push React state into the viewer.
   useEffect(() => { viewer.current?.setVisibleGroups(visible, context); }, [visible, context.join(), ready]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -394,6 +403,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       </section>
       )}
 
+      <SheetInset.Provider value={setSheetInset}>
       {inFunction && openFunction && !selected && (
         <FunctionCard fn={FUNCTION_LAYERS.find((f) => f.id === openFunction)!} onClose={() => setOpenFunction(null)} />
       )}
@@ -405,6 +415,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         <DetailCard mode={modeId} selected={selected} isolated={isolated}
           onIsolate={() => setIsolated((i) => !i)} onClear={() => setSelected(null)} />
       )}
+      </SheetInset.Provider>
 
       {creditsOpen && (
         <aside className="card credits" aria-label="Sources and credits">
