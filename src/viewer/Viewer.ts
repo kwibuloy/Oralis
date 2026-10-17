@@ -542,7 +542,8 @@ export class Viewer {
       m.material.depthWrite = true;
       // Keep each tissue's own hue readable; selection adds a blue glow rather than recolouring.
       const c = m.material.color.copy(colour);
-      if (key === this.selected) c.lerp(SELECT, SELECT_MIX);
+      // Vertex-coloured parts keep their own hues (a tint would turn brown caries purple): glow only.
+      if (key === this.selected) c.lerp(SELECT, m.userData.vertexColours ? SELECT_MIX * 0.25 : SELECT_MIX);
       m.material.emissive.copy(key === this.selected ? SELECT_GLOW : key === this.hovered ? HOVER_GLOW : NO_GLOW);
     }
     this.needsRender = true;
@@ -716,7 +717,7 @@ export class Viewer {
   /** Move each pin over its point; hide pins on hidden parts or on the far side of the part. */
   private placePins() {
     if (!this.pins.length) return;
-    const { width, height } = this.canvas.getBoundingClientRect();
+    const { width, height } = this; // set in resize(): reading the canvas rect every frame forced a layout
     const world = new THREE.Vector3(), toCamera = new THREE.Vector3(), normal = new THREE.Vector3();
     for (const p of this.pins) {
       p.mesh.localToWorld(world.copy(p.local));
@@ -754,7 +755,8 @@ export class Viewer {
     if (this.playing) {
       this.flowTime.value = (this.flowTime.value + ((now - this.lastTick) / 1000 / LOOP_SECONDS) * this.speed) % 1;
       this.lastTick = now;
-      this.needsRender = true;
+      // Only the flow shader changes with the clock; timelines driven from outside (Cariology) need no redraw.
+      if (this.batches.some((b) => b.flowOn) || this.meshes.some((m) => m.parent && m.userData.flowOn)) this.needsRender = true;
       if (now - this.lastTimeReport > 100) { this.lastTimeReport = now; this.onTime(this.flowTime.value); }
     }
     if (this.compiling) return;
