@@ -40,10 +40,11 @@ export const TISSUE_LOOK: Record<string, SurfaceStyle> = {
   pulp: { grain: 0.25, grainSize: 0.25, bump: 0.3, stain: '#8f2f3c', stainAmount: 0.35, stainSize: 0.45, roughness: 0.7 },
   'alveolar-bone': { grain: 0.35, grainSize: 0.3, bump: 0.6, stain: '#c4a983', stainAmount: 0.4, stainSize: 0.4, roughness: 0.85 },
   gingiva: { grain: 0.15, grainSize: 0.12, bump: 0.25, stain: '#c9727a', stainAmount: 0.2, stainSize: 0.7, roughness: 0.5 },
+  pdl: { grain: 0.2, grainSize: 0.05, roughness: 0.6 },
 };
 const DRAW_ORDER = [
   'enamel-surface-zone', 'enamel-lesion-body', 'enamel-dark-zone', 'enamel-translucent-zone', 'infected-dentin', 'affected-dentin',
-  'sclerotic-dentin', 'tertiary-dentin', 'pulp', 'cementum', 'enamel', 'dentin', 'gingiva', 'alveolar-bone',
+  'sclerotic-dentin', 'tertiary-dentin', 'pulp', 'cementum', 'enamel', 'dentin', 'pdl', 'gingiva', 'alveolar-bone',
 ];
 /** Natural colour and texture of a lesion-molar part; fissure lesions are stained brown, as they usually are clinically. */
 export function lesionPartLook(key: string) {
