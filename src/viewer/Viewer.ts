@@ -100,6 +100,7 @@ interface PartState {
   bite: THREE.Vector3; // current "open bite" style offset
   radial: THREE.Vector3; // explode direction at 100% of the spread phase
   grid: THREE.Vector3 | null; // offset that places the part in the inventory grid
+  at: THREE.Vector3; // position last written to the batches (NaN until first placed)
 }
 
 /**
@@ -124,6 +125,7 @@ export class Viewer {
   private down: { x: number; y: number } | null = null;
   private frame = 0;
   private needsRender = true;
+  private compiling = false;
   private resizeObserver: ResizeObserver;
   private reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -216,6 +218,7 @@ export class Viewer {
       const info = describe(mesh.name) ?? describe(mesh.parent?.name ?? '');
       if (info) add.push([mesh, info]);
     });
+    this.compiling = true; // no drawing until the shaders are built (see compileAsync below)
     for (const [mesh, info] of add) this.register(mesh, info);
     this.buildBatches();
 
@@ -230,6 +233,11 @@ export class Viewer {
     this.apply();
     this.place();
     this.frameAll();
+    // Link the shaders in parallel, off the main thread. Drawing first would block on each program in turn
+    // (1.5 s of frozen page in Cariology on a laptop, several times that on a phone).
+    await this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
+    this.compiling = false;
+    this.needsRender = true;
   }
 
   setVisibleGroups(groups: Iterable<string>, context: Iterable<string> = []) {
@@ -451,7 +459,7 @@ export class Viewer {
     const box = new THREE.Box3().setFromObject(m);
     this.state.set(m, {
       base: m.position.clone(), center: box.getCenter(new THREE.Vector3()), size: box.getSize(new THREE.Vector3()),
-      bite: new THREE.Vector3(), radial: new THREE.Vector3(), grid: null,
+      bite: new THREE.Vector3(), radial: new THREE.Vector3(), grid: null, at: new THREE.Vector3(NaN, NaN, NaN),
     });
   }
 
@@ -488,6 +496,10 @@ export class Viewer {
     }
   }
 
+  private isFaded(m: PartMesh): boolean {
+    return this.context.has(m.userData.group) && !this.visible.has(m.userData.group) && m.userData.key !== this.selected;
+  }
+
   private shown(m: PartMesh): boolean {
     const { key, group } = m.userData as { key: string; group: string };
     if (!this.filter(key)) return false;
@@ -502,7 +514,7 @@ export class Viewer {
 
   private apply() {
     const colour = new THREE.Color();
-    const isFaded = (m: PartMesh) => this.context.has(m.userData.group) && !this.visible.has(m.userData.group) && m.userData.key !== this.selected;
+    const isFaded = (m: PartMesh) => this.isFaded(m);
     // Parts fading for the first time get a see-through batch.
     const newlyFaded = this.meshes.filter((m) => !m.userData.fadedBatch && isFaded(m) && this.shown(m));
     if (newlyFaded.length) this.buildBatches(newlyFaded, true);
@@ -568,9 +580,15 @@ export class Viewer {
     const spread = Math.min(t / 0.5, 1);
     const ease = (x: number) => x * x * (3 - 2 * x);
     const g = t > 0.5 ? ease((t - 0.5) / 0.5) : 0;
+    const next = new THREE.Vector3(), target = new THREE.Vector3();
     for (const [m, s] of this.state) {
-      const p = m.position.copy(s.base).add(s.bite).addScaledVector(s.radial, ease(spread));
-      if (g > 0 && s.grid) p.lerp(s.base.clone().add(s.grid), g);
+      next.copy(s.base).add(s.bite).addScaledVector(s.radial, ease(spread));
+      if (g > 0 && s.grid) next.lerp(target.copy(s.base).add(s.grid), g);
+      // Only parts that moved are written: each write touches the batch's matrix texture, and place() runs
+      // many times while a page opens (2,234 writes per call took seconds on a phone).
+      if (next.equals(s.at)) continue;
+      s.at.copy(next);
+      m.position.copy(next);
       m.updateMatrixWorld();
       const { batch, instance, fadedBatch, fadedInstance } = m.userData as { batch: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
       batch.mesh.setMatrixAt(instance, m.matrixWorld);
@@ -636,12 +654,28 @@ export class Viewer {
     const rect = this.canvas.getBoundingClientRect();
     const p = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(p, this.camera);
-    // The solid batches (their hidden parts are skipped) and the parts drawn on their own; faded parts can't be picked.
-    const targets: THREE.Object3D[] = [...this.batches.filter((b) => !b.faded).map((b) => b.mesh), ...this.meshes.filter((m) => m.parent && m.visible)];
-    const hit = this.raycaster.intersectObjects(targets, false)[0];
-    if (!hit) return null;
-    const batch = this.batches.find((b) => b.mesh === hit.object);
-    return ((batch ? batch.parts[hit.batchId ?? -1] : hit.object)?.userData.key as string) ?? null;
+    // Broad phase: test the ray against each drawn part's box, then only the geometry of the parts the
+    // ray enters, nearest first, stopping once no later box can be closer. (Testing every batch's
+    // triangles took 50 ms per mouse move in Cariology.) Faded context parts can't be picked.
+    const box = new THREE.Box3(), at = new THREE.Vector3();
+    const near: [PartMesh, number][] = [];
+    for (const m of this.meshes) {
+      if (!m.visible || this.isFaded(m)) continue;
+      const g = m.geometry;
+      if (!g.boundingBox) g.computeBoundingBox();
+      box.copy(g.boundingBox!).applyMatrix4(m.matrixWorld);
+      if (this.raycaster.ray.intersectBox(box, at)) near.push([m, at.distanceTo(this.raycaster.ray.origin)]);
+    }
+    near.sort((a, b) => a[1] - b[1]);
+    let best: PartMesh | null = null, bestDistance = Infinity;
+    const hits: THREE.Intersection[] = [];
+    for (const [m, entry] of near) {
+      if (entry > bestDistance) break;
+      hits.length = 0;
+      m.raycast(this.raycaster, hits);
+      if (hits.length && hits[0].distance < bestDistance) { bestDistance = hits[0].distance; best = m; }
+    }
+    return (best?.userData.key as string) ?? null;
   }
 
   private handleDown = (e: PointerEvent) => { this.down = { x: e.clientX, y: e.clientY }; };
@@ -654,8 +688,16 @@ export class Viewer {
     if (moved <= 6) this.onPick(this.pick(e));
   };
 
+  private moveEvent: PointerEvent | null = null;
+
+  /** Hover picks run at most once per frame, however many mouse events arrive. */
   private handleMove = (e: PointerEvent) => {
     if (e.pointerType !== 'mouse' || this.down) return;
+    if (!this.moveEvent) requestAnimationFrame(() => { const ev = this.moveEvent; this.moveEvent = null; if (ev && !this.down) this.hover(ev); });
+    this.moveEvent = e;
+  };
+
+  private hover(e: PointerEvent) {
     const key = this.pick(e);
     const rect = this.canvas.getBoundingClientRect();
     this.onHover(key, key ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : null);
@@ -663,7 +705,7 @@ export class Viewer {
     this.hovered = key;
     this.canvas.style.cursor = key ? 'pointer' : 'grab';
     this.apply();
-  };
+  }
 
   private handleLeave = () => {
     this.hovered = null;
@@ -715,6 +757,7 @@ export class Viewer {
       this.needsRender = true;
       if (now - this.lastTimeReport > 100) { this.lastTimeReport = now; this.onTime(this.flowTime.value); }
     }
+    if (this.compiling) return;
     if (moving || this.needsRender || this.controls.autoRotate || gsap.globalTimeline.getChildren().length) {
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
