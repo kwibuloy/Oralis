@@ -27,6 +27,9 @@ const AUTO_ROTATE_SECONDS = 25;
 
 /** Room around a fitted model for the cards over the canvas (picker above, explode card below). */
 const FIT_PADDING = 1.35;
+/** A selected part fills about half the free height; small parts still show this share of the whole model around them. */
+const SELECT_PADDING = 1.9;
+const SELECT_CONTEXT = 0.12;
 
 export type View = 'front' | 'side' | 'back' | 'top' | 'bottom';
 const VIEW_DIR: Record<View, THREE.Vector3> = {
@@ -44,6 +47,13 @@ export interface Pin {
   title: string;
   position: [number, number, number];
   normal: [number, number, number];
+}
+
+/** Pixels of each canvas edge hidden behind cards. */
+export interface Insets {
+  left: number;
+  right: number;
+  bottom: number;
 }
 
 export interface Pickable {
@@ -107,6 +117,12 @@ export class Viewer {
   // Pins are DOM buttons over the canvas, moved after each render so they stay tappable on phones.
   private pinLayer: HTMLDivElement;
   private flying = false;
+  // Canvas edges (px) covered by cards: the phone bottom sheet, or the detail card on the right and
+  // the layers card on the left. The projection centre moves into the free space between them.
+  private inset: Insets = { left: 0, right: 0, bottom: 0 };
+  private insetTarget: Insets = { left: 0, right: 0, bottom: 0 };
+  private width = 1;
+  private height = 1;
   private pins: { el: HTMLButtonElement; mesh: PartMesh; local: THREE.Vector3; normal: THREE.Vector3 }[] = [];
 
   onPick: (key: string | null) => void = () => {};
@@ -200,10 +216,22 @@ export class Viewer {
     this.place();
   }
 
+  /** Select a part and fly to it: closer in on the part, never further out than the camera already is. */
   select(key: string | null, { frame = true } = {}) {
     this.selected = key;
     this.apply();
-    if (key && frame) this.frameKeys([key], 2.2);
+    if (key && frame) this.frameKeys([key], SELECT_PADDING, undefined, 1, { context: SELECT_CONTEXT, closerOnly: true });
+  }
+
+  /** Tell the viewer how much of each canvas edge cards cover (0 when none); the view slides to keep framed parts clear of them. */
+  setInsets(insets: Insets) {
+    const to = { left: Math.max(0, Math.round(insets.left)), right: Math.max(0, Math.round(insets.right)), bottom: Math.max(0, Math.round(insets.bottom)) };
+    const t = this.insetTarget;
+    if (Math.abs(to.left - t.left) < 2 && Math.abs(to.right - t.right) < 2 && Math.abs(to.bottom - t.bottom) < 2) return;
+    this.insetTarget = to;
+    gsap.killTweensOf(this.inset);
+    if (this.reduced) { Object.assign(this.inset, to); this.resize(); return; }
+    gsap.to(this.inset, { ...to, duration: 0.35, ease: 'power3.out', onUpdate: () => this.resize() });
   }
 
   setIsolated(on: boolean) {
@@ -443,7 +471,7 @@ export class Viewer {
     this.needsRender = true;
   }
 
-  private frameKeys(keys: string[], padding: number, direction?: THREE.Vector3, duration = 1) {
+  private frameKeys(keys: string[], padding: number, direction?: THREE.Vector3, duration = 1, { context = 0.7, closerOnly = false } = {}) {
     const box = new THREE.Box3();
     const set = new Set(keys);
     for (const m of this.meshes) if (set.has(m.userData.key)) box.expandByObject(m);
@@ -455,8 +483,8 @@ export class Viewer {
       const all = new THREE.Box3();
       for (const m of this.meshes) if (m.visible) all.expandByObject(m);
       if (!all.isEmpty()) {
-        sphere.radius = Math.max(sphere.radius, all.getBoundingSphere(new THREE.Sphere()).radius * 0.7);
-        size.max(all.getSize(new THREE.Vector3()).multiplyScalar(0.7));
+        sphere.radius = Math.max(sphere.radius, all.getBoundingSphere(new THREE.Sphere()).radius * context);
+        size.max(all.getSize(new THREE.Vector3()).multiplyScalar(context));
       }
     }
     const current = this.camera.position.clone().sub(this.controls.target);
@@ -468,12 +496,16 @@ export class Viewer {
     const halfW = (fromAbove ? size.x : Math.abs(dir.z) * size.x + Math.abs(dir.x) * size.z) / 2;
     const halfD = (fromAbove ? size.y : Math.abs(dir.x) * size.x + Math.abs(dir.z) * size.z) / 2;
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
-    const fit = Math.max(halfH / tan, halfW / (tan * this.camera.aspect)) + halfD;
-    const distance = fit * padding;
+    // Only the space between the cards is free. A narrow gap (tablet landscape) still gets a close
+    // view: the padding keeps the part itself inside the gap while its surroundings pass behind the cards.
+    const freeH = Math.max(0.3, 1 - this.insetTarget.bottom / this.height);
+    const freeW = Math.max(0.45, 1 - (this.insetTarget.left + this.insetTarget.right) / this.width);
+    const fit = Math.max(halfH / (tan * freeH), halfW / (tan * this.camera.aspect * freeW)) + halfD;
+    const distance = closerOnly && current.length() > 1e-3 ? Math.min(fit * padding, current.length()) : fit * padding;
     const to = sphere.center.clone().add(dir.multiplyScalar(distance));
     // Close enough to inspect a single tooth even when the whole body is framed.
     this.controls.minDistance = Math.max(sphere.radius * 0.01, 0.5);
-    this.controls.maxDistance = Math.max(distance * 4, 60);
+    this.controls.maxDistance = Math.max(distance * 4, 60, this.controls.maxDistance);
     this.camera.near = Math.max(distance / 100, 0.05);
     this.camera.far = distance * 20;
     this.camera.updateProjectionMatrix();
@@ -549,8 +581,11 @@ export class Viewer {
     this.renderer.setSize(box.width, box.height, false);
     this.camera.aspect = box.width / box.height;
     // Shift the projection so the model centres in the space between the top and bottom cards.
-    const shift = Math.round(box.height * (box.width > 860 ? SHIFT_DESKTOP : SHIFT_PHONE));
-    this.camera.setViewOffset(box.width, box.height, 0, shift, box.width, box.height);
+    this.width = box.width;
+    this.height = box.height;
+    const shiftX = Math.round((this.inset.right - this.inset.left) / 2);
+    const shift = Math.round(box.height * (box.width > 860 ? SHIFT_DESKTOP : SHIFT_PHONE) + this.inset.bottom / 2);
+    this.camera.setViewOffset(box.width, box.height, shiftX, shift, box.width, box.height);
     this.camera.updateProjectionMatrix();
     this.needsRender = true;
   }
