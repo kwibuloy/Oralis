@@ -153,6 +153,13 @@ function baseFields(box) {
   return base;
 }
 
+/**
+ * Each region grows a little into its neighbours (never into open air, which `S` bounds): regions that meet
+ * exactly leave hairline cracks where their snapped, smoothed walls drift apart, and through a crack the
+ * background shows. Overlapping, the neighbour's wall fills the crack.
+ */
+const GROW = STEP * 0.6;
+
 /** Mesh every region of one lesion stage (or the static part around a lesion type). Returns the parts made. */
 function buildRegions(kind, stage, part, prefix) {
   const planes = CUTS[kind];
@@ -169,13 +176,13 @@ function buildRegions(kind, stage, part, prefix) {
     S[i] = res.S;
     // This part's side of the box, overlapping the other part by half a cell so the cut face has no seam.
     const clip = part === 'stage' ? inBox(p) - STEP / 2 : -inBox(p) - STEP / 2;
-    for (const r of REGIONS) fields[r][i] = Math.max(res.regions[r], clip);
+    for (const r of REGIONS) fields[r][i] = Math.max(res.regions[r] - GROW, res.S, clip);
   }
   const made = [];
   const fCut = stageFields(kind, stage, { cut: false });
   const region = (fn, r) => (p) => {
     const res = fn(p, { T: sdf(p), T0: uncarved(p), P: pulp(p) });
-    return Math.max(res.regions[r], part === 'stage' ? inBox(p) - STEP / 2 : -inBox(p) - STEP / 2);
+    return Math.max(res.regions[r] - GROW, res.S, part === 'stage' ? inBox(p) - STEP / 2 : -inBox(p) - STEP / 2);
   };
   for (const r of REGIONS) {
     const field = fields[r];
