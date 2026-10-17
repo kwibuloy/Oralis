@@ -539,7 +539,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       ) : cariView === 'process' ? (
         <Timeline label="Caries process" playing={ready && playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed}
           valueText={`${Math.round(minute)} minutes, pH ${plaquePH(minute, scenario).toFixed(1)}`} track={<PhTrack scenario={scenario} />}>
-          <ProcessHead minute={minute} scenario={scenario} onScenario={setScenario} />
+          <ProcessHead minute={minute} scenario={scenario} onScenario={(s) => { setScenario(s); scrub(0); }} />
         </Timeline>
       ) : null) : carving ? null : inFunction ? (
         <Timeline label="Function" playing={ready && playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed} />
