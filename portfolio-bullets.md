@@ -32,6 +32,13 @@ deployed statically on Vercel.
   Cariology (-52%)** (emulated 390 px phone at 3x pixel ratio, 4x CPU slowdown), by profiling the startup,
   finding that every part's position was rewritten into the batches on each of many layout calls, writing
   only the parts that moved, and compiling shaders in parallel before the first frame.
+- **Made Cariology open without a stall: the worst frame after the model appears fell from 243–330 ms to
+  28 ms, and every later lesion stage switches in 14 ms** (headed Chrome, laptop GPU), by uploading only
+  the ~1.5M of 9.7M triangles a view shows, preparing the rest in idle time away from user input, and
+  replacing one camera-bite tween per part (parts² position writes per frame) with a single tween.
+- **Removed see-through holes when zooming into a tooth section** by letting the near clip plane follow
+  the camera (it sat at 0.73 mm of tooth) and stopping wheel zoom short of the surface under the cursor,
+  checked by a scripted zoom into 4 zone pins on every lesion type at two stages.
 - **Cut hover and tap hit-testing time by 72% in General anatomy (5.3 → 1.5 ms) and by 80% in Cariology
   (50 → 10 ms) with identical results on 400 sample points in the two large subjects**, by testing the ray
   against each part's bounding box first and then only the nearest parts' triangles; hover picks are now
