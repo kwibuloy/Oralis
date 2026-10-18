@@ -94,6 +94,12 @@ const LAYER_UNITS = 150;
 
 interface Batch {
   mesh: THREE.BatchedMesh;
+  /** Has parts to draw in the current view. */
+  drawn?: boolean;
+  /** Its shader is still linking (drawn once ready). */
+  linking?: boolean;
+  /** Prepared ahead of use: kept in the next frame (with nothing to draw) so its buffers reach the GPU. */
+  uploading?: boolean;
   parts: PartMesh[]; // by instance id
   flowOn?: { value: number };
   /** A see-through batch for faded context parts (built when parts first fade). */
@@ -195,6 +201,9 @@ export class Viewer {
     this.controls.autoRotateSpeed = 60 / AUTO_ROTATE_SECONDS;
     this.controls.addEventListener('change', () => (this.needsRender = true));
 
+    for (const type of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(type, this.noteInput, { capture: true, passive: true });
+    // Registered before OrbitControls' own wheel handler can run (capture phase), so it can stop a zoom.
+    canvas.addEventListener('wheel', this.guardWheel, { capture: true, passive: false });
     canvas.addEventListener('pointerdown', this.handleDown);
     canvas.addEventListener('pointerup', this.handleUp);
     canvas.addEventListener('pointermove', this.handleMove);
@@ -227,7 +236,9 @@ export class Viewer {
     });
     this.compiling = true; // no drawing until the shaders are built (see compileAsync below)
     for (const [mesh, info] of add) this.register(mesh, info);
-    this.buildBatches();
+    // Batches are built (and uploaded to the GPU) only for parts as they are first shown: apply() below
+    // builds the opening view's. Cariology holds 9.7 M triangles, of which one view shows about 1.5 M;
+    // uploading all of it at once froze the page for seconds after the model appeared.
 
     const all = new THREE.Box3();
     for (const m of this.meshes) all.expandByObject(m);
@@ -248,6 +259,37 @@ export class Viewer {
     this.renderer.render(this.scene, this.camera);
     this.compiling = false;
     this.needsRender = true;
+    this.prepareRest();
+  }
+
+  /**
+   * Build and upload the parts not shown yet a few at a time while the page is idle, so the first visit
+   * to another lesion stage or view finds them on the GPU (built on demand, a new stage stalled 300 ms).
+   */
+  private prepareRest() {
+    // Only when the page is idle (no forced deadline), and only once the opening camera flight is over.
+    // Nor within 1.5 s of a tap, click, key or wheel anywhere on the page: one unchanged part is up to 840 k
+    // triangles, and preparing it as the user switched views stalled that switch.
+    const busy = () => this.flying || this.playing || performance.now() - this.lastInput < 1500;
+    const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(() => (busy() ? setTimeout(() => idle(fn), 300) : fn())) : setTimeout(fn, 50));
+    const step = () => {
+      if (this.disposed) return;
+      const chunk: PartMesh[] = [];
+      let triangles = 0;
+      for (const m of this.meshes) {
+        if (m.userData.batch) continue;
+        chunk.push(m);
+        triangles += (m.geometry.index?.count ?? m.geometry.getAttribute('position').count) / 3;
+        if (triangles > 120_000) break;
+      }
+      if (!chunk.length) return;
+      const before = this.batches.length;
+      this.buildBatches(chunk);
+      for (const b of this.batches.slice(before)) b.uploading = true;
+      this.apply();
+      idle(step);
+    };
+    setTimeout(() => idle(step), 2500);
   }
 
   setVisibleGroups(groups: Iterable<string>, context: Iterable<string> = []) {
@@ -310,6 +352,10 @@ export class Viewer {
     } });
   }
   private biteTween = { t: 0 };
+  private frameNear = 0.1;
+  private disposed = false;
+  private lastInput = 0;
+  private noteInput = () => { this.lastInput = performance.now(); };
 
   /**
    * 0 = assembled, 0.5 = fully spread around the centre, 1 = every visible part
@@ -429,9 +475,12 @@ export class Viewer {
   }
 
   dispose() {
+    this.disposed = true;
+    for (const type of ['pointerdown', 'keydown', 'wheel']) window.removeEventListener(type, this.noteInput, { capture: true });
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.pinLayer.remove();
+    this.canvas.removeEventListener('wheel', this.guardWheel, { capture: true });
     this.canvas.removeEventListener('pointerdown', this.handleDown);
     this.canvas.removeEventListener('pointerup', this.handleUp);
     this.canvas.removeEventListener('pointermove', this.handleMove);
@@ -459,6 +508,7 @@ export class Viewer {
       ? new THREE.MeshPhysicalMaterial({ ...options, clearcoat: info.surface.clearcoat, clearcoatRoughness: 0.18 })
       : new THREE.MeshStandardMaterial(options);
     if (info.surface) addSurface(material, info.surface);
+    addCaps(material);
     return material;
   }
 
@@ -509,7 +559,7 @@ export class Viewer {
         batch.parts[id] = m;
         m.userData[faded ? 'fadedBatch' : 'batch'] = batch;
         m.userData[faded ? 'fadedInstance' : 'instance'] = id;
-        if (faded) mesh.setMatrixAt(id, m.matrixWorld);
+        mesh.setMatrixAt(id, m.matrixWorld);
       }
       this.root.add(mesh);
       this.batches.push(batch);
@@ -536,21 +586,25 @@ export class Viewer {
     const colour = new THREE.Color();
     const isFaded = (m: PartMesh) => this.isFaded(m);
     // Parts fading for the first time get a see-through batch.
+    const unbatched = this.meshes.filter((m) => !m.userData.batch && this.shown(m));
+    if (unbatched.length) this.buildBatches(unbatched);
     const newlyFaded = this.meshes.filter((m) => !m.userData.fadedBatch && isFaded(m) && this.shown(m));
     if (newlyFaded.length) {
       const before = this.batches.length;
       this.buildBatches(newlyFaded, true);
       // Their see-through material is a new shader: link it off the main thread and draw the batch once
       // it is ready, instead of stalling the next frame (a hitch mid-flight when Cariology opens).
-      const fresh = this.batches.slice(before).map((b) => b.mesh);
-      for (const mesh of fresh) mesh.visible = false;
-      Promise.all(fresh.map((mesh) => this.renderer.compileAsync(mesh, this.camera, this.scene).catch(() => {})))
-        .then(() => { for (const mesh of fresh) mesh.visible = true; this.needsRender = true; });
+      const fresh = this.batches.slice(before);
+      for (const b of fresh) b.linking = true;
+      Promise.all(fresh.map((b) => this.renderer.compileAsync(b.mesh, this.camera, this.scene).catch(() => {})))
+        .then(() => { for (const b of fresh) { b.linking = false; b.mesh.visible = !!b.drawn; } this.needsRender = true; });
     }
+    const drawn = new Set<Batch>();
     for (const m of this.meshes) {
-      const { key, base, batch, instance, fadedBatch, fadedInstance } = m.userData as { key: string; base: THREE.Color; batch: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
+      const { key, base, batch, instance, fadedBatch, fadedInstance } = m.userData as { key: string; base: THREE.Color; batch?: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
       const shown = this.shown(m);
       m.visible = shown;
+      if (!batch) continue; // never shown yet
       const faded = isFaded(m);
       const override = this.colourOverride?.get(key);
       colour.copy(base);
@@ -560,7 +614,9 @@ export class Viewer {
       const special = shown && !faded && (key === this.selected || key === this.hovered);
       batch.mesh.setVisibleAt(instance, shown && !special && !faded);
       batch.mesh.setColorAt(instance, colour);
+      if (shown && !special && !faded) drawn.add(batch);
       if (fadedBatch) {
+        if (shown && faded) drawn.add(fadedBatch);
         fadedBatch.mesh.setVisibleAt(fadedInstance!, shown && faded);
         fadedBatch.mesh.setColorAt(fadedInstance!, colour);
       }
@@ -577,6 +633,8 @@ export class Viewer {
       // A blue glow on brown caries reads purple: painted parts get only a trace of it.
       if (m.userData.vertexColours) m.material.emissive.multiplyScalar(0.2);
     }
+    // A batch with nothing to draw is left out of the frame, so its buffers reach the GPU only once used.
+    for (const b of this.batches) { b.drawn = drawn.has(b); b.mesh.visible = (b.drawn && !b.linking) || !!b.uploading; }
     this.needsRender = true;
   }
 
@@ -622,8 +680,8 @@ export class Viewer {
       s.at.copy(next);
       m.position.copy(next);
       m.updateMatrixWorld();
-      const { batch, instance, fadedBatch, fadedInstance } = m.userData as { batch: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
-      batch.mesh.setMatrixAt(instance, m.matrixWorld);
+      const { batch, instance, fadedBatch, fadedInstance } = m.userData as { batch?: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
+      batch?.mesh.setMatrixAt(instance, m.matrixWorld);
       fadedBatch?.mesh.setMatrixAt(fadedInstance!, m.matrixWorld);
     }
     this.needsRender = true;
@@ -664,7 +722,8 @@ export class Viewer {
     // Close enough to inspect a single tooth even when the whole body is framed.
     this.controls.minDistance = Math.max(sphere.radius * 0.01, 0.5);
     this.controls.maxDistance = Math.max(distance * 4, 60, this.controls.maxDistance);
-    this.camera.near = Math.max(distance / 100, 0.05);
+    this.frameNear = Math.max(distance / 100, 0.05);
+    this.camera.near = this.frameNear;
     this.camera.far = distance * 20;
     this.camera.updateProjectionMatrix();
 
@@ -682,7 +741,12 @@ export class Viewer {
       onComplete: () => { this.flying = false; this.needsRender = true; } });
   }
 
-  private pick(e: PointerEvent): string | null {
+  private pick(e: PointerEvent | WheelEvent): string | null {
+    return this.hit(e)?.key ?? null;
+  }
+
+  /** The nearest drawn part under the pointer and how far it is from the camera. */
+  private hit(e: PointerEvent | WheelEvent): { key: string; distance: number } | null {
     const rect = this.canvas.getBoundingClientRect();
     const p = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(p, this.camera);
@@ -707,8 +771,20 @@ export class Viewer {
       m.raycast(this.raycaster, hits);
       if (hits.length && hits[0].distance < bestDistance) { bestDistance = hits[0].distance; best = m; }
     }
-    return (best?.userData.key as string) ?? null;
+    return best ? { key: best.userData.key as string, distance: bestDistance } : null;
   }
+
+  /**
+   * Zooming in stops short of the surface under the pointer. Zoom-to-cursor otherwise carries the
+   * camera onto and through a cut face, where the near plane slices it open and the walls between the
+   * zones behind it show as holes.
+   */
+  private guardWheel = (e: WheelEvent) => {
+    if (e.deltaY >= 0) return;
+    const h = this.hit(e);
+    const d = this.camera.position.distanceTo(this.controls.target);
+    if (h && h.distance < Math.max(this.camera.near * 6, d * 0.12)) { e.preventDefault(); e.stopImmediatePropagation(); }
+  };
 
   private handleDown = (e: PointerEvent) => { this.down = { x: e.clientX, y: e.clientY }; };
 
@@ -791,11 +867,31 @@ export class Viewer {
       if (now - this.lastTimeReport > 100) { this.lastTimeReport = now; this.onTime(this.flowTime.value); }
     }
     if (this.compiling) return;
+    // The near plane follows the camera in: fixed at the framing distance's 1/100, it sliced open any
+    // surface the camera came within 0.7 mm of in Cariology (the model is a tenth of real size).
+    const near = Math.min(this.frameNear, Math.max(this.camera.position.distanceTo(this.controls.target) / 100, 1e-4));
+    if (Math.abs(near - this.camera.near) > near * 0.01) { this.camera.near = near; this.camera.updateProjectionMatrix(); this.needsRender = true; }
     if (moving || this.needsRender || this.controls.autoRotate || gsap.globalTimeline.getChildren().length) {
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
+      for (const b of this.batches) if (b.uploading) { b.uploading = false; b.mesh.visible = !!b.drawn && !b.linking; }
       this.placePins();
     }
+  };
+}
+
+/**
+ * Draw back faces as a flat fill in the part's own colour. Every part is a closed solid, so a back face
+ * shows only where the camera has gone inside one (zoomed into the tooth) or looks through a gap
+ * between two: the cut then reads as solid tissue instead of a hollow shell with the background
+ * showing through its seams.
+ */
+function addCaps(material: THREE.MeshStandardMaterial) {
+  const before = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    before.call(material, shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+      if (!gl_FrontFacing) gl_FragColor.rgb = diffuseColor.rgb * 0.78;`);
   };
 }
 
@@ -805,7 +901,9 @@ export class Viewer {
  */
 function addFlow(material: THREE.MeshStandardMaterial, time: { value: number }) {
   const on = { value: 0 };
-  material.onBeforeCompile = (shader) => {
+  const before = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    before.call(material, shader, renderer);
     shader.uniforms.uFlowTime = time;
     shader.uniforms.uFlowOn = on;
     shader.vertexShader = shader.vertexShader

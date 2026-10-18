@@ -148,7 +148,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       setSelected(null); setLandmark(id);
     };
     let cancelled = false;
-    v.loadGLB(mode.model, (node) => {
+    // The content hash in the URL makes a rebuilt model a new file to the browser's year-long cache.
+    const version = typeof __MODEL_VERSIONS__ !== 'undefined' ? __MODEL_VERSIONS__[mode.model] : undefined;
+    v.loadGLB(version ? `${mode.model}?v=${version}` : mode.model, (node) => {
       if (modeId === 'histology') {
         const t = TISSUES.find((x) => x.key === node);
         return t ? { key: t.key, group: t.key, color: t.color } : null;

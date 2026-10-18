@@ -310,7 +310,7 @@ function carveSites(geometry) {
   const lin = (hex) => [1, 3, 5].map((i) => { const c = parseInt(hex.slice(i, i + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
   const ENAMEL = lin('#f6f1e7'); // the teeth's colour in the model (GROUP_COLOR.teeth)
   // Carious dentin is a muted yellow-brown (active, soft) to dark brown-black (arrested): no orange.
-  const CHALK = lin('#fbfaf4'), WALL = lin('#7d5a36'), FLOOR = lin('#352214'), STAIN = lin('#22160d'), LEATHER = lin('#a88457'), LEATHER_DEEP = lin('#6a4a2c');
+  const CHALK = lin('#ffffff'), WALL = lin('#7d5a36'), FLOOR = lin('#352214'), STAIN = lin('#22160d'), LEATHER = lin('#a88457'), LEATHER_DEEP = lin('#6a4a2c');
   const SHADOW = lin('#cbbfa9'), SHADOW_DEEP = lin('#86735d'), AMALGAM = lin('#8d9299'), AMALGAM_DARK = lin('#646970');
   const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   const STAINB = lin('#5c3d22');
@@ -362,14 +362,15 @@ function carveSites(geometry) {
       const wide = 1 + under * Math.min(1, Math.max(0, -dn / s.depth));
       let best = Infinity;
       for (const [ou, ow, rs, ds] of s.lobes) best = Math.min(best, Math.hypot((du - ou) / (s.ru * rs * wide), (dw - ow) / (s.rv * rs * wide), dn / (s.depth * ds)));
-      return (best - 1 - 0.22 * fbm(p, 26, 3, seed) - 0.07 * fbm(p, 75, 3, seed + 2)) * R - 0.005 * fbm(p, 55, 2, seed + 5);
+      // Irregular but not ragged: a fine high-frequency term made the margin look torn at close range.
+      return (best - 1 - 0.12 * fbm(p, 26, 3, seed) - 0.025 * fbm(p, 75, 3, seed + 2)) * R - 0.003 * fbm(p, 55, 2, seed + 5);
     };
     // Distance outside the cavity's outline along the surface, for the stain and the halo (≈ 0 at the rim).
     s.rim = (p) => {
       const d = sub(p, c), du = dot(d, u), dw = dot(d, w);
       let best = Infinity;
       for (const [ou, ow, rs] of s.lobes) best = Math.min(best, Math.hypot((du - ou) / (s.ru * rs), (dw - ow) / (s.rv * rs)));
-      return best * (1 + 0.22 * fbm(p, 26, 3, seed)) - 1;
+      return best * (1 + 0.12 * fbm(p, 26, 3, seed)) - 1;
     };
   }
 
@@ -383,9 +384,12 @@ function carveSites(geometry) {
     // The tooth: the scanned shape minus every cavity (and a restoration's ditched margin);
     // the filling: the restoration's cavity within the scanned shape, minus the ditch.
     const ditch = (s, p) => Math.max(Math.abs(s.cavity(p)) - 0.012, -(sdf.sample(p) + 0.05));
+    // The cavity meets the scanned surface in a slightly rounded margin (a smooth max, 0.12 mm): at a sharp
+    // crease the mesher cannot put vertices on both surfaces and left voxel steps all round the rim.
+    const smax = (a, b, k) => { const h = Math.min(1, Math.max(0, 0.5 + (0.5 * (b - a)) / k)); return a + (b - a) * h + k * h * (1 - h); };
     const toothF = (p, base) => {
       let v = base;
-      for (const s of sites) v = Math.max(v, -s.cavity(p));
+      for (const s of sites) v = smax(v, -s.cavity(p), 0.012);
       if (restoration) v = Math.max(v, -ditch(restoration, p));
       return v;
     };
@@ -410,51 +414,61 @@ function carveSites(geometry) {
     // Colour, normals and parts.
     for (const [name, { positions, quads }] of Object.entries(built)) {
       const nv = positions.length / 3;
-      const col = new Float32Array(positions.length), owner = new Int16Array(nv).fill(-1);
+      // owner: the site a vertex's colour belongs to; weight: how much it belongs to that site's part (the
+      // part's outline is the 0.5 contour of this smooth field, not a staircase of whole triangles).
+      const col = new Float32Array(positions.length), owner = new Int16Array(nv).fill(-1), weight = new Float32Array(nv);
+      const claim = (v, si, w) => { if (w > weight[v]) { weight[v] = w; owner[v] = si; } };
       for (let v = 0; v < nv; v++) {
         const p = [positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]];
         let c = ENAMEL;
-        if (name === 'filling') { c = mix(AMALGAM, AMALGAM_DARK, (fbm(p, 60, 2, 9) + 1) * 0.3); owner[v] = SITES.indexOf(restoration); col.set(c, v * 3); continue; }
+        if (name === 'filling') { c = mix(AMALGAM, AMALGAM_DARK, (fbm(p, 60, 2, 9) + 1) * 0.3); claim(v, SITES.indexOf(restoration), 1); col.set(c, v * 3); continue; }
         const depth = -sdf.sample(p); // how far inside the scanned surface: > 0 on a cavity wall
         for (const s of sites) {
           const k = (fbm(p, 90, 2, SITES.indexOf(s) * 3.1) + 1) / 2; // mottling
           const rim = s.rim(p);
           if (s.look === 'restoration') {
-            if (depth > 0.004 && Math.abs(s.cavity(p)) < 0.03) { c = mix(LEATHER, STAIN, 0.6 + 0.4 * k); owner[v] = SITES.indexOf(s); }
-            else if (rim > -0.1 && rim < s.halo) { c = mix(mix(CHALK, LEATHER, 0.2), ENAMEL, Math.max(0, rim) / s.halo); owner[v] = SITES.indexOf(s); }
+            if (depth > 0.004 && Math.abs(s.cavity(p)) < 0.03) { c = mix(LEATHER, STAIN, 0.6 + 0.4 * k); claim(v, SITES.indexOf(s), 1); }
+            else if (rim > -0.1 && rim < s.halo) { c = mix(mix(CHALK, LEATHER, 0.2), ENAMEL, Math.max(0, rim) / s.halo); claim(v, SITES.indexOf(s), 1 - smooth(0.8 * s.halo, s.halo, rim)); }
             continue;
           }
           const reach = Math.max(s.ru, s.rv);
-          // A cavity wall lies on the cavity's own surface; intact enamel only grazes depth 0 and must not match.
-          if (depth > 0.004 && Math.abs(s.cavity(p)) < 0.03 && Math.hypot(...sub(p, s.c)) < reach * 1.6) {
-            // How deep into the cavity, measured from the original surface along the lesion's normal.
-            const tt = Math.min(1, Math.max(0, dot(sub(s.surface, p), s.nc) / s.depth) * 1.3) ** 0.6;
-            const seed = SITES.indexOf(s) * 3.1;
-            const n2 = (fbm(p, 220, 2, seed + 7) + 1) / 2, n3 = (fbm(p, 45, 3, seed + 3) + 1) / 2;
-            c = s.look === 'shadow' ? mix(SHADOW, SHADOW_DEEP, tt * 0.9 + k * 0.2) : s.look === 'leather' ? mix(LEATHER, LEATHER_DEEP, tt * 0.8 + k * 0.25) : mix(WALL, FLOOR, tt * 0.9 + k * 0.25);
-            // Broad patches of lighter and darker carious dentin, darker pitting low down, and a stained margin
-            // where the cavity breaks through the enamel.
-            c = mix(c, c.map((x) => x * 0.6), smooth(0.4, 0.7, n3) * 0.5);
-            c = mix(c, STAIN, smooth(0.66, 0.88, n2) * (0.15 + 0.5 * tt));
-            c = mix(c, s.look === 'shadow' ? SHADOW_DEEP : STAINB, smooth(0.25, 0, tt) * 0.5);
-            owner[v] = SITES.indexOf(s);
-          } else if (rim > -0.15 && rim < s.halo * 1.5 && Math.hypot(...sub(p, s.c)) < reach * (2.2 + s.halo)
-            // The outline is measured in the plane across the lesion's normal, so a point far along the normal
-            // (round the tooth) can land inside it: keep the stain to the surface beside the cavity.
-            && Math.abs(dot(sub(p, s.c), s.nc)) < s.depth + 0.08) {
-            // Stain creeping into the enamel in irregular fingers, then the chalky edge of the lesion, then sound enamel.
-            const seed = SITES.indexOf(s) * 3.1;
-            const edge = Math.max(0, rim) / (s.halo * 1.5);
-            // Broad, soft fingers (fine noise here read as painted fuzz): the stain follows the enamel's
-            // grain a little way, then an opaque chalky band (the white-spot edge of an active lesion).
+          const si = SITES.indexOf(s), seed = si * 3.1;
+          // Halo first: stain creeping into the enamel in broad soft fingers, then the chalky white-spot edge
+          // of an active lesion, then sound enamel. The outline is measured across the lesion's normal, so a
+          // point far round the tooth can land inside it: the halo keeps to the surface beside the cavity.
+          let halo = null, edge = 1;
+          // Faded out, not cut off: hard limits here chopped the halo into a comb along the outline on cusp slopes.
+          const gate = (1 - smooth(s.depth + 0.04, s.depth + 0.1, Math.abs(dot(sub(p, s.c), s.nc)))) * (1 - smooth(reach * (1.9 + s.halo), reach * (2.3 + s.halo), Math.hypot(...sub(p, s.c))));
+          if (rim < s.halo * 1.5 && gate > 0) {
+            edge = Math.max(0, rim) / (s.halo * 1.5);
             const fingers = (fbm(p, 14, 3, seed + 11) + 1) / 2;
             const power = s.look === 'shadow' ? 0.25 : s.look === 'leather' ? 0.55 : 1;
-            const stained = smooth(0.35, 0.7, 0.95 - edge * 1.4 + (fingers - 0.5) * 0.5) * power;
+            // A ramp several vertices wide (0.1 mm apart): a narrow one rendered as blocks at close range.
+            const stained = smooth(0.05, 0.85, 0.95 - edge * 1.4 + (fingers - 0.5) * 0.4) * power;
             const chalk = smooth(0.2, 0.5, edge) * (1 - smooth(0.75, 1, edge)) * 0.95;
-            c = mix(ENAMEL, s.look === 'shadow' ? SHADOW : s.look === 'leather' ? mix(STAINB, LEATHER, 0.5) : mix(STAINB, STAIN, smooth(0.6, 1, stained) * 0.45), stained);
-            c = mix(c, CHALK, chalk * (1 - stained));
-            owner[v] = SITES.indexOf(s);
+            halo = mix(ENAMEL, s.look === 'shadow' ? SHADOW : s.look === 'leather' ? mix(STAINB, LEATHER, 0.5) : mix(STAINB, STAIN, smooth(0.6, 1, stained) * 0.45), stained);
+            halo = mix(ENAMEL, mix(halo, CHALK, chalk * (1 - stained)), gate);
           }
+          // How much of a cavity wall this point is: on the cavity's surface and below the scanned one. Depth is
+          // sampled from the grid and wobbles by about ±0.03 mm on intact enamel, so the blend starts above that:
+          // starting at zero flipped neighbouring rim vertices between wall and enamel, in square blocks.
+          const wallness = Math.hypot(...sub(p, s.c)) < reach * 1.8 ? smooth(0.003, 0.012, depth) * (1 - smooth(0.015, 0.035, Math.abs(s.cavity(p)))) : 0;
+          if (!halo && wallness <= 0) continue;
+          let wall = ENAMEL;
+          if (wallness > 0) {
+            // How deep into the cavity, measured from the original surface along the lesion's normal.
+            const tt = Math.min(1, Math.max(0, dot(sub(s.surface, p), s.nc) / s.depth) * 1.3) ** 0.6;
+            const n2 = (fbm(p, 220, 2, seed + 7) + 1) / 2, n3 = (fbm(p, 45, 3, seed + 3) + 1) / 2;
+            wall = s.look === 'shadow' ? mix(SHADOW, SHADOW_DEEP, tt * 0.9 + k * 0.2) : s.look === 'leather' ? mix(LEATHER, LEATHER_DEEP, tt * 0.8 + k * 0.25) : mix(WALL, FLOOR, tt * 0.9 + k * 0.25);
+            // Broad patches of lighter and darker carious dentin, darker pitting low down, and a stained margin
+            // where the cavity breaks through the enamel.
+            wall = mix(wall, wall.map((x) => x * 0.6), smooth(0.4, 0.7, n3) * 0.5);
+            wall = mix(wall, STAIN, smooth(0.66, 0.88, n2) * (0.15 + 0.5 * tt));
+            wall = mix(wall, s.look === 'shadow' ? SHADOW_DEEP : STAINB, smooth(0.25, 0, tt) * 0.5);
+          }
+          c = mix(halo ?? c, wall, wallness);
+          // The part ends where the halo has faded to sound enamel.
+          claim(v, si, Math.max(wallness, halo ? (1 - smooth(0.85, 1, edge)) * gate : 0));
         }
         col.set(c, v * 3);
       }
@@ -466,18 +480,44 @@ function carveSites(geometry) {
         for (const v of [a, b, c]) for (let k = 0; k < 3; k++) nrm[v * 3 + k] += fn[k];
       }
       for (let v = 0; v < nv; v++) { const l = Math.hypot(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]) || 1; for (let k = 0; k < 3; k++) nrm[v * 3 + k] /= l; }
+      // Split the triangles along the 0.5 contour of the weight, so each site's part has a smooth outline.
+      // New vertices on cut edges are shared by both sides (same position, normal and colour: no seam).
+      const P0 = Array.from(positions), N0 = Array.from(nrm), C0 = Array.from(col), W0 = Array.from(weight), O0 = Array.from(owner);
+      const cuts = new Map();
+      const cutAt = (a, b) => {
+        const key = a < b ? `${a},${b}` : `${b},${a}`;
+        if (cuts.has(key)) return cuts.get(key);
+        const f = (0.5 - W0[a]) / (W0[b] - W0[a]), i = P0.length / 3;
+        for (const [arr, n] of [[P0, 3], [N0, 3], [C0, 3]]) for (let k = 0; k < n; k++) arr.push(arr[a * n + k] + (arr[b * n + k] - arr[a * n + k]) * f);
+        const l = Math.hypot(N0[i * 3], N0[i * 3 + 1], N0[i * 3 + 2]) || 1;
+        for (let k = 0; k < 3; k++) N0[i * 3 + k] /= l;
+        W0.push(0.5); O0.push(W0[a] >= 0.5 ? O0[a] : O0[b]);
+        cuts.set(key, i);
+        return i;
+      };
       const groups = new Map();
+      const put = (part, tri) => { if (!groups.has(part)) groups.set(part, []); groups.get(part).push(...tri); };
+      const partOf = (si) => (name === 'filling' ? 'site-restoration' : si >= 0 ? `site-${SITES[si].id}` : t.g.id);
       for (const tri of tris) {
-        const o = tri.map((v) => owner[v]);
-        const s = o.every((x) => x === o[0]) && o[0] >= 0 ? SITES[o[0]] : null;
-        const part = name === 'filling' ? 'site-restoration' : s ? `site-${s.id}` : t.g.id;
-        if (!groups.has(part)) groups.set(part, []);
-        groups.get(part).push(...tri);
+        if (name === 'filling') { put('site-restoration', tri); continue; }
+        const inside = tri.map((v) => W0[v] >= 0.5);
+        const n = inside.filter(Boolean).length;
+        if (n === 0) { put(t.g.id, tri); continue; }
+        // Inside vertices of two sites in one triangle: keep it whole with the first.
+        const site = O0[tri[inside.indexOf(true)]];
+        if (n === 3) { put(partOf(site), tri); continue; }
+        // Rotate so the odd vertex out comes first, then cut its two edges.
+        const odd = inside.findIndex((x) => (n === 1 ? x : !x));
+        const [a, b, c] = [tri[odd], tri[(odd + 1) % 3], tri[(odd + 2) % 3]];
+        const ab = cutAt(a, b), ac = cutAt(a, c);
+        const lone = [a, ab, ac], pair = [[ab, b, c], [ab, c, ac]];
+        if (n === 1) { put(partOf(site), lone); for (const x of pair) put(t.g.id, x); }
+        else { put(t.g.id, lone); for (const x of pair) put(partOf(site), x); }
       }
       for (const [part, list] of groups) {
         const map = new Map(), P = [], NN = [], C = [], I = [];
         for (const v of list) {
-          if (!map.has(v)) { map.set(v, P.length / 3); P.push(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]); NN.push(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]); C.push(col[v * 3], col[v * 3 + 1], col[v * 3 + 2]); }
+          if (!map.has(v)) { map.set(v, P.length / 3); P.push(P0[v * 3], P0[v * 3 + 1], P0[v * 3 + 2]); NN.push(N0[v * 3], N0[v * 3 + 1], N0[v * 3 + 2]); C.push(C0[v * 3], C0[v * 3 + 1], C0[v * 3 + 2]); }
           I.push(map.get(v));
         }
         const geo = { pos: new Float32Array(P), nrm: new Float32Array(NN), idx: new Uint32Array(I), col: new Float32Array(C) };
