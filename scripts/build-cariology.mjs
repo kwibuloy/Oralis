@@ -159,6 +159,8 @@ function baseFields(box) {
  * background shows. Overlapping, the neighbour's wall fills the crack.
  */
 const GROW = STEP * 0.6;
+/** How far from open air and from the lesion box the static part keeps its inner walls (mm). */
+const EDGE = 0.8;
 
 /** Mesh every region of one lesion stage (or the static part around a lesion type). Returns the parts made. */
 function buildRegions(kind, stage, part, prefix) {
@@ -187,9 +189,16 @@ function buildRegions(kind, stage, part, prefix) {
   for (const r of REGIONS) {
     const field = fields[r];
     if (!field.some((v) => v < 0)) continue;
-    // Every region is a closed solid. An earlier shortcut kept only faces near open air, which left the
-    // enamel hollow behind its cut faces and cavity walls.
-    const { positions, quads } = surfaceNets(STEP, { grid: { min: g.min, n: g.n, field }, snap: null });
+    // Stage parts (where each lesion's timeline plays) are closed solids. The static part around them is
+    // solid within EDGE of open air (outer surface, cut faces) and of the lesion box, so every edge and
+    // every zone near the timeline has its walls; only walls buried deep between two sound tissues, far
+    // from both, are left out, which no camera reaches through the opaque tooth.
+    const exposed = part === 'stage' ? null : (idx) => {
+      if (S[idx] >= -EDGE) return true;
+      const x = idx % g.n[0], j = Math.floor(idx / g.n[0]) % g.n[1], k = Math.floor(idx / (g.n[0] * g.n[1]));
+      return inBox([g.min[0] + x * STEP, g.min[1] + j * STEP, g.min[2] + k * STEP]) < EDGE;
+    };
+    const { positions, quads } = surfaceNets(STEP, { grid: { min: g.min, n: g.n, field }, snap: null, exposed });
     if (!quads.length) continue;
     snapVertices(positions, planes, region(f, r), region(fCut, r), STEP);
     smoothMesh(positions, quads, planes, STEP);

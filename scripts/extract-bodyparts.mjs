@@ -309,10 +309,11 @@ function carveSites(geometry) {
   // ---------- Colours (linear, as glTF vertex colours are) ----------
   const lin = (hex) => [1, 3, 5].map((i) => { const c = parseInt(hex.slice(i, i + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
   const ENAMEL = lin('#f6f1e7'); // the teeth's colour in the model (GROUP_COLOR.teeth)
-  const CHALK = lin('#fdfbf3'), WALL = lin('#8e5f2b'), FLOOR = lin('#4a2c14'), STAIN = lin('#2b1a0d'), LEATHER = lin('#b98b4d'), LEATHER_DEEP = lin('#7a5128');
+  // Carious dentin is a muted yellow-brown (active, soft) to dark brown-black (arrested): no orange.
+  const CHALK = lin('#fbfaf4'), WALL = lin('#7d5a36'), FLOOR = lin('#352214'), STAIN = lin('#22160d'), LEATHER = lin('#a88457'), LEATHER_DEEP = lin('#6a4a2c');
   const SHADOW = lin('#cbbfa9'), SHADOW_DEEP = lin('#86735d'), AMALGAM = lin('#8d9299'), AMALGAM_DARK = lin('#646970');
   const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  const GLINT = lin('#c99a55'), STAINB = lin('#6a4220');
+  const STAINB = lin('#5c3d22');
   const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * Math.min(1, Math.max(0, t)));
 
   /**
@@ -431,10 +432,11 @@ function carveSites(geometry) {
             const seed = SITES.indexOf(s) * 3.1;
             const n2 = (fbm(p, 220, 2, seed + 7) + 1) / 2, n3 = (fbm(p, 45, 3, seed + 3) + 1) / 2;
             c = s.look === 'shadow' ? mix(SHADOW, SHADOW_DEEP, tt * 0.9 + k * 0.2) : s.look === 'leather' ? mix(LEATHER, LEATHER_DEEP, tt * 0.8 + k * 0.25) : mix(WALL, FLOOR, tt * 0.9 + k * 0.25);
-            // Patches of lighter and darker carious dentin, glossy amber glints near the rim, black pitting low down.
-            c = mix(c, c.map((x) => x * 0.55), smooth(0.4, 0.7, n3) * 0.6);
-            c = mix(c, GLINT, smooth(0.7, 0.9, n2) * 0.55 * (1 - tt));
-            c = mix(c, STAIN, smooth(0.62, 0.85, n2) * (0.25 + 0.6 * tt));
+            // Broad patches of lighter and darker carious dentin, darker pitting low down, and a stained margin
+            // where the cavity breaks through the enamel.
+            c = mix(c, c.map((x) => x * 0.6), smooth(0.4, 0.7, n3) * 0.5);
+            c = mix(c, STAIN, smooth(0.66, 0.88, n2) * (0.15 + 0.5 * tt));
+            c = mix(c, s.look === 'shadow' ? SHADOW_DEEP : STAINB, smooth(0.25, 0, tt) * 0.5);
             owner[v] = SITES.indexOf(s);
           } else if (rim > -0.15 && rim < s.halo * 1.5 && Math.hypot(...sub(p, s.c)) < reach * (2.2 + s.halo)
             // The outline is measured in the plane across the lesion's normal, so a point far along the normal
@@ -443,10 +445,12 @@ function carveSites(geometry) {
             // Stain creeping into the enamel in irregular fingers, then the chalky edge of the lesion, then sound enamel.
             const seed = SITES.indexOf(s) * 3.1;
             const edge = Math.max(0, rim) / (s.halo * 1.5);
-            const fingers = (fbm(p, 40, 3, seed + 11) + 1) / 2;
+            // Broad, soft fingers (fine noise here read as painted fuzz): the stain follows the enamel's
+            // grain a little way, then an opaque chalky band (the white-spot edge of an active lesion).
+            const fingers = (fbm(p, 14, 3, seed + 11) + 1) / 2;
             const power = s.look === 'shadow' ? 0.25 : s.look === 'leather' ? 0.55 : 1;
-            const stained = smooth(0.3, 0.8, 1.05 - edge * 1.15 + (fingers - 0.55) * 0.9) * power;
-            const chalk = smooth(0.45, 0.8, edge) * (1 - smooth(0.85, 1, edge)) * 0.9;
+            const stained = smooth(0.35, 0.7, 0.95 - edge * 1.4 + (fingers - 0.5) * 0.5) * power;
+            const chalk = smooth(0.2, 0.5, edge) * (1 - smooth(0.75, 1, edge)) * 0.95;
             c = mix(ENAMEL, s.look === 'shadow' ? SHADOW : s.look === 'leather' ? mix(STAINB, LEATHER, 0.5) : mix(STAINB, STAIN, smooth(0.6, 1, stained) * 0.45), stained);
             c = mix(c, CHALK, chalk * (1 - stained));
             owner[v] = SITES.indexOf(s);
@@ -480,7 +484,6 @@ function carveSites(geometry) {
         if (part === t.g.id) Object.assign(t.g, geo); else extra.push({ name: part, ...geo });
       }
     }
-   
     console.log(`  carved ${sites.map((s) => s.id).join(' + ')} into ${t.g.sided} (${t.g.idx.length / 3} triangles)`);
   }
   const pins = SITES.map((s) => ({ id: s.id, key: `site-${s.id}`, position: add(s.surface, mul(s.nc, 0.003)).map((v) => +v.toFixed(4)), normal: s.nc.map((v) => +v.toFixed(3)) }));
