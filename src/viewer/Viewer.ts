@@ -7,6 +7,10 @@ import { addSurface, type SurfaceStyle } from './surface';
 
 export type { SurfaceStyle };
 
+// A frame that stalls (a buffer upload, a garbage collection) counts as one ordinary frame for the
+// camera tweens, so a fly-in slows for a moment instead of jumping ahead.
+gsap.ticker.lagSmoothing(80, 16);
+
 const SELECT = new THREE.Color('#2563eb');
 const SELECT_MIX = 0.22;
 const SELECT_GLOW = new THREE.Color('#1d4ed8').multiplyScalar(0.32);
@@ -239,6 +243,9 @@ export class Viewer {
     // Link the shaders in parallel, off the main thread. Drawing first would block on each program in turn
     // (1.5 s of frozen page in Cariology on a laptop, several times that on a phone).
     await this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
+    // Draw once while the loading card still covers the canvas: the first draw uploads every batch's
+    // buffers (tens of MB in Cariology), which otherwise stalls the opening camera flight.
+    this.renderer.render(this.scene, this.camera);
     this.compiling = false;
     this.needsRender = true;
   }
@@ -287,13 +294,22 @@ export class Viewer {
 
   /** Move every part whose key passes `match` by `offset` (e.g. open the bite). Animated. */
   setOffset(match: (key: string) => boolean, offset: THREE.Vector3Like) {
+    // One tween for all moving parts, one place() per frame (a tween per part, each calling place(),
+    // cost parts² per frame: a stalled fly-in when Cariology opened its arches).
+    gsap.killTweensOf(this.biteTween);
+    const moves: [THREE.Vector3, THREE.Vector3, THREE.Vector3][] = [];
     for (const [m, s] of this.state) {
       const to = match(m.userData.key) ? new THREE.Vector3().copy(offset) : new THREE.Vector3();
-      if (this.reduced) s.bite.copy(to);
-      else gsap.to(s.bite, { x: to.x, y: to.y, z: to.z, duration: 0.8, ease: 'power3.inOut', onUpdate: () => this.place() });
+      if (!s.bite.equals(to)) moves.push([s.bite, s.bite.clone(), to]);
     }
-    this.place();
+    if (this.reduced || !moves.length) { for (const [bite, , to] of moves) bite.copy(to); this.place(); return; }
+    this.biteTween.t = 0;
+    gsap.to(this.biteTween, { t: 1, duration: 0.8, ease: 'power3.inOut', onUpdate: () => {
+      for (const [bite, from, to] of moves) bite.lerpVectors(from, to, this.biteTween.t);
+      this.place();
+    } });
   }
+  private biteTween = { t: 0 };
 
   /**
    * 0 = assembled, 0.5 = fully spread around the centre, 1 = every visible part
@@ -420,7 +436,8 @@ export class Viewer {
     this.canvas.removeEventListener('pointerup', this.handleUp);
     this.canvas.removeEventListener('pointermove', this.handleMove);
     this.canvas.removeEventListener('pointerleave', this.handleLeave);
-    for (const [m, s] of this.state) { gsap.killTweensOf(s.bite); m.geometry.dispose(); m.material.dispose(); }
+    gsap.killTweensOf(this.biteTween);
+    for (const [m] of this.state) { m.geometry.dispose(); m.material.dispose(); }
     for (const b of this.batches) { b.mesh.dispose(); (b.mesh.material as THREE.Material).dispose(); }
     this.controls.dispose();
     this.renderer.dispose();
@@ -520,7 +537,16 @@ export class Viewer {
     const isFaded = (m: PartMesh) => this.isFaded(m);
     // Parts fading for the first time get a see-through batch.
     const newlyFaded = this.meshes.filter((m) => !m.userData.fadedBatch && isFaded(m) && this.shown(m));
-    if (newlyFaded.length) this.buildBatches(newlyFaded, true);
+    if (newlyFaded.length) {
+      const before = this.batches.length;
+      this.buildBatches(newlyFaded, true);
+      // Their see-through material is a new shader: link it off the main thread and draw the batch once
+      // it is ready, instead of stalling the next frame (a hitch mid-flight when Cariology opens).
+      const fresh = this.batches.slice(before).map((b) => b.mesh);
+      for (const mesh of fresh) mesh.visible = false;
+      Promise.all(fresh.map((mesh) => this.renderer.compileAsync(mesh, this.camera, this.scene).catch(() => {})))
+        .then(() => { for (const mesh of fresh) mesh.visible = true; this.needsRender = true; });
+    }
     for (const m of this.meshes) {
       const { key, base, batch, instance, fadedBatch, fadedInstance } = m.userData as { key: string; base: THREE.Color; batch: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
       const shown = this.shown(m);
@@ -548,6 +574,8 @@ export class Viewer {
       // Vertex-coloured parts keep their own hues (a tint would turn brown caries purple): glow only.
       if (key === this.selected) c.lerp(SELECT, m.userData.vertexColours ? SELECT_MIX * 0.25 : SELECT_MIX);
       m.material.emissive.copy(key === this.selected ? SELECT_GLOW : key === this.hovered ? HOVER_GLOW : NO_GLOW);
+      // A blue glow on brown caries reads purple: painted parts get only a trace of it.
+      if (m.userData.vertexColours) m.material.emissive.multiplyScalar(0.2);
     }
     this.needsRender = true;
   }

@@ -117,7 +117,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const carving = modeId === 'dental' && toothView === 'carving';
   // Cariology: which view, which lesion type and sugar scenario, and whether the stage card is open.
   const cario = modeId === 'cariology';
-  const [cariView, setCariView] = useState<CariologyView>('lesion');
+  // A deep link to a site or a process part opens the view that shows it.
+  const [cariView, setCariView] = useState<CariologyView>(initialSelected?.startsWith('site-') ? 'sites' : initialSelected?.startsWith('pr-') ? 'process' : 'lesion');
   const [lesionKind, setLesionKind] = useState<LesionKind>('pit-fissure');
   const [scenario, setScenario] = useState<Scenario>('single');
   const [stageOpen, setStageOpen] = useState(false);
