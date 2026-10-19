@@ -50,7 +50,10 @@ const DRAW_ORDER = [
 export function lesionPartLook(key: string) {
   const zone = zoneOfPart(key);
   const fissure = key.startsWith('cl-pit-fissure-') && /^enamel-(surface-zone|lesion-body)$/.test(zone);
-  const look = TISSUE_LOOK[zone];
+  // Pit-and-fissure and smooth-surface sections are drawn schematic: flat zone colours on the cut faces,
+  // fading into each other at the boundaries (the model bakes each cut-face vertex's neighbour zone).
+  const section = /^cl-(pit-fissure|smooth-surface)-/.test(key) ? { flatCut: true, blendZones: true } : {};
+  const look = { ...TISSUE_LOOK[zone], ...section };
   return {
     color: ZONES[zone]?.real ?? '#ddd',
     surface: fissure ? { ...look, stain: '#9b7448', stainAmount: 0.55, stainSize: 0.25 } : look,

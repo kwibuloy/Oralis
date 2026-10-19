@@ -239,8 +239,11 @@ export function stageFields(kind, stageIndex, { cut: withCut = true } = {}) {
     const dpt = -T; // depth below the outer surface
     const s = -D; // depth below the DEJ (in dentin)
     // Irregular fronts and rough cavity walls (millimetres of offset).
-    const rough = st.enamel || st.dentin || st.root ? fbm(p, 2.2, 3) : 0;
-    const wall = st.cavity || st.micro !== undefined ? 0.17 * fbm(p, 2.6, 2, 7.3) + 0.05 * fbm(p, 8, 2, 3.1) : 0;
+    // Pit-and-fissure and smooth-surface sections are schematic: half the irregularity, since rough fronts
+    // crossing a rough cavity wall broke the zones there into a confetti of small islands.
+    const calm = isRoot ? 1 : 0.5;
+    const rough = st.enamel || st.dentin || st.root ? calm * fbm(p, 2.2, 3) : 0;
+    const wall = st.cavity || st.micro !== undefined ? calm * (0.17 * fbm(p, 2.6, 2, 7.3) + 0.05 * fbm(p, 8, 2, 3.1)) : 0;
 
     // Cavity (negative inside = removed).
     let cav = 1e3;
@@ -253,8 +256,13 @@ export function stageFields(kind, stageIndex, { cut: withCut = true } = {}) {
     if (st.cavity) {
       const c = st.cavity;
       if (isRoot) cav = Math.hypot(lat / c.wide, dpt / c.deep) - 1;
-      else if (D > 0) cav = lat - c.open; // straight through the enamel ...
-      else cav = Math.max(lat - c.wide * Math.sqrt(Math.max(0, 1 - (s / c.deep) ** 2)), s - c.deep); // ... and wider in dentin, undermining it
+      else {
+        // Straight through the enamel and wider in dentin, undermining it. The width blends across the DEJ
+        // (a quarter of a millimetre): a jump there left voxel terraces along the cavity roof.
+        const t = smoothstep(0.2, -0.05, D);
+        const width = c.open + (c.wide * Math.sqrt(Math.max(0, 1 - (Math.max(0, s) / c.deep) ** 2)) - c.open) * t;
+        cav = Math.max(lat - width, s - c.deep);
+      }
       cav += wall; // broken enamel edges, ragged dentin walls
     }
     const S = Math.max(T, cut(p), -cav);

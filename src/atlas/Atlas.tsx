@@ -17,6 +17,7 @@ import { CARVING_TOOTH, KIND_LABEL, LANDMARKS, landmarkById, MEASUREMENTS, type 
 import {
   bandColour, biofilmColour, LESION_MODEL, lesionType, PERIO_ZONES, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
   stageGroup, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
+  LESION_REGIONS,
 } from '../content/cariology';
 import { CariologyPanel, lesionPartLook, LesionHead, PhTrack, ProcessCard, ProcessHead, SiteCard, StageCard, stageAt, stageTime, VIEW_OPTIONS, ZoneCard } from './Cariology';
 import LoadingBar, { type LoadProgress } from './LoadingBar';
@@ -160,7 +161,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       const key = MESH_TO_KEY.get(node);
       const s = key ? structureByKey(key) : undefined;
       return s ? { key: s.key, group: s.group, color: GROUP_COLOR[s.group] ?? '#ddd' } : null;
-    }, (loaded, total) => !cancelled && setProgress({ loaded, total }))
+    }, (loaded, total) => !cancelled && setProgress({ loaded, total }), { heavy: modeId === 'cariology' })
       .then(() => !cancelled && setReady(true))
       .catch(() => !cancelled && setError('The 3D model could not be loaded. Check your connection and reload.'));
     return () => { cancelled = true; v.dispose(); viewer.current = null; };
@@ -284,6 +285,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       // Show zones: the study colours instead of the natural ones.
       const keys = [...LESION_MODEL[lesionKind].staticParts.map((z) => `${staticGroup(lesionKind)}-${z}`), ...LESION_MODEL[lesionKind].stages[stage].parts.map((z) => `${stageGroup(lesionKind, stage)}-${z}`), ...PERIO_ZONES.map((z) => `${perioGroup(lesionKind)}-${z}`)];
       viewer.current?.setColourOverrides(showZones ? new Map(keys.map((k) => [k, ZONES[zoneOfPart(k)]?.colour ?? '#ddd'])) : null);
+      // Cut faces fade into their neighbour zone's colour, whichever set is showing.
+      viewer.current?.setZonePalette(LESION_REGIONS.map((z) => (showZones ? ZONES[z]?.colour : ZONES[z]?.real) ?? '#ddd'));
       return;
     }
     if (cariView !== 'process') { viewer.current?.setColourOverrides(null); return; }

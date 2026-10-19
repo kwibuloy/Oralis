@@ -13,6 +13,10 @@ const MODEL_VERSIONS = Object.fromEntries(readdirSync('public/models').filter((f
 
 export default defineConfig({
   plugins: [react()],
+  // three-mesh-bvh starts its worker from a URL next to its own file; pre-bundling moves the file and
+  // breaks that URL, so it is served as is. Module workers in the build, as in dev.
+  optimizeDeps: { exclude: ['three-mesh-bvh'] },
+  worker: { format: 'es' },
   define: { __MODEL_SIZES__: JSON.stringify(MODEL_SIZES), __MODEL_VERSIONS__: JSON.stringify(MODEL_VERSIONS) },
   build: {
     chunkSizeWarningLimit: 600,
