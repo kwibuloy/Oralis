@@ -36,6 +36,10 @@ deployed statically on Vercel.
   28 ms, and every later lesion stage switches in 14 ms** (headed Chrome, laptop GPU), by uploading only
   the ~1.5M of 9.7M triangles a view shows, preparing the rest in idle time away from user input, and
   replacing one camera-bite tween per part (parts² position writes per frame) with a single tween.
+- **Made tapping a part in Cariology smooth: the worst frame of the camera's fly-to fell from 118–542 ms
+  to 7–21 ms (35–90 ms at 4x CPU throttle, from 350–1,132 ms), and the opening fly-in under throttle from
+  ~550 ms to 21–28 ms**, by linking the selection shaders while loading and indexing every part with a BVH
+  built in a Web Worker, so a tap tests a handful of triangles instead of hundreds of thousands.
 - **Removed see-through holes when zooming into a tooth section** by letting the near clip plane follow
   the camera (it sat at 0.73 mm of tooth) and stopping wheel zoom short of the surface under the cursor,
   checked by a scripted zoom into 4 zone pins on every lesion type at two stages.

@@ -67,7 +67,7 @@ function textureAt(p, tissue) {
  * a cut plane their own vertices with the plane's normal (a crisp section edge) and _CUT = 1; smooth
  * the rest; add the texture attributes.
  */
-function finishTooth(positions, quads, planes, tissue, step) {
+function finishTooth(positions, quads, planes, tissue, step, { dropCut = false } = {}) {
   const onPlane = (v, i) => {
     const p = [positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]];
     return onFace(planes, i, p, step * 0.6);
@@ -88,6 +88,7 @@ function finishTooth(positions, quads, planes, tissue, step) {
   };
   for (const t of tris) {
     const plane = planes.findIndex((_, i) => t.every((v) => onPlane(v, i)));
+    if (dropCut && plane >= 0) continue; // replaced by a contoured cut face (cutFaces)
     for (const v of t) index.push(vertex(v, plane));
   }
   // Smooth normals for the vertices not on a cut face (area-weighted face normals).
@@ -162,6 +163,114 @@ const GROW = STEP * 0.6;
 /** How far from open air and from the lesion box the static part keeps its inner walls (mm). */
 const EDGE = 0.8;
 
+/**
+ * Cut faces drawn from each zone's own field, for the lesions whose zones meet on the section (pit and
+ * fissure, smooth surface). Surface nets put a zone's edge on the grid, so on the flat section the
+ * boundaries stair-stepped, and zones grown into each other (GROW) overlapped in one plane and flickered
+ * as dots. Here every zone's face on a cut plane is the same grid of triangles clipped at its field's
+ * zero, so neighbours share one smooth edge with no overlap and no gap, at the old triangle count.
+ * Each vertex also carries its nearest other zone (_NBR, an index into REGIONS) and how far towards it
+ * the colour blends (_BLEND, 0.5 on the boundary): the viewer fades zone colours into each other there.
+ */
+const CAP_KINDS = ['pit-fissure', 'smooth-surface'];
+const BLEND_W = 0.22; // mm each side of a boundary
+function cutFaces(kind, stage, part) {
+  const planes = CUTS[kind];
+  const f = stageFields(kind, stage, { cut: false });
+  const inBox = boxField(LESION_BOX[kind]);
+  const clip = (p) => (part === 'stage' ? inBox(p) : -inBox(p)); // no overlap between the two parts here
+  const out = Object.fromEntries(REGIONS.map((r) => [r, { pos: [], tris: [], nbr: [], blend: [], plane: [] }]));
+  const evalAt = (p) => f(p, { T: sdf(p), T0: uncarved(p), P: pulp(p) });
+  planes.forEach((plane, pi) => {
+    const [ua, va] = [0, 1, 2].filter((a) => a !== plane.axis);
+    const u0 = TOOTH.min[ua], v0 = TOOTH.min[va];
+    const nu = Math.ceil((TOOTH.max[ua] - u0) / STEP) + 1, nv = Math.ceil((TOOTH.max[va] - v0) / STEP) + 1;
+    const at = (i, j) => { const p = [0, 0, 0]; p[plane.axis] = plane.at; p[ua] = u0 + i * STEP; p[va] = v0 + j * STEP; return p; };
+    // Beyond every other plane (on the exposed face), within this part's side of the lesion box.
+    const mask = (p) => Math.max(clip(p), ...planes.filter((_, j) => j !== pi).map((c) => -c.side * (p[c.axis] - c.at)));
+    // Field of every region at every node (positive outside); +1 off the face or far outside the tooth.
+    const F = REGIONS.map(() => new Float32Array(nu * nv).fill(1));
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      const p = at(i, j), m = mask(p);
+      if (m > STEP * 1.5 || sdf(p) > 0.3) continue;
+      const res = evalAt(p);
+      REGIONS.forEach((r, ri) => { F[ri][j * nu + i] = Math.max(res.regions[r], res.S, m); });
+    }
+    const n = [0, 0, 0]; n[plane.axis] = plane.side;
+    REGIONS.forEach((r, ri) => {
+      const Fr = F[ri];
+      if (!Fr.some((x) => x < 0)) return;
+      const o = out[r], map = new Map();
+      const first = o.pos.length / 3;
+      const vert = (a, b) => {
+        // A grid node (b < 0) or the zero crossing on the edge between two nodes.
+        const key = b < 0 ? `n${a}` : a < b ? `${a},${b}` : `${b},${a}`;
+        if (map.has(key)) return map.get(key);
+        const pa = at(a % nu, Math.floor(a / nu));
+        let p = pa;
+        if (b >= 0) { const pb = at(b % nu, Math.floor(b / nu)), t = Fr[a] / (Fr[a] - Fr[b]); p = pa.map((x, k) => x + (pb[k] - x) * t); }
+        const id = o.pos.length / 3;
+        o.pos.push(...p);
+        map.set(key, id);
+        return id;
+      };
+      const clipTri = (t) => {
+        const inside = t.map((x) => Fr[x] < 0), k = inside.filter(Boolean).length;
+        if (!k) return [];
+        if (k === 3) return [t.map((x) => vert(x, -1))];
+        const odd = inside.findIndex((x) => (k === 1 ? x : !x));
+        const [a, b, c] = [t[odd], t[(odd + 1) % 3], t[(odd + 2) % 3]];
+        if (k === 1) return [[vert(a, -1), vert(a, b), vert(a, c)]];
+        return [[vert(a, b), vert(b, -1), vert(c, -1)], [vert(a, b), vert(c, -1), vert(a, c)]];
+      };
+      for (let j = 0; j < nv - 1; j++) for (let i = 0; i < nu - 1; i++) {
+        const a = j * nu + i, b = a + 1, c = a + nu + 1, d = a + nu;
+        for (const tri of [...clipTri([a, b, c]), ...clipTri([a, c, d])]) {
+          // Face the removed quarter (the plane's normal).
+          const P = tri.map((v) => o.pos.slice(v * 3, v * 3 + 3));
+          const e1 = P[1].map((x, k) => x - P[0][k]), e2 = P[2].map((x, k) => x - P[0][k]);
+          const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+          if (Math.hypot(...cr) < 1e-12) continue;
+          if (cr[0] * n[0] + cr[1] * n[1] + cr[2] * n[2] < 0) [tri[1], tri[2]] = [tri[2], tri[1]];
+          o.tris.push(...tri);
+        }
+      }
+      // Plane, nearest other zone and blend for each new vertex.
+      for (let v = first; v < o.pos.length / 3; v++) {
+        o.plane.push(pi);
+        const res = evalAt(o.pos.slice(v * 3, v * 3 + 3));
+        let best = Infinity, nbr = ri;
+        REGIONS.forEach((q, qi) => { if (qi === ri) return; const d = Math.max(res.regions[q], res.S); if (d < best) { best = d; nbr = qi; } });
+        const t = Math.min(1, Math.max(0, best / BLEND_W));
+        o.nbr.push(nbr); o.blend.push(0.5 * (1 - t * t * (3 - 2 * t)));
+      }
+    });
+  });
+  return out;
+}
+
+/** The zone's mesh (cut faces dropped) plus its contoured cut faces, mirrored to the left tooth like the rest. */
+function withCap(m, cap, r, planes) {
+  const ri = REGIONS.indexOf(r), tissue = tissueOf(r);
+  const nOld = m.positions.length / 3, nCap = cap.pos.length / 3, n = nOld + nCap;
+  const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), dir = new Float32Array(n * 3), depth = new Float32Array(n), cut = new Float32Array(n);
+  const nbr = new Float32Array(n).fill(ri), blend = new Float32Array(n);
+  pos.set(m.positions); nrm.set(m.normals); dir.set(m.extra._DIR.array); depth.set(m.extra._DEPTH.array); cut.set(m.extra._CUT.array);
+  for (let v = 0; v < nCap; v++) {
+    const p = cap.pos.slice(v * 3, v * 3 + 3), pl = planes[cap.plane[v]], w = nOld + v;
+    const t = textureAt(p, tissue);
+    pos.set([-p[0], p[1], p[2]], w * 3);
+    const nn = [0, 0, 0]; nn[pl.axis] = pl.side; nrm.set([-nn[0], nn[1], nn[2]], w * 3);
+    dir.set([-t.dir[0], t.dir[1], t.dir[2]], w * 3); depth[w] = t.depth; cut[w] = 1;
+    nbr[w] = cap.nbr[v]; blend[w] = cap.blend[v];
+  }
+  const tris = new Uint32Array(m.tris.length + cap.tris.length);
+  tris.set(m.tris);
+  // Mirroring flips the winding, as finishTooth does for its own faces.
+  for (let k = 0; k < cap.tris.length; k += 3) tris.set([cap.tris[k] + nOld, cap.tris[k + 2] + nOld, cap.tris[k + 1] + nOld], m.tris.length + k);
+  return [pos, tris, nrm, { _DIR: { type: 'VEC3', array: dir }, _DEPTH: { type: 'SCALAR', array: depth }, _CUT: { type: 'SCALAR', array: cut }, _NBR: { type: 'SCALAR', array: nbr }, _BLEND: { type: 'SCALAR', array: blend } }];
+}
+
 /** Mesh every region of one lesion stage (or the static part around a lesion type). Returns the parts made. */
 function buildRegions(kind, stage, part, prefix) {
   const planes = CUTS[kind];
@@ -169,6 +278,7 @@ function buildRegions(kind, stage, part, prefix) {
   const f = stageFields(kind, stage);
   const S = new Float32Array(g.count);
   const fields = Object.fromEntries(REGIONS.map((r) => [r, new Float32Array(g.count)]));
+  const owner = new Int8Array(g.count).fill(-1); // the region each grid point belongs to (before GROW)
   const inBox = boxField(LESION_BOX[kind]);
   let i = 0;
   for (let k = 0; k < g.n[2]; k++) for (let j = 0; j < g.n[1]; j++) for (let x = 0; x < g.n[0]; x++, i++) {
@@ -179,6 +289,7 @@ function buildRegions(kind, stage, part, prefix) {
     // This part's side of the box, overlapping the other part by half a cell so the cut face has no seam.
     const clip = part === 'stage' ? inBox(p) - STEP / 2 : -inBox(p) - STEP / 2;
     for (const r of REGIONS) fields[r][i] = Math.max(res.regions[r] - GROW, res.S, clip);
+    owner[i] = REGIONS.findIndex((r) => res.regions[r] < 0);
   }
   const made = [];
   const fCut = stageFields(kind, stage, { cut: false });
@@ -186,6 +297,7 @@ function buildRegions(kind, stage, part, prefix) {
     const res = fn(p, { T: sdf(p), T0: uncarved(p), P: pulp(p) });
     return Math.max(res.regions[r] - GROW, res.S, part === 'stage' ? inBox(p) - STEP / 2 : -inBox(p) - STEP / 2);
   };
+  const caps = CAP_KINDS.includes(kind) ? cutFaces(kind, stage, part) : null;
   for (const r of REGIONS) {
     const field = fields[r];
     if (!field.some((v) => v < 0)) continue;
@@ -193,7 +305,14 @@ function buildRegions(kind, stage, part, prefix) {
     // solid within EDGE of open air (outer surface, cut faces) and of the lesion box, so every edge and
     // every zone near the timeline has its walls; only walls buried deep between two sound tissues, far
     // from both, are left out, which no camera reaches through the opaque tooth.
-    const exposed = part === 'stage' ? null : (idx) => {
+    // On a surface facing air (the cavity walls, the outer surface) a zone keeps only the faces of points it
+    // owns, not of the margin it grew into its neighbours: both drew a face there, on the same surface, and
+    // the two flickered through each other in rows ("potholes" on the cavity walls). GROW still closes the
+    // walls between zones inside the tooth.
+    const ri = REGIONS.indexOf(r), own = CAP_KINDS.includes(kind);
+    const exposed = (idx, inner) => {
+      if (own && S[idx] >= 0 && owner[inner] !== ri) return false;
+      if (part === 'stage') return true;
       if (S[idx] >= -EDGE) return true;
       const x = idx % g.n[0], j = Math.floor(idx / g.n[0]) % g.n[1], k = Math.floor(idx / (g.n[0] * g.n[1]));
       return inBox([g.min[0] + x * STEP, g.min[1] + j * STEP, g.min[2] + k * STEP]) < EDGE;
@@ -202,8 +321,9 @@ function buildRegions(kind, stage, part, prefix) {
     if (!quads.length) continue;
     snapVertices(positions, planes, region(f, r), region(fCut, r), STEP);
     smoothMesh(positions, quads, planes, STEP);
-    const m = finishTooth(positions, quads, planes, tissueOf(r), STEP);
-    addMesh(`${prefix}-${r}`, m.positions, m.tris, m.normals, m.extra);
+    const m = finishTooth(positions, quads, planes, tissueOf(r), STEP, { dropCut: !!caps });
+    if (caps) addMesh(`${prefix}-${r}`, ...withCap(m, caps[r], r, planes));
+    else addMesh(`${prefix}-${r}`, m.positions, m.tris, m.normals, m.extra);
     made.push(r);
   }
   return made;
@@ -427,6 +547,6 @@ log('process block');
 
 mkdirSync('models-src', { recursive: true });
 writeFileSync('models-src/cariology.glb', await new NodeIO().writeBinary(doc));
-writeFileSync('src/content/cariology.generated.json', JSON.stringify({ units: { lesion: 'mm', process: 'µm' }, lesions, bands: BANDS.length }, null, 1) + '\n');
+writeFileSync('src/content/cariology.generated.json', JSON.stringify({ units: { lesion: 'mm', process: 'µm' }, regions: REGIONS, lesions, bands: BANDS.length }, null, 1) + '\n');
 const tris = doc.getRoot().listMeshes().reduce((t, m) => t + m.listPrimitives()[0].getIndices().getCount() / 3, 0);
 log(`cariology.glb: ${doc.getRoot().listNodes().length} parts, ${tris} triangles`);

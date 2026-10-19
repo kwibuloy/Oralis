@@ -113,6 +113,8 @@ export const LESION_MODEL = generated.lesions as unknown as Record<LesionKind, {
 }>;
 /** Group (for visibility) of one stage of a lesion, and of the unchanging part of its section. */
 export const stageGroup = (kind: LesionKind, stage: number) => `cl-${kind}-${stage}`;
+/** The lesion molar's regions in the model's order: cut faces name the zone they blend into by this index. */
+export const LESION_REGIONS = (generated as unknown as { regions: string[] }).regions;
 export const staticGroup = (kind: LesionKind) => LESION_MODEL[kind].static;
 export const perioGroup = (kind: LesionKind) => LESION_MODEL[kind].perio;
 export const PERIO_ZONES = ['alveolar-bone', 'pdl', 'gingiva'];
