@@ -29,7 +29,17 @@ export interface SurfaceStyle {
   roughness?: number;
   /** A glossy layer on top (enamel). */
   clearcoat?: number;
+  /** Cut faces drawn flat in the part's colour: no streaks, bands, grain, stain or relief there. */
+  flatCut?: boolean;
+  /**
+   * On cut faces, fade towards the colour of the neighbouring zone: vertex attributes _nbr (an index into
+   * the zone palette) and _blend (0..0.5, 0.5 on the boundary) say which and how much.
+   */
+  blendZones?: boolean;
 }
+
+/** Colours of the zones a `blendZones` part can fade into, by index (linear, as material colours are). */
+export const ZONE_SLOTS = 16;
 
 const GLSL = /* glsl */ `
 float srfHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -55,9 +65,18 @@ vec3 srfPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
 const f = (v: number) => v.toFixed(5);
 
 /** Add the surface texture to a material (its colour and lighting stay controlled as usual). */
-export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle) {
+export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle, zones?: { value: THREE.Color[] }) {
   const stain = new THREE.Color(s.stain ?? '#000');
+  const blend = !!(s.blendZones && zones);
   material.onBeforeCompile = (shader) => {
+    if (blend) {
+      shader.uniforms.uZone = zones!;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float _nbr;\nattribute float _blend;\nvarying float vZoneNbr;\nvarying float vZoneBlend;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvZoneNbr = _nbr;\nvZoneBlend = _blend;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\nuniform vec3 uZone[${ZONE_SLOTS}];\nvarying float vZoneNbr;\nvarying float vZoneBlend;`);
+    }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec3 _dir;\nattribute float _depth;\nattribute float _cut;\nvarying vec3 vSrfLocal;\nvarying vec3 vSrfDir;\nvarying float vSrfDepth;\nvarying float vSrfCut;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSrfLocal = position;\nvSrfDir = _dir;\nvSrfDepth = _depth;\nvSrfCut = _cut;');
@@ -88,8 +107,10 @@ export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle
           float pk = 0.5 + 0.5 * sin(6.2831853 * vSrfLocal.y / ${f(s.perikymataSpacing ?? 0.12)} + srfGrain * 1.5);
           srfH += ${f(s.perikymata)} * (1.0 - srfCut) * (pk - 0.5) * srfFade(${f(s.perikymataSpacing ?? 0.12)}, srfPx) * ${f((s.perikymataSpacing ?? 0.12) * 0.15)};
         }` : ''}
+        ${s.flatCut ? 'srfShade *= 1.0 - srfCut; srfH *= 1.0 - srfCut;' : ''}
         diffuseColor.rgb *= 1.0 + srfShade * 0.55;
-        ${s.stain ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(stain.r)}, ${f(stain.g)}, ${f(stain.b)}), ${f(s.stainAmount ?? 0.5)} * smoothstep(0.42, 0.72, srfFbm(vSrfLocal / ${f(s.stainSize ?? 0.8)} + 11.0)));` : ''}`)
+        ${s.stain ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(stain.r)}, ${f(stain.g)}, ${f(stain.b)}), ${f(s.stainAmount ?? 0.5)} * ${s.flatCut ? '(1.0 - srfCut) * ' : ''}smoothstep(0.42, 0.72, srfFbm(vSrfLocal / ${f(s.stainSize ?? 0.8)} + 11.0)));` : ''}
+        ${blend ? 'diffuseColor.rgb = mix(diffuseColor.rgb, uZone[int(vZoneNbr + 0.5)], clamp(vZoneBlend, 0.0, 0.5) * srfCut);' : ''}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal = srfPerturb(-vViewPosition, normal, vec2(dFdx(srfH), dFdy(srfH)) * ${f((s.bump ?? 0.5) * 6)}, faceDirection);`);
   };

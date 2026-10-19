@@ -189,7 +189,8 @@ export function sampleGrid(f, step, { min, max } = TOOTH_BOX) {
 }
 /**
  * Surface nets over a sampled grid (negative inside). `snap` moves each vertex onto the true surface
- * of a field function (null keeps the grid-interpolated positions). `exposed(gridIndex)` can drop faces
+ * of a field function (null keeps the grid-interpolated positions). `exposed(outside, inside)` (grid indices
+ * of the two points the face separates) can drop faces
  * whose outer side is not open air, e.g. where one region of a solid meets the next.
  */
 export function surfaceNets(step, { grid = sampleGrid(sdf, step), snap = sdf, exposed = null } = {}) {
@@ -225,7 +226,7 @@ export function surfaceNets(step, { grid = sampleGrid(sdf, step), snap = sdf, ex
       const nextIndex = idx(i + o[0], j + o[1], k + o[2]);
       const next = field[nextIndex] < 0;
       if (inside === next) continue;
-      if (exposed && !exposed(inside ? nextIndex : idx(i, j, k))) continue;
+      if (exposed && !exposed(inside ? nextIndex : idx(i, j, k), inside ? idx(i, j, k) : nextIndex)) continue;
       const [u, w] = [[1, 2], [0, 2], [0, 1]][axis];
       const cell = (du, dw) => { const c = [i, j, k]; c[u] -= du; c[w] -= dw; return vert[cidx(c[0], c[1], c[2])]; };
       const q = [cell(0, 0), cell(1, 0), cell(1, 1), cell(0, 1)];

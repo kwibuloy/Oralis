@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { addSurface, type SurfaceStyle } from './surface';
+import { acceleratedRaycast, type MeshBVH } from 'three-mesh-bvh';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { addSurface, type SurfaceStyle, ZONE_SLOTS } from './surface';
 
 export type { SurfaceStyle };
 
@@ -134,7 +136,7 @@ export class Viewer {
   private batches: Batch[] = [];
   private state = new Map<PartMesh, PartState>();
   private modelCenter = new THREE.Vector3();
-  private raycaster = new THREE.Raycaster();
+  private raycaster = Object.assign(new THREE.Raycaster(), { firstHitOnly: true }); // with a BVH: the nearest hit only
   private down: { x: number; y: number } | null = null;
   private frame = 0;
   private needsRender = true;
@@ -221,7 +223,12 @@ export class Viewer {
    * Load a Draco-compressed GLB; `describe` maps a node name to its structure, or null to drop it.
    * `onProgress` gets bytes downloaded and the total (null when the server sends no length).
    */
-  async loadGLB(url: string, describe: (nodeName: string) => Pickable | null, onProgress?: (loaded: number, total: number | null) => void): Promise<void> {
+  /**
+   * `heavy`: a model whose parts run to hundreds of thousands of triangles (Cariology). Its selection
+   * shaders are linked while loading and its parts get a spatial index for picking, built in a worker:
+   * a tap otherwise linked a shader (0.85 s) and tested every triangle of the big parts (0.3 s) mid-flight.
+   */
+  async loadGLB(url: string, describe: (nodeName: string) => Pickable | null, onProgress?: (loaded: number, total: number | null) => void, { heavy = false } = {}): Promise<void> {
     const draco = new DRACOLoader().setDecoderPath('/draco/');
     const gltf = await new GLTFLoader().setDRACOLoader(draco)
       .loadAsync(url, (e) => onProgress?.(e.loaded, e.lengthComputable && e.total ? e.total : null));
@@ -254,12 +261,70 @@ export class Viewer {
     // Link the shaders in parallel, off the main thread. Drawing first would block on each program in turn
     // (1.5 s of frozen page in Cariology on a laptop, several times that on a phone).
     await this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
+    if (heavy) await this.linkSelectionShaders();
     // Draw once while the loading card still covers the canvas: the first draw uploads every batch's
     // buffers (tens of MB in Cariology), which otherwise stalls the opening camera flight.
     this.renderer.render(this.scene, this.camera);
     this.compiling = false;
     this.needsRender = true;
     this.prepareRest();
+    if (heavy) void this.indexForPicking();
+  }
+
+  /**
+   * A selected or hovered part is drawn on its own, with a material unlike its batch's: link one of each
+   * kind now, in parallel and off the main thread, so the first tap doesn't wait on a shader.
+   */
+  private async linkSelectionShaders() {
+    const kinds = new Map<string, PartMesh>();
+    for (const m of this.meshes) {
+      const { info, vertexColours } = m.userData as { info: Pickable; vertexColours: boolean };
+      const attrs = Object.keys(m.geometry.attributes).sort().join();
+      kinds.set(JSON.stringify([info.surface ?? null, !!info.overlay, info.layer ?? 0, vertexColours, attrs]), m);
+    }
+    const stage = new THREE.Group();
+    stage.visible = true;
+    for (const m of kinds.values()) {
+      const proxy = new THREE.Mesh(m.geometry, m.material);
+      proxy.frustumCulled = false;
+      stage.add(proxy);
+    }
+    await this.renderer.compileAsync(stage, this.camera, this.scene).catch(() => {});
+  }
+
+  /**
+   * Give each part a BVH so a tap or hover tests a handful of triangles, not all of a part's hundreds of
+   * thousands. Built in a worker, one part at a time, largest shown parts first; a part is skipped by
+   * picking (and kept in its batch) while its buffers are away in the worker.
+   */
+  private async indexForPicking() {
+    const worker = new GenerateMeshBVHWorker();
+    this.bvhWorker = worker;
+    const size = (m: PartMesh) => m.geometry.index?.count ?? 0;
+    try {
+      for (;;) {
+        if (this.disposed) break;
+        const todo = this.meshes.filter((m) => m.userData.batch && !m.geometry.boundsTree && m.parent !== this.root);
+        if (!todo.length) {
+          if (this.meshes.every((m) => m.geometry.boundsTree)) break;
+          await new Promise((r) => setTimeout(r, 500)); // the rest are batched later (prepareRest)
+          continue;
+        }
+        todo.sort((a, b) => Number(b.visible) - Number(a.visible) || size(b) - size(a));
+        const m = todo[0];
+        m.userData.indexing = true;
+        // Indirect: the triangle order is kept, so the part's batch and its own draw stay valid.
+        const bvh = (await worker.generate(m.geometry, { indirect: true }).catch(() => null)) as MeshBVH | null;
+        if (!bvh) { m.userData.indexing = false; break; } // no worker: picking tests triangles as before
+        m.geometry.boundsTree = bvh;
+        m.raycast = acceleratedRaycast;
+        m.userData.indexing = false;
+        if (m.userData.key === this.selected || m.userData.key === this.hovered) this.apply();
+      }
+    } finally {
+      worker.dispose();
+      this.bvhWorker = null;
+    }
   }
 
   /**
@@ -290,6 +355,12 @@ export class Viewer {
       idle(step);
     };
     setTimeout(() => idle(step), 2500);
+  }
+
+  /** The colour of each zone a cut face can blend into, by the index baked into the model (_nbr). */
+  setZonePalette(colours: string[]) {
+    colours.slice(0, ZONE_SLOTS).forEach((c, i) => this.zonePalette.value[i].set(c));
+    this.needsRender = true;
   }
 
   setVisibleGroups(groups: Iterable<string>, context: Iterable<string> = []) {
@@ -354,6 +425,9 @@ export class Viewer {
   private biteTween = { t: 0 };
   private frameNear = 0.1;
   private disposed = false;
+  /** Colours that `blendZones` cut faces fade into (see setZonePalette). */
+  private zonePalette = { value: Array.from({ length: ZONE_SLOTS }, () => new THREE.Color()) };
+  private bvhWorker: GenerateMeshBVHWorker | null = null;
   private lastInput = 0;
   private noteInput = () => { this.lastInput = performance.now(); };
 
@@ -476,6 +550,7 @@ export class Viewer {
 
   dispose() {
     this.disposed = true;
+    this.bvhWorker?.dispose();
     for (const type of ['pointerdown', 'keydown', 'wheel']) window.removeEventListener(type, this.noteInput, { capture: true });
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
@@ -507,7 +582,7 @@ export class Viewer {
     const material = info.surface?.clearcoat
       ? new THREE.MeshPhysicalMaterial({ ...options, clearcoat: info.surface.clearcoat, clearcoatRoughness: 0.18 })
       : new THREE.MeshStandardMaterial(options);
-    if (info.surface) addSurface(material, info.surface);
+    if (info.surface) addSurface(material, info.surface, this.zonePalette);
     addCaps(material);
     return material;
   }
@@ -611,7 +686,8 @@ export class Viewer {
       if (override) colour.set(override);
       // In the see-through batch when faded; drawn on its own (with its own material, for the glow)
       // when selected or hovered; otherwise in its batch.
-      const special = shown && !faded && (key === this.selected || key === this.hovered);
+      // (Not while its buffers are in the BVH worker: it stays in its batch until they are back.)
+      const special = shown && !faded && (key === this.selected || key === this.hovered) && !m.userData.indexing;
       batch.mesh.setVisibleAt(instance, shown && !special && !faded);
       batch.mesh.setColorAt(instance, colour);
       if (shown && !special && !faded) drawn.add(batch);
@@ -756,7 +832,7 @@ export class Viewer {
     const box = new THREE.Box3(), at = new THREE.Vector3();
     const near: [PartMesh, number][] = [];
     for (const m of this.meshes) {
-      if (!m.visible || this.isFaded(m)) continue;
+      if (!m.visible || this.isFaded(m) || m.userData.indexing) continue;
       const g = m.geometry;
       if (!g.boundingBox) g.computeBoundingBox();
       box.copy(g.boundingBox!).applyMatrix4(m.matrixWorld);
