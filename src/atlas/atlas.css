@@ -47,6 +47,10 @@
 .pin { position: absolute; left: 0; top: 0; min-width: 22px; height: 22px; padding: 0 5px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px rgb(17 24 39 / 0.35); pointer-events: auto; cursor: pointer; transition: opacity 260ms ease, background-color var(--t-ui) ease; }
 .pin.is-hidden { opacity: 0; pointer-events: none; }
 .pin.is-active { background: var(--select); transform-origin: center; z-index: 1; box-shadow: 0 0 0 4px rgb(37 99 235 / 0.25), 0 1px 4px rgb(17 24 39 / 0.35); }
+/* From a pin pushed aside by its neighbours back to its point (a dot), over light and dark tissue alike. */
+.pin-line { position: absolute; left: 0; top: 0; height: 1.5px; margin-top: -0.75px; transform-origin: 0 50%; background: var(--accent); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.75); pointer-events: none; transition: opacity 260ms ease; }
+.pin-line::before { content: ''; position: absolute; left: -3px; top: -2.25px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px #fff; }
+.pin-line.is-hidden { opacity: 0; }
 @media (pointer: coarse) {
   /* Bigger targets on touch screens. */
   .pin { min-width: 28px; height: 28px; font-size: 12px; }

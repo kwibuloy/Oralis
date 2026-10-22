@@ -4,12 +4,14 @@
 //   git clone --depth 1 https://github.com/ashemag/human-atlas ../human-atlas
 //   node scripts/extract-bodyparts.mjs ../human-atlas
 //
-// Run scripts/build-carving-tooth.mjs and scripts/build-cariology.mjs first: the Oral anatomy model
-// includes the carving molar, the Cariology model the lesion molar and the process block.
+// Run scripts/build-carving-tooth.mjs, scripts/build-cariology.mjs and scripts/blender/build_cariology.py
+// first: the Oral anatomy model includes the carving molar, the Cariology model the Blender lesion molar
+// and the process block.
 // Writes public/models/general.glb (every BodyParts3D mesh), public/models/physiology.glb (only what the
 // Physiology functions show, plus the skeleton for orientation, with per-vertex flow distances),
 // public/models/dental.glb (dentition and jaws) and public/models/cariology.glb (the arches with caries
-// sites carved into their teeth, plus the authored parts), and src/content/cariology-sites.generated.json.
+// sites carved into their teeth, plus the authored parts), src/content/cariology-sites.generated.json and
+// src/content/cariology-lesions.generated.json.
 // The histology model is authored in Blender instead: scripts/blender/build_histology.py.
 import { Document, NodeIO } from '@gltf-transform/core';
 import { KHRDracoMeshCompression } from '@gltf-transform/extensions';
@@ -532,24 +534,121 @@ function carveSites(geometry) {
 }
 
 /**
- * Merge the authored Cariology parts (models-src/cariology.glb, from scripts/build-cariology.mjs): the
- * lesion molar (mm) and the process block (µm), scaled to the model's centimetres and set beside the
- * arches. Each view shows only its own parts.
+ * Merge the authored Cariology parts, scaled to the model's centimetres and set beside the arches (each
+ * view shows only its own parts):
+ *   - the lesion molar (mm) from models-src/cariology-blender.glb and its manifest (scripts/blender/
+ *     build_cariology.py). Each part's two primitives (natural surface, "(cut)" study faces) become one,
+ *     with _CUT (1 on a cut face) and _ZONE (the part's index in `regions`, for the zone palette) per
+ *     vertex; its custom normals are kept. Writes src/content/cariology-lesions.generated.json: per
+ *     lesion, the parts of each stage and a pin on the cut face of each lesion zone and the pulp;
+ *   - the process block (µm) from models-src/cariology.glb (scripts/build-cariology.mjs), whose old
+ *     lesion molar (cl-*) is no longer used.
  */
 async function addCariologyParts(doc, buffer, scene, archRightEdge) {
-  const src = await io.read('models-src/cariology.glb');
-  for (const node of src.getRoot().listNodes()) {
+  const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setBuffer(buffer);
+  const place = (node, scale, x) => scene.addChild(node.setScale([scale, scale, scale]).setTranslation([archRightEdge + x, 0, 0]));
+
+  const block = await io.read('models-src/cariology.glb');
+  let n = 0;
+  for (const node of block.getRoot().listNodes()) {
     const name = node.getName();
+    if (!name.startsWith('pr-')) continue;
     const p = node.getMesh().listPrimitives()[0];
-    const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setBuffer(buffer);
-    // Every attribute, including the texture ones (_DIR, _DEPTH, _CUT) the viewer reads.
     const prim = doc.createPrimitive().setIndices(copy(p.getIndices()));
     for (const semantic of p.listSemantics()) prim.setAttribute(semantic, copy(p.getAttribute(semantic)));
-    const lesion = name.startsWith('cl-');
-    scene.addChild(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim))
-      .setScale(lesion ? [0.1, 0.1, 0.1] : [0.05, 0.05, 0.05]).setTranslation([archRightEdge + (lesion ? 4 : 10), 0, 0]));
+    place(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim)), 0.05, 10);
+    n++;
   }
-  console.log(`  merged ${src.getRoot().listNodes().length} cariology parts`);
+
+  const manifest = JSON.parse(readFileSync('models-src/cariology-blender.json', 'utf8'));
+  const tooth = await io.read('models-src/cariology-blender.glb');
+  const zoneOf = (name) => name.replace(/^cl-(pit-fissure|smooth-surface|root)-(\d+|static|perio)-/, '');
+  const nodes = new Map(tooth.getRoot().listNodes().filter((x) => x.getMesh()).map((x) => [x.getName(), x]));
+  const regions = [...new Set([...nodes.keys()].map(zoneOf))].sort();
+  if (regions.length > 16) throw new Error(`${regions.length} lesion-molar regions: the viewer's zone palette holds 16`);
+  const cutFaces = new Map(); // part → its cut-face triangles [a, b, c, normal], for the pins
+  for (const [name, node] of nodes) {
+    const pos = [], nrm = [], cut = [], idx = [], tris = [];
+    for (const p of node.getMesh().listPrimitives()) {
+      const isCut = / \(cut\)$/.test(p.getMaterial()?.getName() ?? '');
+      const P = p.getAttribute('POSITION').getArray(), N = p.getAttribute('NORMAL').getArray(), I = p.getIndices().getArray();
+      const base = pos.length / 3;
+      for (let i = 0; i < P.length; i++) { pos.push(P[i]); nrm.push(N[i]); }
+      for (let i = 0; i < P.length / 3; i++) cut.push(isCut ? 1 : 0);
+      for (let i = 0; i < I.length; i++) idx.push(base + I[i]);
+      const v = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+      if (isCut) for (let t = 0; t < I.length; t += 3) tris.push([v(I[t]), v(I[t + 1]), v(I[t + 2]), [N[I[t] * 3], N[I[t] * 3 + 1], N[I[t] * 3 + 2]]]);
+    }
+    cutFaces.set(name, tris);
+    const zone = regions.indexOf(zoneOf(name));
+    const prim = doc.createPrimitive()
+      .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(new Float32Array(pos)).setBuffer(buffer))
+      .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(new Float32Array(nrm)).setBuffer(buffer))
+      .setAttribute('_CUT', doc.createAccessor().setType('SCALAR').setArray(new Float32Array(cut)).setBuffer(buffer))
+      .setAttribute('_ZONE', doc.createAccessor().setType('SCALAR').setArray(new Float32Array(cut.length).fill(zone)).setBuffer(buffer))
+      .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(idx)).setBuffer(buffer));
+    place(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim)), 0.1, 4);
+  }
+
+  const lesions = {};
+  for (const [kind, site] of Object.entries(manifest.sites)) {
+    const zones = (group) => site.base.filter((x) => x.startsWith(`cl-${kind}-${group}-`)).map(zoneOf);
+    lesions[kind] = {
+      static: `cl-${kind}-static`, staticParts: zones('static'),
+      perio: `cl-${kind}-perio`, perioParts: zones('perio'),
+      lesion: site.lesion,
+      stages: site.stages.map((names, i) => {
+        const parts = names.map(zoneOf);
+        // Pins on the lesion zones and the pulp; sound enamel, dentin and cementum have none.
+        const pins = parts.filter((z) => !['enamel', 'dentin', 'cementum'].includes(z))
+          .map((z) => ({ region: z, ...pinOnCut(cutFaces.get(`cl-${kind}-${i}-${z}`)) }))
+          .filter((p) => p.position);
+        return { parts, pins };
+      }),
+    };
+  }
+  writeFileSync('src/content/cariology-lesions.generated.json', JSON.stringify({ units: 'mm', tooth: manifest.tooth, regions, lesions }, null, 1) + '\n');
+  console.log(`  merged ${n} process-block parts and ${nodes.size} lesion-molar parts`);
+}
+
+/**
+ * A pin on a part's cut faces: on the cut plane with the most area, the triangle centre farthest from
+ * that plane's outline, so the pin sits well inside the zone even when the zone is thin or curved.
+ */
+function pinOnCut(tris) {
+  if (!tris?.length) return {};
+  const planes = new Map();
+  for (const t of tris) {
+    const k = t[3].map((v) => Math.round(v * 10)).join();
+    const [a, b, c] = t;
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const area = Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) / 2;
+    if (!planes.has(k)) planes.set(k, { area: 0, tris: [] });
+    const p = planes.get(k); p.area += area; p.tris.push(t);
+  }
+  const plane = [...planes.values()].sort((a, b) => b.area - a.area)[0];
+  // The outline: edges used by only one triangle of the plane (vertices matched to 1 µm).
+  const vk = (p) => p.map((v) => Math.round(v * 1000)).join();
+  const edges = new Map();
+  for (const t of plane.tris) for (let k = 0; k < 3; k++) {
+    const e = [vk(t[k]), vk(t[(k + 1) % 3])].sort().join('|');
+    edges.set(e, edges.has(e) ? null : [t[k], t[(k + 1) % 3]]);
+  }
+  const outline = [...edges.values()].filter(Boolean);
+  const toSegment = (p, [a, b]) => {
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+    const s = Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2 || 1)));
+    return Math.hypot(ap[0] - s * ab[0], ap[1] - s * ab[1], ap[2] - s * ab[2]);
+  };
+  let best = null, far = -1;
+  for (const [a, b, c] of plane.tris) {
+    const m = [0, 1, 2].map((i) => (a[i] + b[i] + c[i]) / 3);
+    let d = Infinity;
+    for (const e of outline) { d = Math.min(d, toSegment(m, e)); if (d <= far) break; }
+    if (d > far) { far = d; best = m; }
+  }
+  const nrm = plane.tris[0][3], l = Math.hypot(...nrm) || 1;
+  return { position: best.map((v) => +v.toFixed(3)), normal: nrm.map((v) => +(v / l).toFixed(3)) };
 }
 
 function computeFlows(geometry) {
