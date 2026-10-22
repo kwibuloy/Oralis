@@ -1,5 +1,5 @@
 import {
-  CRITICAL_PH, ICDAS_NOTE, LESION_MODEL, PERIO_ZONES, LESION_TYPES, lesionType, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SCENARIOS, SITES, siteById,
+  CRITICAL_PH, ICDAS_NOTE, LESION_MODEL, lesionKey, PERIO_ZONES, LESION_TYPES, lesionType, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SCENARIOS, SITES, siteById,
   stageCodeLabel, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
 } from '../content/cariology';
 import type { SurfaceStyle } from '../viewer/Viewer';
@@ -66,10 +66,9 @@ export function CariologyPanel({ view, kind, stage, selected, onSelect, scenario
 }) {
   if (view === 'lesion') {
     const model = LESION_MODEL[kind];
-    // One row per zone; a click selects the zone's part in this stage (or the unchanging part outside the
-    // lesion, or the bone and gingiva around it).
+    // One row per tissue or zone in this stage; a click selects all of it (fixed part and stage patch).
     const zones = Object.keys(ZONES).filter((z) => model.stages[stage].parts.includes(z) || model.staticParts.includes(z) || PERIO_ZONES.includes(z));
-    const keyFor = (z: string) => (PERIO_ZONES.includes(z) ? `${model.perio}-${z}` : model.stages[stage].parts.includes(z) ? `cl-${kind}-${stage}-${z}` : `${model.static}-${z}`);
+    const keyFor = (z: string) => lesionKey(kind, z);
     return (
       <div className="cariology-panel">
         <p className="cariology-panel__lead">{lesionType(kind).section}</p>
