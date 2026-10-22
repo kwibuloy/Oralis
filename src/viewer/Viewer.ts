@@ -357,7 +357,7 @@ export class Viewer {
     setTimeout(() => idle(step), 2500);
   }
 
-  /** The colour of each zone a cut face can blend into, by the index baked into the model (_nbr). */
+  /** The colour of each zone's cut faces, by the index baked into the model (_zone). */
   setZonePalette(colours: string[]) {
     colours.slice(0, ZONE_SLOTS).forEach((c, i) => this.zonePalette.value[i].set(c));
     this.needsRender = true;
@@ -425,7 +425,7 @@ export class Viewer {
   private biteTween = { t: 0 };
   private frameNear = 0.1;
   private disposed = false;
-  /** Colours that `blendZones` cut faces fade into (see setZonePalette). */
+  /** Colours of `cutZone` cut faces (see setZonePalette). */
   private zonePalette = { value: Array.from({ length: ZONE_SLOTS }, () => new THREE.Color()) };
   private bvhWorker: GenerateMeshBVHWorker | null = null;
   private lastInput = 0;

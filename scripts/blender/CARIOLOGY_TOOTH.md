@@ -1,8 +1,9 @@
 # Cariology tooth in Blender — status, method and bug log
 
-The Blender replacement for the Cariology lesion molar (started 2026-10-22). **Model only**: the
-website is not wired to it yet. Read this before touching `cariology_shape.py` or
-`build_cariology.py`; the bug log at the end lists every problem already hit and its fix.
+The Cariology lesion molar, built in Blender (started 2026-10-22; **live on the website since
+2026-10-22**, replacing the old `build-cariology.mjs` tooth). Read this before touching
+`cariology_shape.py` or `build_cariology.py`; the bug log at the end lists every problem already hit
+and its fix.
 
 ## Files
 
@@ -11,10 +12,36 @@ website is not wired to it yet. Read this before touching `cariology_shape.py` o
 | `scripts/blender/cariology_shape.py` | The tooth as signed-distance fields (crown, cusps, fissures, roots, pulp, enamel thickness, cervical line) |
 | `scripts/blender/build_cariology.py` | Meshing, distance fields, tissues, lesion stages, collar, materials, normals, export |
 | `scripts/blender/render_cariology.py` | Workbench renders of one site/stage, for checking |
-| `models-src/cariology-blender.glb` / `.blend` / `.json` | Draft outputs: GLB 8.3 MB, `.blend` 61 MB compressed, JSON manifest |
+| `models-src/cariology-blender.glb` / `.blend` / `.json` | Outputs: GLB 8.3 MB, `.blend` 61 MB compressed (not committed), JSON manifest |
+| `scripts/extract-bodyparts.mjs` (`addCariologyParts`, `pinOnCut`) | Merges the GLB into `public/models/cariology.glb` and writes `src/content/cariology-lesions.generated.json` |
 
-The live site still loads `public/models/cariology.glb` from `scripts/build-cariology.mjs`. Do not
-overwrite it with this model until the user decides to switch.
+## On the website
+
+- **Names** are the content keys (`src/content/cariology.ts`): `cl-<site>-static-<tissue>` (the cut
+  tooth outside the patch box), `cl-<site>-perio-<part>` (bone, PDL, gingiva) and
+  `cl-<site>-<stage>-<zone>` (the patch at one stage). The Lesion view shows static + perio + one stage,
+  so a stage change swaps only the patch.
+- **Merge** (`extract-bodyparts.mjs`): each part's two primitives (natural, `(cut)`) become one, with
+  per-vertex `_CUT` (1 on cut faces) and `_ZONE` (index into `regions` of the generated JSON). Custom
+  normals are copied as they are. Scale 0.1 (mm → model cm), beside the arches. From the old
+  `models-src/cariology.glb` only the process block (`pr-*`) is taken.
+- **Colours**: the outside of every part takes `ZONES[zone].real`; cut faces take the viewer's zone
+  palette (`cutZone` in `src/viewer/surface.ts`), set to the study colours (`ZONES[zone].colour`) when
+  Show zones is on (the default) and to the natural ones when off. Both match the palette below.
+  The old growth lines (`_DIR`, `_DEPTH`) and blurred zone borders (`_nbr`, `_blend`) were dropped
+  (user's choice): cut faces are flat colours with sharp borders.
+- **Pins**: one per lesion zone and the pulp, on the cut plane where the part has most area, at the
+  triangle centre farthest from that plane's outline (`pinOnCut`). Smooth-surface stages have no pulp
+  pin (its patch pulp never reaches a cut face).
+- **Camera**: `LESION_VIEW` in `cariology.ts` (glTF axes: +x distal, +y occlusal, +z buccal).
+- **Surface zone**: after cavitation a ring of it stays around the cavity (removed only within 0.3 mm of
+  the rim); `content.test.ts` checks that every enamel zone still lines a cavitated lesion (user's choice).
+
+### Measured (2026-10-22)
+
+`public/models/cariology.glb` 28.7 MB → 11.1 MB (whole Cariology model: arches, sites, process block,
+lesion molar; 4.56 M triangles). Download at 20 Mbit/s, 40 ms (Chrome throttling): 11.7 s → 4.8 s.
+Ready (first pin shown) on a local dev server at 390 px: 1.6–2.0 s.
 
 ## Commands
 
@@ -71,8 +98,8 @@ The user is not a dental student: ask in plain words, never assume.
   dentin zones (infected, affected, sclerotic), tertiary dentin lens on the pulp wall, undermining
   cavities (narrow opening, wider bowl in dentin) lined by every zone, microcavities (a local
   widening of the fissure; a shallow dish on the smooth surface), rounded cavity rims.
-- **Base + patch**: per site, the cut tooth outside a patch box is stored once (`<site>-base-<part>`);
-  each stage stores only the patch (`<site>-s<n>-<zone>`). A JSON manifest lists parts per stage,
+- **Base + patch**: per site, the cut tooth outside a patch box is stored once (`cl-<site>-static-<part>`, `cl-<site>-perio-<part>`);
+  each stage stores only the patch (`cl-<site>-<n>-<zone>`). A JSON manifest lists parts per stage,
   lesion position (glTF coordinates), cut box and patch box.
 - **Size**: 8.3 MB GLB (Draco), ~3.0 M triangles, 156 objects, against 28.7 MB for the old model.
 - **Draft files written** (2026-10-22) and checked by re-importing the GLB: all 156 manifest names
@@ -92,8 +119,9 @@ The user is not a dental student: ask in plain words, never assume.
    planes meet the widened fissure (real geometry, not debris).
 3. The 61 MB `.blend` is **not committed** (user's choice; it is in `.gitignore`). Rebuild it with the
    full-build command to open the model in Blender.
-4. Later, only if the user asks: website integration (content keys, patch swapping in the Viewer,
-   `content.test.ts`), the `anatomy-reviewer` agent, and a guard-hook rule for the new generated files.
+4. Website integration done (2026-10-22, see "On the website"); the guard hook covers the new
+   generated files. Not done: an `anatomy-reviewer` pass over the new zones (notably the surface-zone
+   ring after cavitation); pins can crowd on the small early lesions.
 
 ## How it is built (pipeline)
 

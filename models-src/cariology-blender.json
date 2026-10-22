@@ -5,77 +5,77 @@
  "sites": {
   "pit-fissure": {
    "base": [
-    "pit-fissure-base-alveolar-bone",
-    "pit-fissure-base-pdl",
-    "pit-fissure-base-gingiva",
-    "pit-fissure-base-enamel",
-    "pit-fissure-base-cementum",
-    "pit-fissure-base-dentin",
-    "pit-fissure-base-pulp"
+    "cl-pit-fissure-perio-alveolar-bone",
+    "cl-pit-fissure-perio-pdl",
+    "cl-pit-fissure-perio-gingiva",
+    "cl-pit-fissure-static-enamel",
+    "cl-pit-fissure-static-cementum",
+    "cl-pit-fissure-static-dentin",
+    "cl-pit-fissure-static-pulp"
    ],
    "stages": [
     [
-     "pit-fissure-s0-enamel",
-     "pit-fissure-s0-dentin",
-     "pit-fissure-s0-pulp"
+     "cl-pit-fissure-0-enamel",
+     "cl-pit-fissure-0-dentin",
+     "cl-pit-fissure-0-pulp"
     ],
     [
-     "pit-fissure-s1-enamel",
-     "pit-fissure-s1-enamel-surface-zone",
-     "pit-fissure-s1-enamel-translucent-zone",
-     "pit-fissure-s1-enamel-dark-zone",
-     "pit-fissure-s1-enamel-lesion-body",
-     "pit-fissure-s1-dentin",
-     "pit-fissure-s1-pulp"
+     "cl-pit-fissure-1-enamel",
+     "cl-pit-fissure-1-enamel-surface-zone",
+     "cl-pit-fissure-1-enamel-translucent-zone",
+     "cl-pit-fissure-1-enamel-dark-zone",
+     "cl-pit-fissure-1-enamel-lesion-body",
+     "cl-pit-fissure-1-dentin",
+     "cl-pit-fissure-1-pulp"
     ],
     [
-     "pit-fissure-s2-enamel",
-     "pit-fissure-s2-enamel-surface-zone",
-     "pit-fissure-s2-enamel-translucent-zone",
-     "pit-fissure-s2-enamel-dark-zone",
-     "pit-fissure-s2-enamel-lesion-body",
-     "pit-fissure-s2-sclerotic-dentin",
-     "pit-fissure-s2-dentin",
-     "pit-fissure-s2-pulp"
+     "cl-pit-fissure-2-enamel",
+     "cl-pit-fissure-2-enamel-surface-zone",
+     "cl-pit-fissure-2-enamel-translucent-zone",
+     "cl-pit-fissure-2-enamel-dark-zone",
+     "cl-pit-fissure-2-enamel-lesion-body",
+     "cl-pit-fissure-2-sclerotic-dentin",
+     "cl-pit-fissure-2-dentin",
+     "cl-pit-fissure-2-pulp"
     ],
     [
-     "pit-fissure-s3-enamel",
-     "pit-fissure-s3-enamel-surface-zone",
-     "pit-fissure-s3-enamel-translucent-zone",
-     "pit-fissure-s3-enamel-dark-zone",
-     "pit-fissure-s3-enamel-lesion-body",
-     "pit-fissure-s3-infected-dentin",
-     "pit-fissure-s3-affected-dentin",
-     "pit-fissure-s3-sclerotic-dentin",
-     "pit-fissure-s3-dentin",
-     "pit-fissure-s3-tertiary-dentin",
-     "pit-fissure-s3-pulp"
+     "cl-pit-fissure-3-enamel",
+     "cl-pit-fissure-3-enamel-surface-zone",
+     "cl-pit-fissure-3-enamel-translucent-zone",
+     "cl-pit-fissure-3-enamel-dark-zone",
+     "cl-pit-fissure-3-enamel-lesion-body",
+     "cl-pit-fissure-3-infected-dentin",
+     "cl-pit-fissure-3-affected-dentin",
+     "cl-pit-fissure-3-sclerotic-dentin",
+     "cl-pit-fissure-3-dentin",
+     "cl-pit-fissure-3-tertiary-dentin",
+     "cl-pit-fissure-3-pulp"
     ],
     [
-     "pit-fissure-s4-enamel",
-     "pit-fissure-s4-enamel-surface-zone",
-     "pit-fissure-s4-enamel-translucent-zone",
-     "pit-fissure-s4-enamel-dark-zone",
-     "pit-fissure-s4-enamel-lesion-body",
-     "pit-fissure-s4-infected-dentin",
-     "pit-fissure-s4-affected-dentin",
-     "pit-fissure-s4-sclerotic-dentin",
-     "pit-fissure-s4-dentin",
-     "pit-fissure-s4-tertiary-dentin",
-     "pit-fissure-s4-pulp"
+     "cl-pit-fissure-4-enamel",
+     "cl-pit-fissure-4-enamel-surface-zone",
+     "cl-pit-fissure-4-enamel-translucent-zone",
+     "cl-pit-fissure-4-enamel-dark-zone",
+     "cl-pit-fissure-4-enamel-lesion-body",
+     "cl-pit-fissure-4-infected-dentin",
+     "cl-pit-fissure-4-affected-dentin",
+     "cl-pit-fissure-4-sclerotic-dentin",
+     "cl-pit-fissure-4-dentin",
+     "cl-pit-fissure-4-tertiary-dentin",
+     "cl-pit-fissure-4-pulp"
     ],
     [
-     "pit-fissure-s5-enamel",
-     "pit-fissure-s5-enamel-surface-zone",
-     "pit-fissure-s5-enamel-translucent-zone",
-     "pit-fissure-s5-enamel-dark-zone",
-     "pit-fissure-s5-enamel-lesion-body",
-     "pit-fissure-s5-infected-dentin",
-     "pit-fissure-s5-affected-dentin",
-     "pit-fissure-s5-sclerotic-dentin",
-     "pit-fissure-s5-dentin",
-     "pit-fissure-s5-tertiary-dentin",
-     "pit-fissure-s5-pulp"
+     "cl-pit-fissure-5-enamel",
+     "cl-pit-fissure-5-enamel-surface-zone",
+     "cl-pit-fissure-5-enamel-translucent-zone",
+     "cl-pit-fissure-5-enamel-dark-zone",
+     "cl-pit-fissure-5-enamel-lesion-body",
+     "cl-pit-fissure-5-infected-dentin",
+     "cl-pit-fissure-5-affected-dentin",
+     "cl-pit-fissure-5-sclerotic-dentin",
+     "cl-pit-fissure-5-dentin",
+     "cl-pit-fissure-5-tertiary-dentin",
+     "cl-pit-fissure-5-pulp"
     ]
    ],
    "lesion": [
@@ -110,83 +110,83 @@
   },
   "smooth-surface": {
    "base": [
-    "smooth-surface-base-alveolar-bone",
-    "smooth-surface-base-pdl",
-    "smooth-surface-base-gingiva",
-    "smooth-surface-base-enamel",
-    "smooth-surface-base-cementum",
-    "smooth-surface-base-dentin",
-    "smooth-surface-base-pulp"
+    "cl-smooth-surface-perio-alveolar-bone",
+    "cl-smooth-surface-perio-pdl",
+    "cl-smooth-surface-perio-gingiva",
+    "cl-smooth-surface-static-enamel",
+    "cl-smooth-surface-static-cementum",
+    "cl-smooth-surface-static-dentin",
+    "cl-smooth-surface-static-pulp"
    ],
    "stages": [
     [
-     "smooth-surface-s0-enamel",
-     "smooth-surface-s0-dentin",
-     "smooth-surface-s0-cementum",
-     "smooth-surface-s0-pulp"
+     "cl-smooth-surface-0-enamel",
+     "cl-smooth-surface-0-dentin",
+     "cl-smooth-surface-0-cementum",
+     "cl-smooth-surface-0-pulp"
     ],
     [
-     "smooth-surface-s1-enamel",
-     "smooth-surface-s1-enamel-surface-zone",
-     "smooth-surface-s1-enamel-translucent-zone",
-     "smooth-surface-s1-enamel-dark-zone",
-     "smooth-surface-s1-enamel-lesion-body",
-     "smooth-surface-s1-dentin",
-     "smooth-surface-s1-cementum",
-     "smooth-surface-s1-pulp"
+     "cl-smooth-surface-1-enamel",
+     "cl-smooth-surface-1-enamel-surface-zone",
+     "cl-smooth-surface-1-enamel-translucent-zone",
+     "cl-smooth-surface-1-enamel-dark-zone",
+     "cl-smooth-surface-1-enamel-lesion-body",
+     "cl-smooth-surface-1-dentin",
+     "cl-smooth-surface-1-cementum",
+     "cl-smooth-surface-1-pulp"
     ],
     [
-     "smooth-surface-s2-enamel",
-     "smooth-surface-s2-enamel-surface-zone",
-     "smooth-surface-s2-enamel-translucent-zone",
-     "smooth-surface-s2-enamel-dark-zone",
-     "smooth-surface-s2-enamel-lesion-body",
-     "smooth-surface-s2-sclerotic-dentin",
-     "smooth-surface-s2-dentin",
-     "smooth-surface-s2-cementum",
-     "smooth-surface-s2-pulp"
+     "cl-smooth-surface-2-enamel",
+     "cl-smooth-surface-2-enamel-surface-zone",
+     "cl-smooth-surface-2-enamel-translucent-zone",
+     "cl-smooth-surface-2-enamel-dark-zone",
+     "cl-smooth-surface-2-enamel-lesion-body",
+     "cl-smooth-surface-2-sclerotic-dentin",
+     "cl-smooth-surface-2-dentin",
+     "cl-smooth-surface-2-cementum",
+     "cl-smooth-surface-2-pulp"
     ],
     [
-     "smooth-surface-s3-enamel",
-     "smooth-surface-s3-enamel-surface-zone",
-     "smooth-surface-s3-enamel-translucent-zone",
-     "smooth-surface-s3-enamel-dark-zone",
-     "smooth-surface-s3-enamel-lesion-body",
-     "smooth-surface-s3-infected-dentin",
-     "smooth-surface-s3-affected-dentin",
-     "smooth-surface-s3-sclerotic-dentin",
-     "smooth-surface-s3-dentin",
-     "smooth-surface-s3-cementum",
-     "smooth-surface-s3-tertiary-dentin",
-     "smooth-surface-s3-pulp"
+     "cl-smooth-surface-3-enamel",
+     "cl-smooth-surface-3-enamel-surface-zone",
+     "cl-smooth-surface-3-enamel-translucent-zone",
+     "cl-smooth-surface-3-enamel-dark-zone",
+     "cl-smooth-surface-3-enamel-lesion-body",
+     "cl-smooth-surface-3-infected-dentin",
+     "cl-smooth-surface-3-affected-dentin",
+     "cl-smooth-surface-3-sclerotic-dentin",
+     "cl-smooth-surface-3-dentin",
+     "cl-smooth-surface-3-cementum",
+     "cl-smooth-surface-3-tertiary-dentin",
+     "cl-smooth-surface-3-pulp"
     ],
     [
-     "smooth-surface-s4-enamel",
-     "smooth-surface-s4-enamel-surface-zone",
-     "smooth-surface-s4-enamel-translucent-zone",
-     "smooth-surface-s4-enamel-dark-zone",
-     "smooth-surface-s4-enamel-lesion-body",
-     "smooth-surface-s4-infected-dentin",
-     "smooth-surface-s4-affected-dentin",
-     "smooth-surface-s4-sclerotic-dentin",
-     "smooth-surface-s4-dentin",
-     "smooth-surface-s4-cementum",
-     "smooth-surface-s4-tertiary-dentin",
-     "smooth-surface-s4-pulp"
+     "cl-smooth-surface-4-enamel",
+     "cl-smooth-surface-4-enamel-surface-zone",
+     "cl-smooth-surface-4-enamel-translucent-zone",
+     "cl-smooth-surface-4-enamel-dark-zone",
+     "cl-smooth-surface-4-enamel-lesion-body",
+     "cl-smooth-surface-4-infected-dentin",
+     "cl-smooth-surface-4-affected-dentin",
+     "cl-smooth-surface-4-sclerotic-dentin",
+     "cl-smooth-surface-4-dentin",
+     "cl-smooth-surface-4-cementum",
+     "cl-smooth-surface-4-tertiary-dentin",
+     "cl-smooth-surface-4-pulp"
     ],
     [
-     "smooth-surface-s5-enamel",
-     "smooth-surface-s5-enamel-surface-zone",
-     "smooth-surface-s5-enamel-translucent-zone",
-     "smooth-surface-s5-enamel-dark-zone",
-     "smooth-surface-s5-enamel-lesion-body",
-     "smooth-surface-s5-infected-dentin",
-     "smooth-surface-s5-affected-dentin",
-     "smooth-surface-s5-sclerotic-dentin",
-     "smooth-surface-s5-dentin",
-     "smooth-surface-s5-cementum",
-     "smooth-surface-s5-tertiary-dentin",
-     "smooth-surface-s5-pulp"
+     "cl-smooth-surface-5-enamel",
+     "cl-smooth-surface-5-enamel-surface-zone",
+     "cl-smooth-surface-5-enamel-translucent-zone",
+     "cl-smooth-surface-5-enamel-dark-zone",
+     "cl-smooth-surface-5-enamel-lesion-body",
+     "cl-smooth-surface-5-infected-dentin",
+     "cl-smooth-surface-5-affected-dentin",
+     "cl-smooth-surface-5-sclerotic-dentin",
+     "cl-smooth-surface-5-dentin",
+     "cl-smooth-surface-5-cementum",
+     "cl-smooth-surface-5-tertiary-dentin",
+     "cl-smooth-surface-5-pulp"
     ]
    ],
    "lesion": [
@@ -221,49 +221,49 @@
   },
   "root": {
    "base": [
-    "root-base-alveolar-bone",
-    "root-base-pdl",
-    "root-base-gingiva",
-    "root-base-enamel",
-    "root-base-cementum",
-    "root-base-dentin",
-    "root-base-pulp"
+    "cl-root-perio-alveolar-bone",
+    "cl-root-perio-pdl",
+    "cl-root-perio-gingiva",
+    "cl-root-static-enamel",
+    "cl-root-static-cementum",
+    "cl-root-static-dentin",
+    "cl-root-static-pulp"
    ],
    "stages": [
     [
-     "root-s0-enamel",
-     "root-s0-dentin",
-     "root-s0-cementum",
-     "root-s0-pulp"
+     "cl-root-0-enamel",
+     "cl-root-0-dentin",
+     "cl-root-0-cementum",
+     "cl-root-0-pulp"
     ],
     [
-     "root-s1-enamel",
-     "root-s1-infected-dentin",
-     "root-s1-affected-dentin",
-     "root-s1-sclerotic-dentin",
-     "root-s1-dentin",
-     "root-s1-cementum",
-     "root-s1-pulp"
+     "cl-root-1-enamel",
+     "cl-root-1-infected-dentin",
+     "cl-root-1-affected-dentin",
+     "cl-root-1-sclerotic-dentin",
+     "cl-root-1-dentin",
+     "cl-root-1-cementum",
+     "cl-root-1-pulp"
     ],
     [
-     "root-s2-enamel",
-     "root-s2-infected-dentin",
-     "root-s2-affected-dentin",
-     "root-s2-sclerotic-dentin",
-     "root-s2-dentin",
-     "root-s2-cementum",
-     "root-s2-tertiary-dentin",
-     "root-s2-pulp"
+     "cl-root-2-enamel",
+     "cl-root-2-infected-dentin",
+     "cl-root-2-affected-dentin",
+     "cl-root-2-sclerotic-dentin",
+     "cl-root-2-dentin",
+     "cl-root-2-cementum",
+     "cl-root-2-tertiary-dentin",
+     "cl-root-2-pulp"
     ],
     [
-     "root-s3-enamel",
-     "root-s3-infected-dentin",
-     "root-s3-affected-dentin",
-     "root-s3-sclerotic-dentin",
-     "root-s3-dentin",
-     "root-s3-cementum",
-     "root-s3-tertiary-dentin",
-     "root-s3-pulp"
+     "cl-root-3-enamel",
+     "cl-root-3-infected-dentin",
+     "cl-root-3-affected-dentin",
+     "cl-root-3-sclerotic-dentin",
+     "cl-root-3-dentin",
+     "cl-root-3-cementum",
+     "cl-root-3-tertiary-dentin",
+     "cl-root-3-pulp"
     ]
    ],
    "lesion": [
