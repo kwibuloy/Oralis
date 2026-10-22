@@ -35,12 +35,16 @@ and its fix.
   (user's choice): cut faces are flat colours with sharp borders.
 - **Pins**: one per lesion zone and the pulp, on the cut plane where the part has most area, at the
   triangle centre farthest from that plane's outline (`pinOnCut`). Smooth-surface stages have no pulp
-  pin (its patch pulp never reaches a cut face).
+  pin (its patch pulp never reaches a cut face). On screen, pins that would overlap are pushed apart
+  (`spreadPins` in `Viewer.ts`), each with a thin line to a dot at its point; zoomed in, they sit on
+  their points again (user's choice).
 - **Camera**: `LESION_VIEW` in `cariology.ts` (glTF axes: +x distal, +y occlusal, +z buccal). The
-  screen opens from the front and turns to it once loaded (~0.9 s). In the Lesion view a tapped point or
-  pin is flown to, framing 2.5 mm around it (`Viewer.setSpotFocus`), not the middle of the part.
+  screen opens from the front and turns to it once loaded (~0.9 s). Tapping the tooth frames the whole
+  part as in every subject; tapping a pin uses the same distance but centres on the pin's point
+  (`Viewer.setPinFocus`). The tooth opens with nothing selected, even when the address names a part.
 - **Highlight**: cut faces take the colour from the palette, not the material, so the selection tint
-  is applied in the shader too (`uCutTint`, `SELECT_CUT_MIX` 0.55 in `Viewer.ts`).
+  is applied in the shader too (`uCutTint`); the outside of these parts gets the same amount
+  (`SELECT_CUT_MIX` 0.55 in `Viewer.ts`), so a part reads as one selection.
 - **Surface zone**: after cavitation a ring of it stays around the cavity (removed only within 0.3 mm of
   the rim); `content.test.ts` checks that every enamel zone still lines a cavitated lesion (user's choice).
 
@@ -183,6 +187,9 @@ The user is not a dental student: ask in plain words, never assume.
 | Toothed band outlines around cavities | The crease of `min(front, cavity − margin)` ran along the tooth surface; OpenVDB meshes creases as steps | Smooth min (`S.smin`, k 0.12) in `around()` |
 | (Website) Opening turn sat still, then snapped to the end | The explode-slider refit ran on load, 0.2 s into the turn; two camera tweens set the camera every frame | Refit only when the slider moved (`Atlas.tsx`); a new framing kills unfinished ones (`frameBox`) |
 | (Website) Unselected cut faces black | `new THREE.Vector4()` is (0, 0, 0, **1**): a full tint to black | `cutTint` starts at (0, 0, 0, 0) |
+| (Website) Enamel already selected when the screen opened | The last tap is kept in the address (`#/cariology/<key>`) and restored on reload | Cariology ignores a `cl-` selection from the address |
+| (Website) Enamel's outside lighter blue than its cut face | Outside tinted 0.22, cut faces 0.55 | Parts with `cutZone` use 0.55 outside too |
+| (Website) 47 of 82 pins overlapping at 1440 (68 on a phone), e.g. tertiary dentin under pulp | Zone points a fraction of a millimetre apart on a small lesion | `spreadPins`: push apart on screen, line to the point |
 | (Website) Selected sclerotic dentin showed as concentric rings | Every stage's patch shares the key, and a selected key was shown in hidden groups too | `shown()`: hidden meshes of a selected key only when none is in view |
 
 ## Checks that caught these
