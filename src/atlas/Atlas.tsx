@@ -17,7 +17,7 @@ import { CARVING_TOOTH, KIND_LABEL, LANDMARKS, landmarkById, MEASUREMENTS, type 
 import {
   bandColour, biofilmColour, LESION_MODEL, lesionType, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
   stageGroup, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
-  LESION_REGIONS, LESION_VIEW,
+  LESION_REGIONS, LESION_VIEW, lesionKey,
 } from '../content/cariology';
 import { CariologyPanel, lesionPartLook, LesionHead, PhTrack, ProcessCard, ProcessHead, SiteCard, StageCard, stageAt, stageTime, VIEW_OPTIONS, ZoneCard } from './Cariology';
 import LoadingBar, { type LoadProgress } from './LoadingBar';
@@ -62,7 +62,9 @@ const PROCESS_VIEW = { x: 0.55, y: 0.75, z: 1 };
 function cariologyPart(node: string): Pickable | null {
   if (node.startsWith('cl-')) {
     const zone = zoneOfPart(node);
-    return { key: node, group: node.slice(0, node.length - zone.length - 1), ...lesionPartLook(node) };
+    // The group is the node's own piece (shown per stage); the key is the whole tissue or zone.
+    const group = node.slice(0, node.length - zone.length - 1);
+    return { key: lesionKey(group.replace(/-(\d+|static|perio)$/, '').slice(3) as LesionKind, zone), group, ...lesionPartLook(node) };
   }
   if (node.startsWith('site-')) return { key: node, group: 'sites', color: node === 'site-restoration' ? SITE_COLOUR.restoration : SITE_COLOUR.site, surface: { roughness: node === 'site-restoration' ? 0.35 : 0.7 } };
   if (node.startsWith('pr-')) {
@@ -262,7 +264,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     if (carving) viewer.current?.setPins('carving-crown', LANDMARKS.map((l) => ({ id: l.id, label: String(l.n), title: l.name, position: l.position, normal: l.normal })));
     else if (cario && cariView === 'lesion') {
       viewer.current?.setPins(null, LESION_MODEL[lesionKind].stages[stage].pins.map((p, i) => {
-        const key = `${stageGroup(lesionKind, stage)}-${p.region}`;
+        const key = lesionKey(lesionKind, p.region);
         return { id: key, key, label: String(i + 1), title: ZONES[p.region]?.name ?? p.region, position: p.position, normal: p.normal };
       }));
     } else if (cario && cariView === 'sites') {
@@ -271,12 +273,13 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   }, [carving, cario, cariView, lesionKind, stage, ready]);
   useEffect(() => { viewer.current?.setActivePin(cario ? selected : landmark); }, [landmark, selected, cario, carving, cariView, stage, ready]);
 
-  // Cariology: keep a selected lesion zone selected as the stage changes (if the zone is still there).
+  // In the sectioned tooth, taps and pins fly to the spot (about 2.5 mm around it), not the middle of the part.
+  useEffect(() => { viewer.current?.setSpotFocus(cario && cariView === 'lesion' ? 0.25 : 0); }, [cario, cariView, ready]);
+  // Cariology: a selected lesion zone stays selected as the stage changes, unless this stage has none of it.
   useEffect(() => {
-    if (!cario || !selected?.startsWith(`cl-${lesionKind}-`) || selected.includes('-static-')) return;
-    const zone = zoneOfPart(selected);
-    const next = LESION_MODEL[lesionKind].stages[stage].parts.includes(zone) ? `${stageGroup(lesionKind, stage)}-${zone}` : null;
-    if (next !== selected) { quietSelect.current = true; setSelected(next); }
+    if (!cario || !selected?.startsWith(`cl-${lesionKind}-`)) return;
+    const model = LESION_MODEL[lesionKind], zone = zoneOfPart(selected);
+    if (![model.stages[stage].parts, model.staticParts, model.perioParts].some((p) => p.includes(zone))) { quietSelect.current = true; setSelected(null); }
   }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
   // Process view: enamel loses mineral (chalky) below the critical pH and regains it above; the biofilm turns acid.
   useEffect(() => {
@@ -315,9 +318,12 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     requestAnimationFrame(() => viewer.current?.setView(next === 'carving' ? CARVING_START : 'front'));
   };
 
-  // Refit once the slider settles; the inventory (past 50%) reads best face-on.
+  // Refit once the slider settles; the inventory (past 50%) reads best face-on. Only after the slider has
+  // moved: on load this refit started 0.2 s into Cariology's opening turn and held the camera still.
+  const fittedExplode = useRef(explode);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || fittedExplode.current === explode) return;
+    fittedExplode.current = explode;
     const id = setTimeout(() => {
       if (explode > 0.5) { viewer.current?.setView('front'); setView('front'); } else viewer.current?.fit();
     }, 220);

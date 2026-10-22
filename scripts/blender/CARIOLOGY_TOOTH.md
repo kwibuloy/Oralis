@@ -20,7 +20,10 @@ and its fix.
 - **Names** are the content keys (`src/content/cariology.ts`): `cl-<site>-static-<tissue>` (the cut
   tooth outside the patch box), `cl-<site>-perio-<part>` (bone, PDL, gingiva) and
   `cl-<site>-<stage>-<zone>` (the patch at one stage). The Lesion view shows static + perio + one stage,
-  so a stage change swaps only the patch.
+  so a stage change swaps only the patch. On screen every piece of one tissue or zone shares the key
+  `cl-<site>-<zone>` (`lesionKey`; the node name stays the group), so the fixed dentin and the stage's
+  dentin patch are tapped, highlighted and described as one part (user's choice). The viewer shows a
+  selected key's hidden meshes only when none of them is in view, so other stages' patches stay hidden.
 - **Merge** (`extract-bodyparts.mjs`): each part's two primitives (natural, `(cut)`) become one, with
   per-vertex `_CUT` (1 on cut faces) and `_ZONE` (index into `regions` of the generated JSON). Custom
   normals are copied as they are. Scale 0.1 (mm → model cm), beside the arches. From the old
@@ -33,7 +36,11 @@ and its fix.
 - **Pins**: one per lesion zone and the pulp, on the cut plane where the part has most area, at the
   triangle centre farthest from that plane's outline (`pinOnCut`). Smooth-surface stages have no pulp
   pin (its patch pulp never reaches a cut face).
-- **Camera**: `LESION_VIEW` in `cariology.ts` (glTF axes: +x distal, +y occlusal, +z buccal).
+- **Camera**: `LESION_VIEW` in `cariology.ts` (glTF axes: +x distal, +y occlusal, +z buccal). The
+  screen opens from the front and turns to it once loaded (~0.9 s). In the Lesion view a tapped point or
+  pin is flown to, framing 2.5 mm around it (`Viewer.setSpotFocus`), not the middle of the part.
+- **Highlight**: cut faces take the colour from the palette, not the material, so the selection tint
+  is applied in the shader too (`uCutTint`, `SELECT_CUT_MIX` 0.55 in `Viewer.ts`).
 - **Surface zone**: after cavitation a ring of it stays around the cavity (removed only within 0.3 mm of
   the rim); `content.test.ts` checks that every enamel zone still lines a cavitated lesion (user's choice).
 
@@ -174,6 +181,9 @@ The user is not a dental student: ask in plain words, never assume.
 | Saw-tooth line on a cavity wall at the DEJ | Cavity floor built parallel to the DEJ (`−D − 0.08`) | Close the enamel part across the axis (`along − (t_dej + 0.1)`) |
 | Smooth-surface microcavity floor ragged | Flat floor parallel to the tooth surface layers | A dish (ellipse in lateral distance and depth) |
 | Toothed band outlines around cavities | The crease of `min(front, cavity − margin)` ran along the tooth surface; OpenVDB meshes creases as steps | Smooth min (`S.smin`, k 0.12) in `around()` |
+| (Website) Opening turn sat still, then snapped to the end | The explode-slider refit ran on load, 0.2 s into the turn; two camera tweens set the camera every frame | Refit only when the slider moved (`Atlas.tsx`); a new framing kills unfinished ones (`frameBox`) |
+| (Website) Unselected cut faces black | `new THREE.Vector4()` is (0, 0, 0, **1**): a full tint to black | `cutTint` starts at (0, 0, 0, 0) |
+| (Website) Selected sclerotic dentin showed as concentric rings | Every stage's patch shares the key, and a selected key was shown in hidden groups too | `shown()`: hidden meshes of a selected key only when none is in view |
 
 ## Checks that caught these
 
