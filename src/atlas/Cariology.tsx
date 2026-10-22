@@ -18,12 +18,11 @@ export const stageTime = (kind: LesionKind, stage: number) => (stage + 0.5) / le
 export const VIEW_OPTIONS: [CariologyView, string][] = [['lesion', 'Lesion'], ['sites', 'Sites'], ['process', 'Process']];
 
 /**
- * How each tissue of the lesion molar looks (sizes in millimetres). The tooth itself stays smooth:
- * glossy enamel, with only faint growth lines (striae of Retzius, incremental lines in dentin) on the
- * cut faces; carious dentin and pulp are stained, bone and gingiva textured.
+ * How the outside of each tissue of the lesion molar looks (sizes in millimetres): glossy enamel,
+ * stained carious dentin and pulp, textured bone and gingiva. Cut faces are flat zone colours.
  */
-const ENAMEL: SurfaceStyle = { bands: 0.1, bandSpacing: 0.32, roughness: 0.28, clearcoat: 0.55 };
-const DENTIN: SurfaceStyle = { bands: 0.08, bandSpacing: 0.45, roughness: 0.55 };
+const ENAMEL: SurfaceStyle = { roughness: 0.28, clearcoat: 0.55 };
+const DENTIN: SurfaceStyle = { roughness: 0.55 };
 const CHALK: SurfaceStyle = { roughness: 0.78 };
 export const TISSUE_LOOK: Record<string, SurfaceStyle> = {
   enamel: ENAMEL,
@@ -50,10 +49,8 @@ const DRAW_ORDER = [
 export function lesionPartLook(key: string) {
   const zone = zoneOfPart(key);
   const fissure = key.startsWith('cl-pit-fissure-') && /^enamel-(surface-zone|lesion-body)$/.test(zone);
-  // Pit-and-fissure and smooth-surface sections are drawn schematic: flat zone colours on the cut faces,
-  // fading into each other at the boundaries (the model bakes each cut-face vertex's neighbour zone).
-  const section = /^cl-(pit-fissure|smooth-surface)-/.test(key) ? { flatCut: true, blendZones: true } : {};
-  const look = { ...TISSUE_LOOK[zone], ...section };
+  // Cut faces are drawn flat in the zone palette's colour (study or natural, see Show zones).
+  const look = { ...TISSUE_LOOK[zone], flatCut: true, cutZone: true };
   return {
     color: ZONES[zone]?.real ?? '#ddd',
     surface: fissure ? { ...look, stain: '#9b7448', stainAmount: 0.55, stainSize: 0.25 } : look,
