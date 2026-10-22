@@ -15,9 +15,9 @@ import FunctionCard from './FunctionCard';
 import { LandmarkCard, ToothCard } from './CarvingCards';
 import { CARVING_TOOTH, KIND_LABEL, LANDMARKS, landmarkById, MEASUREMENTS, type LandmarkKind } from '../content/carving';
 import {
-  bandColour, biofilmColour, LESION_MODEL, lesionType, PERIO_ZONES, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
+  bandColour, biofilmColour, LESION_MODEL, lesionType, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
   stageGroup, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
-  LESION_REGIONS,
+  LESION_REGIONS, LESION_VIEW, lesionKey,
 } from '../content/cariology';
 import { CariologyPanel, lesionPartLook, LesionHead, PhTrack, ProcessCard, ProcessHead, SiteCard, StageCard, stageAt, stageTime, VIEW_OPTIONS, ZoneCard } from './Cariology';
 import LoadingBar, { type LoadProgress } from './LoadingBar';
@@ -62,7 +62,9 @@ const PROCESS_VIEW = { x: 0.55, y: 0.75, z: 1 };
 function cariologyPart(node: string): Pickable | null {
   if (node.startsWith('cl-')) {
     const zone = zoneOfPart(node);
-    return { key: node, group: node.slice(0, node.length - zone.length - 1), ...lesionPartLook(node) };
+    // The group is the node's own piece (shown per stage); the key is the whole tissue or zone.
+    const group = node.slice(0, node.length - zone.length - 1);
+    return { key: lesionKey(group.replace(/-(\d+|static|perio)$/, '').slice(3) as LesionKind, zone), group, ...lesionPartLook(node) };
   }
   if (node.startsWith('site-')) return { key: node, group: 'sites', color: node === 'site-restoration' ? SITE_COLOUR.restoration : SITE_COLOUR.site, surface: { roughness: node === 'site-restoration' ? 0.35 : 0.7 } };
   if (node.startsWith('pr-')) {
@@ -93,7 +95,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<LoadProgress | null>(null);
-  const [selected, setSelected] = useState<string | null>(initialSelected ?? null);
+  // Cariology's tooth always opens with nothing selected: a lesion part left in the address by the last
+  // tap (and restored on reload) read as a highlight the student had not asked for.
+  const [selected, setSelected] = useState<string | null>((modeId === 'cariology' && initialSelected?.startsWith('cl-') ? null : initialSelected) ?? null);
   const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
   const [visible, setVisible] = useState<string[]>(mode.defaultVisible);
   const [isolated, setIsolated] = useState(false);
@@ -123,7 +127,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [lesionKind, setLesionKind] = useState<LesionKind>('pit-fissure');
   const [scenario, setScenario] = useState<Scenario>('single');
   const [stageOpen, setStageOpen] = useState(false);
-  const [showZones, setShowZones] = useState(false);
+  const [showZones, setShowZones] = useState(true);
   const stage = cario ? stageAt(lesionKind, time) : 0;
   const minute = time * PROCESS_MINUTES;
   const cariTimeline = cario && cariView !== 'sites';
@@ -262,7 +266,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     if (carving) viewer.current?.setPins('carving-crown', LANDMARKS.map((l) => ({ id: l.id, label: String(l.n), title: l.name, position: l.position, normal: l.normal })));
     else if (cario && cariView === 'lesion') {
       viewer.current?.setPins(null, LESION_MODEL[lesionKind].stages[stage].pins.map((p, i) => {
-        const key = `${stageGroup(lesionKind, stage)}-${p.region}`;
+        const key = lesionKey(lesionKind, p.region);
         return { id: key, key, label: String(i + 1), title: ZONES[p.region]?.name ?? p.region, position: p.position, normal: p.normal };
       }));
     } else if (cario && cariView === 'sites') {
@@ -271,21 +275,20 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   }, [carving, cario, cariView, lesionKind, stage, ready]);
   useEffect(() => { viewer.current?.setActivePin(cario ? selected : landmark); }, [landmark, selected, cario, carving, cariView, stage, ready]);
 
-  // Cariology: keep a selected lesion zone selected as the stage changes (if the zone is still there).
+  // In the sectioned tooth a pin flies to its own point (a tap on the tooth frames the whole part).
+  useEffect(() => { viewer.current?.setPinFocus(cario && cariView === 'lesion'); }, [cario, cariView, ready]);
+  // Cariology: a selected lesion zone stays selected as the stage changes, unless this stage has none of it.
   useEffect(() => {
-    if (!cario || !selected?.startsWith(`cl-${lesionKind}-`) || selected.includes('-static-')) return;
-    const zone = zoneOfPart(selected);
-    const next = LESION_MODEL[lesionKind].stages[stage].parts.includes(zone) ? `${stageGroup(lesionKind, stage)}-${zone}` : null;
-    if (next !== selected) { quietSelect.current = true; setSelected(next); }
+    if (!cario || !selected?.startsWith(`cl-${lesionKind}-`)) return;
+    const model = LESION_MODEL[lesionKind], zone = zoneOfPart(selected);
+    if (![model.stages[stage].parts, model.staticParts, model.perioParts].some((p) => p.includes(zone))) { quietSelect.current = true; setSelected(null); }
   }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
   // Process view: enamel loses mineral (chalky) below the critical pH and regains it above; the biofilm turns acid.
   useEffect(() => {
     if (!ready || !cario) return;
     if (cariView === 'lesion') {
-      // Show zones: the study colours instead of the natural ones.
-      const keys = [...LESION_MODEL[lesionKind].staticParts.map((z) => `${staticGroup(lesionKind)}-${z}`), ...LESION_MODEL[lesionKind].stages[stage].parts.map((z) => `${stageGroup(lesionKind, stage)}-${z}`), ...PERIO_ZONES.map((z) => `${perioGroup(lesionKind)}-${z}`)];
-      viewer.current?.setColourOverrides(showZones ? new Map(keys.map((k) => [k, ZONES[zoneOfPart(k)]?.colour ?? '#ddd'])) : null);
-      // Cut faces fade into their neighbour zone's colour, whichever set is showing.
+      // The outside stays natural; Show zones puts the study colours on the cut faces.
+      viewer.current?.setColourOverrides(null);
       viewer.current?.setZonePalette(LESION_REGIONS.map((z) => (showZones ? ZONES[z]?.colour : ZONES[z]?.real) ?? '#ddd'));
       return;
     }
@@ -294,9 +297,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     const colours = new Map<string, string>([0, 1, 2, 3, 4].map((b) => [`pr-band-${b}`, bandColour(b, m)]));
     colours.set('pr-biofilm-matrix', biofilmColour(plaquePH(minute, scenario)));
     viewer.current?.setColourOverrides(colours);
-  }, [cario, cariView, minute, scenario, ready, showZones, lesionKind, stage]);
+  }, [cario, cariView, minute, scenario, ready, showZones]);
   const cariViewDir = (v: CariologyView, kind: LesionKind) => {
-    const d = LESION_MODEL[kind].view;
+    const d = LESION_VIEW[kind];
     return v === 'lesion' ? { x: d[0], y: d[1], z: d[2] } : v === 'process' ? PROCESS_VIEW : 'front';
   };
   // Frame the opening view once the model is in.
@@ -317,9 +320,12 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     requestAnimationFrame(() => viewer.current?.setView(next === 'carving' ? CARVING_START : 'front'));
   };
 
-  // Refit once the slider settles; the inventory (past 50%) reads best face-on.
+  // Refit once the slider settles; the inventory (past 50%) reads best face-on. Only after the slider has
+  // moved: on load this refit started 0.2 s into Cariology's opening turn and held the camera still.
+  const fittedExplode = useRef(explode);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || fittedExplode.current === explode) return;
+    fittedExplode.current = explode;
     const id = setTimeout(() => {
       if (explode > 0.5) { viewer.current?.setView('front'); setView('front'); } else viewer.current?.fit();
     }, 220);
