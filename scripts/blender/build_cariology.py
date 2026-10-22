@@ -19,7 +19,9 @@ How it is built
 - Normals come from the fields, not the triangles, so curved surfaces shade smoothly and the seam
   between the base and a stage patch does not show.
 
-Objects are named <site>-base-<part> and <site>-s<stage>-<zone> (e.g. pit-fissure-s3-infected-dentin).
+Objects are named as the website's content keys (src/content/cariology.ts): cl-<site>-static-<tissue>
+for the base tooth, cl-<site>-perio-<part> for the bone, ligament and gingiva, and cl-<site>-<stage>-<zone>
+for a stage patch (e.g. cl-pit-fissure-3-infected-dentin).
 Each has a natural material outside and a study material on its cut faces. A JSON manifest beside
 the GLB lists sites, stages, parts and lesion positions (glTF coordinates, Y up).
 
@@ -322,6 +324,7 @@ def tooth_inner(x, y, z, T, D):
 
 
 # ---------- the collar: periodontal ligament, alveolar bone and gingiva ----------
+PERIO = ("alveolar-bone", "pdl", "gingiva")
 
 PDL, BONE, GUM, GUM_BELOW_CREST = 0.2, 1.0, 0.35, 2.2
 
@@ -827,8 +830,9 @@ def build():
         for k, me in parts.items():
             if empty(me):
                 continue
-            finals.append((f"{site.name}-base-{k}", k, me, surfaces, planes, cuts, site.name, "base"))
-            names.append(f"{site.name}-base-{k}")
+            name = f"cl-{site.name}-{'perio' if k in PERIO else 'static'}-{k}"
+            finals.append((name, k, me, surfaces, planes, cuts, site.name, "base"))
+            names.append(name)
         info = {"base": names, "stages": [], "lesion": [round(site.o[0], 3), round(site.o[2], 3), round(-site.o[1], 3)],
                 "cut": [list(map(float, site.cut[0])), list(map(float, site.cut[1]))],
                 "patch": [list(map(float, site.patch[0])), list(map(float, site.patch[1]))]}
@@ -896,7 +900,7 @@ def build():
             for k, me in out.items():
                 if empty(me):
                     continue
-                name = f"{site.name}-s{n}-{k}"
+                name = f"cl-{site.name}-{n}-{k}"
                 finals.append((name, k, me, stage_surfaces, cuts + pplanes, cuts, site.name, f"stage {n}"))
                 names.append(name)
             info["stages"].append(names)

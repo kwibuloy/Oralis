@@ -15,9 +15,9 @@ import FunctionCard from './FunctionCard';
 import { LandmarkCard, ToothCard } from './CarvingCards';
 import { CARVING_TOOTH, KIND_LABEL, LANDMARKS, landmarkById, MEASUREMENTS, type LandmarkKind } from '../content/carving';
 import {
-  bandColour, biofilmColour, LESION_MODEL, lesionType, PERIO_ZONES, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
+  bandColour, biofilmColour, LESION_MODEL, lesionType, perioGroup, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SITE_COLOUR, SITE_PINS, SITES, staticGroup,
   stageGroup, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
-  LESION_REGIONS,
+  LESION_REGIONS, LESION_VIEW,
 } from '../content/cariology';
 import { CariologyPanel, lesionPartLook, LesionHead, PhTrack, ProcessCard, ProcessHead, SiteCard, StageCard, stageAt, stageTime, VIEW_OPTIONS, ZoneCard } from './Cariology';
 import LoadingBar, { type LoadProgress } from './LoadingBar';
@@ -123,7 +123,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [lesionKind, setLesionKind] = useState<LesionKind>('pit-fissure');
   const [scenario, setScenario] = useState<Scenario>('single');
   const [stageOpen, setStageOpen] = useState(false);
-  const [showZones, setShowZones] = useState(false);
+  const [showZones, setShowZones] = useState(true);
   const stage = cario ? stageAt(lesionKind, time) : 0;
   const minute = time * PROCESS_MINUTES;
   const cariTimeline = cario && cariView !== 'sites';
@@ -282,10 +282,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   useEffect(() => {
     if (!ready || !cario) return;
     if (cariView === 'lesion') {
-      // Show zones: the study colours instead of the natural ones.
-      const keys = [...LESION_MODEL[lesionKind].staticParts.map((z) => `${staticGroup(lesionKind)}-${z}`), ...LESION_MODEL[lesionKind].stages[stage].parts.map((z) => `${stageGroup(lesionKind, stage)}-${z}`), ...PERIO_ZONES.map((z) => `${perioGroup(lesionKind)}-${z}`)];
-      viewer.current?.setColourOverrides(showZones ? new Map(keys.map((k) => [k, ZONES[zoneOfPart(k)]?.colour ?? '#ddd'])) : null);
-      // Cut faces fade into their neighbour zone's colour, whichever set is showing.
+      // The outside stays natural; Show zones puts the study colours on the cut faces.
+      viewer.current?.setColourOverrides(null);
       viewer.current?.setZonePalette(LESION_REGIONS.map((z) => (showZones ? ZONES[z]?.colour : ZONES[z]?.real) ?? '#ddd'));
       return;
     }
@@ -294,9 +292,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     const colours = new Map<string, string>([0, 1, 2, 3, 4].map((b) => [`pr-band-${b}`, bandColour(b, m)]));
     colours.set('pr-biofilm-matrix', biofilmColour(plaquePH(minute, scenario)));
     viewer.current?.setColourOverrides(colours);
-  }, [cario, cariView, minute, scenario, ready, showZones, lesionKind, stage]);
+  }, [cario, cariView, minute, scenario, ready, showZones]);
   const cariViewDir = (v: CariologyView, kind: LesionKind) => {
-    const d = LESION_MODEL[kind].view;
+    const d = LESION_VIEW[kind];
     return v === 'lesion' ? { x: d[0], y: d[1], z: d[2] } : v === 'process' ? PROCESS_VIEW : 'front';
   };
   // Frame the opening view once the model is in.
