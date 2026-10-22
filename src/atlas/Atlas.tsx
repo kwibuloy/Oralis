@@ -95,7 +95,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<LoadProgress | null>(null);
-  const [selected, setSelected] = useState<string | null>(initialSelected ?? null);
+  // Cariology's tooth always opens with nothing selected: a lesion part left in the address by the last
+  // tap (and restored on reload) read as a highlight the student had not asked for.
+  const [selected, setSelected] = useState<string | null>((modeId === 'cariology' && initialSelected?.startsWith('cl-') ? null : initialSelected) ?? null);
   const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
   const [visible, setVisible] = useState<string[]>(mode.defaultVisible);
   const [isolated, setIsolated] = useState(false);
@@ -273,8 +275,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   }, [carving, cario, cariView, lesionKind, stage, ready]);
   useEffect(() => { viewer.current?.setActivePin(cario ? selected : landmark); }, [landmark, selected, cario, carving, cariView, stage, ready]);
 
-  // In the sectioned tooth, taps and pins fly to the spot (about 2.5 mm around it), not the middle of the part.
-  useEffect(() => { viewer.current?.setSpotFocus(cario && cariView === 'lesion' ? 0.25 : 0); }, [cario, cariView, ready]);
+  // In the sectioned tooth a pin flies to its own point (a tap on the tooth frames the whole part).
+  useEffect(() => { viewer.current?.setPinFocus(cario && cariView === 'lesion'); }, [cario, cariView, ready]);
   // Cariology: a selected lesion zone stays selected as the stage changes, unless this stage has none of it.
   useEffect(() => {
     if (!cario || !selected?.startsWith(`cl-${lesionKind}-`)) return;
