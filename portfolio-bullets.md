@@ -63,6 +63,10 @@ deployed statically on Vercel.
   booleans, 156 parts) so each lesion stage stores only a small patch around the lesion while the healthy
   tooth is shared, and by colouring cut faces from a per-vertex zone index in one shader, so the study and
   natural colour sets switch with a uniform update instead of new materials.
+- **Restored Cariology's opening camera turn: it covered 1° of its 64° and then snapped; now it plays the
+  full turn in 0.9 s** (frames 7–16 ms on a laptop GPU with 4x CPU slowdown), by tracing the camera angle
+  each frame, finding a second camera tween started by an unrelated refit, and letting the newest
+  framing replace an unfinished one.
 - **Removed three classes of rendering artefact** (stair-stepped zone edges, hairline seams, folded
   slivers) and the see-through holes that appeared as stages played, by moving to closed solid regions,
   boundary snapping, smoothing and draw-priority offsets, verified in zoomed phone screenshots.
@@ -148,6 +152,7 @@ its model changed in the same period (7.7 → 17.2 MB), so before and after are 
 | 1,200+ flow structures | `content.test.ts` (flow attribute present on more than 1,200 meshes) |
 | 16 stages, 161 authored parts, about 2.7M triangles, 0.08 mm | `scripts/build-cariology.mjs` output and `STEP` default (the old lesion molar, replaced 2026-10-22) |
 | Cariology 28.7 → 11.1 MB, 11.7 → 4.8 s, 156 parts | `ls` of `public/models/cariology.glb` before (commit `adc844e`) and after; download of both files in headless Chrome with network throttling at 20 Mbit/s and 40 ms (`fetch`, cache off, two runs each, equal); 156 parts from `models-src/cariology-blender.json`. The whole GLB includes the arches, sites and process block, which did not change |
+| Opening turn 1° of 64° → full turn in 0.9 s | Camera azimuth logged every animation frame from page load (headless Chrome, D3D11 GPU, 390 px at 2x, 4x CPU throttle), before and after the fix: 19.3° → 18.2° then a jump to −44.6°, versus a smooth 19.3° → −45.0° |
 | 192,864 triangles, 30 landmarks | `scripts/build-carving-tooth.mjs` output |
 | 20 viewport/subject touch checks, 0 failures | `scripts/touch-check.mjs` run on 5 subjects × 4 widths |
 | 630+ notes | Count of `summary:` entries in `body.ts`, `systems.ts` and `anatomy.ts`; some are shared family notes |

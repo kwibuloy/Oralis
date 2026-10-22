@@ -64,8 +64,9 @@ export const MODES: Mode[] = [
   {
     id: 'cariology', name: 'Cariology', short: 'Caries', model: '/models/cariology.glb', source: 'bodyparts3d',
     lead: 'How caries starts and progresses: lesion stages in a sectioned molar with ICDAS and ICCMS codes, caries sites on the arch by G.V. Black class, and the biofilm and pH behind it.',
-    // The three views (Lesion, Sites, Process) set what is visible; the lesion molar opens first.
-    defaultVisible: ['cl-pit-fissure-static', 'cl-pit-fissure-0'],
+    // The three views (Lesion, Sites, Process) set what is visible; the lesion molar opens first, with
+    // its bone and gingiva, so all its shaders are linked while loading (not during the opening flight).
+    defaultVisible: ['cl-pit-fissure-static', 'cl-pit-fissure-0', 'cl-pit-fissure-perio'],
     presets: [],
   },
   {

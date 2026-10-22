@@ -108,8 +108,12 @@ export const ZONES: Record<string, { name: string; note: string; colour: string;
  * Lesion-molar parts are named cl-<kind>-<stage>-<zone> for the patch around the lesion at one stage,
  * cl-<kind>-static-<zone> for the unchanging rest of the cut tooth, and cl-<kind>-perio-<zone> for the
  * bone, ligament and gingiva around it. A stage swaps only its patch.
+ *
+ * On screen each tissue or zone of a lesion is one part, cl-<kind>-<zone> (lesionKey): the fixed piece and
+ * the stage patch of the dentin, say, are selected, highlighted and described together.
  */
-export const zoneOfPart = (key: string) => key.replace(/^cl-(pit-fissure|smooth-surface|root)-(\d+|static|perio)-/, '');
+export const zoneOfPart = (key: string) => key.replace(/^cl-(pit-fissure|smooth-surface|root)-((\d+|static|perio)-)?/, '');
+export const lesionKey = (kind: LesionKind, zone: string) => `cl-${kind}-${zone}`;
 export const isLesionPart = (key: string) => key.startsWith('cl-');
 
 export interface LesionStageModel { parts: string[]; pins: { region: string; position: [number, number, number]; normal: [number, number, number] }[] }
