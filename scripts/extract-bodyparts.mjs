@@ -3,6 +3,7 @@
 //
 //   git clone --depth 1 https://github.com/ashemag/human-atlas ../human-atlas
 //   node scripts/extract-bodyparts.mjs ../human-atlas
+//   ONLY=dental node scripts/extract-bodyparts.mjs ../human-atlas   (just those models; structures JSON untouched)
 //
 // Run scripts/build-carving-tooth.mjs and scripts/build-cariology.mjs first: the Oral anatomy model
 // includes the carving molar, the Cariology model the lesion molar and the process block.
@@ -125,7 +126,9 @@ mkdirSync('public/models', { recursive: true });
 const keyOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const records = new Map();
 
+const only = process.env.ONLY?.split(',');
 for (const [model, includes] of Object.entries(MODELS)) {
+  if (only && !only.includes(model)) continue;
   const parts = picked.filter((p) => includes(p.group));
   // Centre each model on its own bounding box.
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
@@ -144,6 +147,7 @@ for (const [model, includes] of Object.entries(MODELS)) {
     return { id: p.id, name: unsided(p.name).toLowerCase(), sided: p.name.toLowerCase(), group: p.group, system: p.system, pos, nrm, idx };
   });
   const flows = model === 'physiology' ? computeFlows(geometry) : new Map();
+  const bites = model === 'dental' ? computeBiteWeights(geometry) : new Map();
   // Cariology: carve the caries sites into their teeth (adds the lesion parts, recolours those teeth).
   const sites = model === 'cariology' ? carveSites(geometry) : [];
   for (const [i, p] of parts.entries()) {
@@ -154,6 +158,8 @@ for (const [model, includes] of Object.entries(MODELS)) {
       .setIndices(doc.createAccessor().setType('SCALAR').setArray(idx).setBuffer(buffer));
     // Signed distance along the part's network, read by the viewer as the `_flow` attribute.
     if (flows.has(p.id)) prim.setAttribute('_FLOW', doc.createAccessor().setType('SCALAR').setArray(flows.get(p.id)).setBuffer(buffer));
+    // How far each vertex follows the lower jaw when the bite opens, read by the viewer as `_bite`.
+    if (bites.has(p.id)) prim.setAttribute('_BITE', doc.createAccessor().setType('SCALAR').setArray(bites.get(p.id)).setBuffer(buffer));
     if (geometry[i].col) prim.setAttribute('COLOR_0', doc.createAccessor().setType('VEC3').setArray(geometry[i].col).setBuffer(buffer));
     scene.addChild(doc.createNode(p.id).setMesh(doc.createMesh(p.id).addPrimitive(prim)));
 
@@ -552,6 +558,103 @@ async function addCariologyParts(doc, buffer, scene, archRightEdge) {
   console.log(`  merged ${src.getRoot().listNodes().length} cariology parts`);
 }
 
+/**
+ * Oral anatomy's open bite: the fraction of the lower jaw's offset each vertex follows (the `_BITE`
+ * attribute). The mandible, lower teeth and lower gingiva move whole (the viewer does that by key); the
+ * hyoid drops about half as far. Parts tied between them and the fixed skull (tongue, floor-of-mouth
+ * muscles, glands, lips, pharyngeal wall) stretch: each vertex blends the anchors its part is tied to by
+ * inverse distance, so it moves with the bone it lies on and stretches in between.
+ */
+function computeBiteWeights(geometry) {
+  const lowerJaw = (g) => g.group === 'mandible' || (/lower/.test(g.sided) && (g.group === 'teeth' || g.group === 'gingiva'));
+  const upperJaw = (g) => g.group === 'maxilla' || (/upper/.test(g.sided) && (g.group === 'teeth' || g.group === 'gingiva'));
+  const fixed = (g) => g.group === 'skull' || upperJaw(g) || /^(atlas|axis)$/.test(g.name);
+  const anchor = (test, value) => ({ value, nearest: pointIndex(geometry.filter(test).map((g) => g.pos)) });
+  const JAW = anchor(lowerJaw, 1), HYOID = anchor((g) => g.name === 'hyoid bone', 0.5), FIXED = anchor(fixed, 0);
+  // The tongue and the glands hang between the jaw and the hyoid; the floor-of-mouth muscles and the
+  // pharyngeal wall also reach the skull (digastric and stylohyoid behind the ear).
+  const TIED = { tongue: [JAW, HYOID], glands: [JAW, HYOID], suprahyoid: [JAW, HYOID, FIXED], 'palate-pharynx': [JAW, HYOID, FIXED] };
+  const out = new Map();
+  for (const g of geometry) {
+    if (g.name === 'hyoid bone') { out.set(g.id, new Float32Array(g.pos.length / 3).fill(HYOID.value)); continue; }
+    if (g.group === 'lips') { out.set(g.id, lipWeights(g)); continue; }
+    const anchors = TIED[g.group];
+    if (!anchors) continue;
+    const w = new Float32Array(g.pos.length / 3);
+    for (let v = 0; v < w.length; v++) {
+      let sum = 0, total = 0;
+      for (const a of anchors) {
+        const d = a.nearest(g.pos[v * 3], g.pos[v * 3 + 1], g.pos[v * 3 + 2]);
+        const k = 1 / (d ** 4 + 1e-4); // a part lying on a bone moves with it; the blend happens in between
+        sum += a.value * k; total += k;
+      }
+      w[v] = sum / total;
+    }
+    out.set(g.id, w);
+  }
+  const range = (w) => { let lo = 1, hi = 0; for (const x of w) { lo = Math.min(lo, x); hi = Math.max(hi, x); } return `${lo.toFixed(2)}–${hi.toFixed(2)}`; };
+  console.log(`  bite weights: ${out.size} meshes`);
+  for (const [id, w] of out) console.log(`    ${geometry.find((g) => g.id === id).sided}: ${range(w)}`);
+  return out;
+}
+
+/**
+ * The lips go by height, not nearness: the upper incisors overlap the lower lip. The source lip is one
+ * surface running across the closed mouth, so it is cut along the mouth slit: each triangle goes whole to
+ * the lip its centre lies in (below the slit it follows the jaw, above it stays) and the lips part instead
+ * of stretching a sheet over the open mouth. Towards the corners the cut gives way to a smooth blend by
+ * height, the same for every triangle at a point, so the corners stretch without tearing. Unwelds the lip
+ * in `g` (the export's weld joins whatever ends up with equal weights again) and returns the weights.
+ */
+function lipWeights(g) {
+  const P = g.pos, N = g.nrm, I = g.idx;
+  let half = 0;
+  for (let i = 0; i < P.length; i += 3) half = Math.max(half, Math.abs(P[i]));
+  // The slit is the height of the corners (the outer tenth of the lip's width).
+  let sum = 0, n = 0;
+  for (let i = 0; i < P.length; i += 3) if (Math.abs(P[i]) > half * 0.9) { sum += P[i + 1]; n++; }
+  const slit = sum / n;
+  const smooth = (y, blend) => { const t = Math.min(Math.max((slit + blend - y) / (2 * blend), 0), 1); return t * t * (3 - 2 * t); };
+  const corner = (x) => Math.min(Math.max((Math.abs(x) / half - 0.7) / 0.25, 0), 1); // 0 mid-lip, 1 at the corners
+  const pos = new Float32Array(I.length * 3), nrm = new Float32Array(I.length * 3), w = new Float32Array(I.length);
+  for (let t = 0; t < I.length; t += 3) {
+    const cy = (P[I[t] * 3 + 1] + P[I[t + 1] * 3 + 1] + P[I[t + 2] * 3 + 1]) / 3;
+    const side = cy < slit ? 1 : 0;
+    for (let k = 0; k < 3; k++) {
+      const v = I[t + k], o = t + k;
+      for (let c = 0; c < 3; c++) { pos[o * 3 + c] = P[v * 3 + c]; nrm[o * 3 + c] = N[v * 3 + c]; }
+      const c = corner(P[v * 3]);
+      w[o] = (1 - c) * side + c * smooth(P[v * 3 + 1], 0.35);
+    }
+  }
+  g.pos = pos; g.nrm = nrm; g.idx = Uint32Array.from({ length: I.length }, (_, i) => i);
+  return w;
+}
+
+/** Distance from a point to the nearest vertex of a set of position arrays, through a uniform grid (cm). */
+function pointIndex(arrays, cell = 0.5) {
+  const grid = new Map();
+  const id = (i, j, k) => ((i + 512) * 1024 + (j + 512)) * 1024 + (k + 512);
+  for (const pos of arrays) for (let v = 0; v < pos.length; v += 3) {
+    const key = id(Math.floor(pos[v] / cell), Math.floor(pos[v + 1] / cell), Math.floor(pos[v + 2] / cell));
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(pos[v], pos[v + 1], pos[v + 2]);
+  }
+  return (x, y, z) => {
+    const ci = Math.floor(x / cell), cj = Math.floor(y / cell), ck = Math.floor(z / cell);
+    let best = Infinity; // squared
+    // Search shells of cells outwards; stop once no farther shell can hold a nearer point.
+    for (let r = 0; r < 200 && best > ((r - 1) * cell) ** 2; r++) {
+      for (let i = ci - r; i <= ci + r; i++) for (let j = cj - r; j <= cj + r; j++) for (let k = ck - r; k <= ck + r; k++) {
+        if (Math.max(Math.abs(i - ci), Math.abs(j - cj), Math.abs(k - ck)) !== r) continue;
+        const pts = grid.get(id(i, j, k));
+        if (pts) for (let p = 0; p < pts.length; p += 3) best = Math.min(best, (pts[p] - x) ** 2 + (pts[p + 1] - y) ** 2 + (pts[p + 2] - z) ** 2);
+      }
+    }
+    return Math.sqrt(best);
+  };
+}
+
 function computeFlows(geometry) {
   const by = (re) => geometry.filter((g) => re.test(g.name));
   const centroid = (list) => {
@@ -619,4 +722,5 @@ function computeFlows(geometry) {
   return out;
 }
 
-writeFileSync('src/content/structures.generated.json', JSON.stringify([...records.values()], null, 1) + '\n');
+// The structure index lists every model a mesh is in, so it is written only by a full run.
+if (!only) writeFileSync('src/content/structures.generated.json', JSON.stringify([...records.values()], null, 1) + '\n');
