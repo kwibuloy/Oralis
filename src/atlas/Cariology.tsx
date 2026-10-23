@@ -1,5 +1,5 @@
 import {
-  CRITICAL_PH, ICDAS_NOTE, LESION_MODEL, PERIO_ZONES, LESION_TYPES, lesionType, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SCENARIOS, SITES, siteById,
+  CRITICAL_PH, ICDAS_NOTE, LESION_MODEL, lesionKey, PERIO_ZONES, LESION_TYPES, lesionType, mineralAt, plaquePH, PROCESS_MINUTES, PROCESS_PARTS, SCENARIOS, SITES, siteById,
   stageCodeLabel, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
 } from '../content/cariology';
 import type { SurfaceStyle } from '../viewer/Viewer';
@@ -18,12 +18,11 @@ export const stageTime = (kind: LesionKind, stage: number) => (stage + 0.5) / le
 export const VIEW_OPTIONS: [CariologyView, string][] = [['lesion', 'Lesion'], ['sites', 'Sites'], ['process', 'Process']];
 
 /**
- * How each tissue of the lesion molar looks (sizes in millimetres). The tooth itself stays smooth:
- * glossy enamel, with only faint growth lines (striae of Retzius, incremental lines in dentin) on the
- * cut faces; carious dentin and pulp are stained, bone and gingiva textured.
+ * How the outside of each tissue of the lesion molar looks (sizes in millimetres): glossy enamel,
+ * stained carious dentin and pulp, textured bone and gingiva. Cut faces are flat zone colours.
  */
-const ENAMEL: SurfaceStyle = { bands: 0.1, bandSpacing: 0.32, roughness: 0.28, clearcoat: 0.55 };
-const DENTIN: SurfaceStyle = { bands: 0.08, bandSpacing: 0.45, roughness: 0.55 };
+const ENAMEL: SurfaceStyle = { roughness: 0.28, clearcoat: 0.55 };
+const DENTIN: SurfaceStyle = { roughness: 0.55 };
 const CHALK: SurfaceStyle = { roughness: 0.78 };
 export const TISSUE_LOOK: Record<string, SurfaceStyle> = {
   enamel: ENAMEL,
@@ -50,10 +49,8 @@ const DRAW_ORDER = [
 export function lesionPartLook(key: string) {
   const zone = zoneOfPart(key);
   const fissure = key.startsWith('cl-pit-fissure-') && /^enamel-(surface-zone|lesion-body)$/.test(zone);
-  // Pit-and-fissure and smooth-surface sections are drawn schematic: flat zone colours on the cut faces,
-  // fading into each other at the boundaries (the model bakes each cut-face vertex's neighbour zone).
-  const section = /^cl-(pit-fissure|smooth-surface)-/.test(key) ? { flatCut: true, blendZones: true } : {};
-  const look = { ...TISSUE_LOOK[zone], ...section };
+  // Cut faces are drawn flat in the zone palette's colour (study or natural, see Show zones).
+  const look = { ...TISSUE_LOOK[zone], flatCut: true, cutZone: true };
   return {
     color: ZONES[zone]?.real ?? '#ddd',
     surface: fissure ? { ...look, stain: '#9b7448', stainAmount: 0.55, stainSize: 0.25 } : look,
@@ -69,10 +66,9 @@ export function CariologyPanel({ view, kind, stage, selected, onSelect, scenario
 }) {
   if (view === 'lesion') {
     const model = LESION_MODEL[kind];
-    // One row per zone; a click selects the zone's part in this stage (or the unchanging part outside the
-    // lesion, or the bone and gingiva around it).
+    // One row per tissue or zone in this stage; a click selects all of it (fixed part and stage patch).
     const zones = Object.keys(ZONES).filter((z) => model.stages[stage].parts.includes(z) || model.staticParts.includes(z) || PERIO_ZONES.includes(z));
-    const keyFor = (z: string) => (PERIO_ZONES.includes(z) ? `${model.perio}-${z}` : model.stages[stage].parts.includes(z) ? `cl-${kind}-${stage}-${z}` : `${model.static}-${z}`);
+    const keyFor = (z: string) => lesionKey(kind, z);
     return (
       <div className="cariology-panel">
         <p className="cariology-panel__lead">{lesionType(kind).section}</p>

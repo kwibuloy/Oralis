@@ -1,0 +1,1385 @@
+{
+ "units": "mm",
+ "tooth": "36",
+ "regions": [
+  "affected-dentin",
+  "alveolar-bone",
+  "cementum",
+  "dentin",
+  "enamel",
+  "enamel-dark-zone",
+  "enamel-lesion-body",
+  "enamel-surface-zone",
+  "enamel-translucent-zone",
+  "gingiva",
+  "infected-dentin",
+  "pdl",
+  "pulp",
+  "sclerotic-dentin",
+  "tertiary-dentin"
+ ],
+ "lesions": {
+  "pit-fissure": {
+   "static": "cl-pit-fissure-static",
+   "staticParts": [
+    "enamel",
+    "cementum",
+    "dentin",
+    "pulp"
+   ],
+   "perio": "cl-pit-fissure-perio",
+   "perioParts": [
+    "alveolar-bone",
+    "pdl",
+    "gingiva"
+   ],
+   "lesion": [
+    -0.3,
+    5.05,
+    -0.1
+   ],
+   "stages": [
+    {
+     "parts": [
+      "enamel",
+      "dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "pulp",
+       "position": [
+        -1.213,
+        1.414,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -0.3,
+        5.308,
+        0.009
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -0.3,
+        4.979,
+        0.662
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -0.3,
+        4.839,
+        0.456
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -0.3,
+        4.943,
+        0.221
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.213,
+        1.414,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "sclerotic-dentin",
+      "dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -1.456,
+        5.383,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -0.3,
+        4.557,
+        1.266
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -0.3,
+        4.572,
+        0.867
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -0.3,
+        4.699,
+        0.454
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -0.874,
+        4.155,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.213,
+        1.414,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -1.392,
+        5.365,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -0.3,
+        4.676,
+        1.483
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -0.3,
+        4.614,
+        1.013
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -0.3,
+        4.78,
+        0.364
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "infected-dentin",
+       "position": [
+        -0.987,
+        4.137,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -1.696,
+        4.145,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -2.494,
+        4.52,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.016,
+        1.267,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -2.293,
+        5.415,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -0.3,
+        4.465,
+        2.964
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -0.3,
+        4.856,
+        2.66
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -0.3,
+        5.454,
+        1.315
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "infected-dentin",
+       "position": [
+        -2.266,
+        4.529,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -2.649,
+        4.098,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -3.124,
+        4.134,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.016,
+        1.267,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -3.294,
+        5.315,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -0.3,
+        3.908,
+        3.62
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -0.3,
+        4.62,
+        3.746
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -0.3,
+        4.354,
+        3.175
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "infected-dentin",
+       "position": [
+        -1.057,
+        3.154,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -3.438,
+        4.365,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -3.823,
+        4.423,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "tertiary-dentin",
+       "position": [
+        -1.387,
+        1.782,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.711,
+        1.385,
+        -0.1
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "smooth-surface": {
+   "static": "cl-smooth-surface-static",
+   "staticParts": [
+    "enamel",
+    "cementum",
+    "dentin",
+    "pulp"
+   ],
+   "perio": "cl-smooth-surface-perio",
+   "perioParts": [
+    "alveolar-bone",
+    "pdl",
+    "gingiva"
+   ],
+   "lesion": [
+    -5.601,
+    4.2,
+    0.3
+   ],
+   "stages": [
+    {
+     "parts": [
+      "enamel",
+      "dentin",
+      "cementum",
+      "pulp"
+     ],
+     "pins": []
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "dentin",
+      "cementum",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -5.352,
+        5.058,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -4.873,
+        4.641,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -5.304,
+        4.889,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -5.275,
+        4.514,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "sclerotic-dentin",
+      "dentin",
+      "cementum",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -5.247,
+        5.309,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -0.38,
+        4.762,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -4.539,
+        4.452,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -4.861,
+        4.474,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -4.214,
+        4.2,
+        0.972
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "cementum",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -5.265,
+        5.249,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -0.899,
+        4.903,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -0.305,
+        4.824,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -5.077,
+        4.55,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "infected-dentin",
+       "position": [
+        -4.039,
+        4.2,
+        0.516
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -4.217,
+        4.2,
+        1.416
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -4.206,
+        4.2,
+        2.037
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "cementum",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -5.72,
+        4.2,
+        1.817
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -4.638,
+        4.2,
+        2.656
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -4.665,
+        4.2,
+        2.515
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -3.863,
+        5.702,
+        0.3
+       ],
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      },
+      {
+       "region": "infected-dentin",
+       "position": [
+        -4.15,
+        4.2,
+        2.056
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -3.848,
+        4.2,
+        2.309
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -3.872,
+        4.2,
+        2.813
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "enamel-surface-zone",
+      "enamel-translucent-zone",
+      "enamel-dark-zone",
+      "enamel-lesion-body",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "cementum",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "enamel-surface-zone",
+       "position": [
+        -5.748,
+        4.2,
+        2.399
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "enamel-translucent-zone",
+       "position": [
+        -5.064,
+        4.2,
+        2.951
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "enamel-dark-zone",
+       "position": [
+        -5.052,
+        4.2,
+        2.807
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "enamel-lesion-body",
+       "position": [
+        -4.734,
+        4.2,
+        2.656
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "infected-dentin",
+       "position": [
+        -3.688,
+        4.2,
+        2.194
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -3.863,
+        4.2,
+        2.95
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -2.733,
+        4.2,
+        0.931
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "root": {
+   "static": "cl-root-static",
+   "staticParts": [
+    "enamel",
+    "cementum",
+    "dentin",
+    "pulp"
+   ],
+   "perio": "cl-root-perio",
+   "perioParts": [
+    "alveolar-bone",
+    "pdl",
+    "gingiva"
+   ],
+   "lesion": [
+    -1.9,
+    -1.6,
+    4.563
+   ],
+   "stages": [
+    {
+     "parts": [
+      "enamel",
+      "dentin",
+      "cementum",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "pulp",
+       "position": [
+        -1.9,
+        0.667,
+        0.786
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "cementum",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "infected-dentin",
+       "position": [
+        -2.697,
+        -1.6,
+        4.509
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -3.118,
+        -1.6,
+        4.332
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -3.542,
+        -1.6,
+        4.131
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.9,
+        0.667,
+        0.786
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "cementum",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "infected-dentin",
+       "position": [
+        -3.915,
+        -1.6,
+        3.716
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -3.178,
+        -1.6,
+        3.582
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -3.657,
+        -1.6,
+        3.258
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "tertiary-dentin",
+       "position": [
+        -2.288,
+        -1.6,
+        1.573
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.9,
+        0.667,
+        -0.058
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "parts": [
+      "enamel",
+      "infected-dentin",
+      "affected-dentin",
+      "sclerotic-dentin",
+      "dentin",
+      "cementum",
+      "tertiary-dentin",
+      "pulp"
+     ],
+     "pins": [
+      {
+       "region": "infected-dentin",
+       "position": [
+        -1.9,
+        0.028,
+        4.448
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "affected-dentin",
+       "position": [
+        -1.9,
+        0.399,
+        4.362
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      },
+      {
+       "region": "sclerotic-dentin",
+       "position": [
+        -3.497,
+        -1.6,
+        2.98
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "tertiary-dentin",
+       "position": [
+        -2.628,
+        -1.6,
+        1.572
+       ],
+       "normal": [
+        0,
+        1,
+        0
+       ]
+      },
+      {
+       "region": "pulp",
+       "position": [
+        -1.9,
+        0.667,
+        -0.058
+       ],
+       "normal": [
+        -1,
+        0,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

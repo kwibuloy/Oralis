@@ -19,8 +19,9 @@ This file points; it does not document. Read the files it names.
 | Screenshots | `node scripts/shoot.mjs --widths 1440,1024,768,390 general dental histology/enamel` |
 | Touch check (selection + card) | `node scripts/touch-check.mjs` (usage in its header) |
 | Carving tooth (run before extract) | `node scripts/build-carving-tooth.mjs` → `models-src/carving-molar.glb`, `src/content/carving.generated.json` |
-| Cariology lesion molar + process block (run before extract) | `node scripts/build-cariology.mjs` → `models-src/cariology.glb`, `src/content/cariology.generated.json` |
-| General, Physiology, Oral anatomy + Cariology models | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
+| Cariology lesion molar, Blender (run before extract; see `scripts/blender/CARIOLOGY_TOOTH.md`) | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_cariology.py -- models-src/cariology-blender.glb models-src/cariology-blender.blend` → also `models-src/cariology-blender.json` |
+| Cariology process block (run before extract) | `node scripts/build-cariology.mjs` → `models-src/cariology.glb` (its old lesion molar is unused) |
+| General, Physiology, Oral anatomy + Cariology models (+ `cariology-lesions.generated.json`) | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
 | Histology model | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_histology.py -- public/models/histology.glb models-src/histology.blend` |
 
 ## Where things are
@@ -38,7 +39,7 @@ This file points; it does not document. Read the files it names.
 | Tooth numbering + morphology | `src/content/teeth.ts` |
 | Carving tooth (Oral anatomy): landmarks, notes, Wheeler measurements | `src/content/carving.ts`, `src/atlas/CarvingCards.tsx`; geometry from `scripts/build-carving-tooth.mjs` |
 | Histology tissues | `src/content/histology.ts` |
-| Cariology: lesion stages, codes, zones, sites, pH | `src/content/cariology.ts`, `src/atlas/Cariology.tsx`; shapes in `scripts/lib/caries-lesions.mjs`, sites in `extract-bodyparts.mjs` |
+| Cariology: lesion stages, codes, zones, sites, pH | `src/content/cariology.ts`, `src/atlas/Cariology.tsx`; lesion molar in `scripts/blender/build_cariology.py`, merged with pins and sites in `extract-bodyparts.mjs` (`addCariologyParts`) |
 | Atlas screen (state, cards) | `src/atlas/Atlas.tsx`, `DetailCard.tsx`, `Search.tsx`, `controls.tsx` |
 | 3D viewer (framework-free) | `src/viewer/Viewer.ts` |
 | Models and their sources | `public/models/*.glb`, `models-src/*.blend`, `scripts/` |
