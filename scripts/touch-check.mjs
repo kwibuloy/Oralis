@@ -54,7 +54,9 @@ for (const w of widths) {
   if (key) {
     const pt = await page.evaluate((key) => {
       const v = window.__viewer;
-      const m = v.meshes.find((m) => m.userData.key === key);
+      // A key can span several meshes (Cariology: a tissue's fixed part and each stage's patch): tap a shown
+      // one whose buffers are not away in the picking worker.
+      const m = v.meshes.find((m) => m.userData.key === key && m.visible && !m.userData.indexing) ?? v.meshes.find((m) => m.userData.key === key);
       if (!m) return null;
       m.geometry.computeBoundingBox();
       const c = new m.geometry.boundingBox.constructor().setFromObject(m).getCenter(new m.position.constructor()).project(v.camera);
