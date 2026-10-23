@@ -116,6 +116,8 @@ interface PartState {
   radial: THREE.Vector3; // explode direction at 100% of the spread phase
   grid: THREE.Vector3 | null; // offset that places the part in the inventory grid
   at: THREE.Vector3; // position last written to the batches (NaN until first placed)
+  /** A part that stretches with the offset: per-vertex share of it (the `_bite` attribute) and its rest shape. */
+  stretch?: { weights: ArrayLike<number>; rest: Float32Array; at: THREE.Vector3 };
 }
 
 /**
@@ -151,6 +153,9 @@ export class Viewer {
   private hovered: string | null = null;
   private isolated = false;
   private explode = 0;
+  /** The offset parts with per-vertex weights stretch by (follows setOffset). */
+  private stretchBy = new THREE.Vector3();
+  private hasStretch = false;
   private gridDirty = true;
   private colourOverride: Map<string, string> | null = null;
   // Animated flow: one clock shared by every flow material, 0..1 per loop.
@@ -405,16 +410,23 @@ export class Viewer {
     if (this.selected) this.frameKeys(on ? [this.selected] : this.visibleKeys(), on ? 1.5 : FIT_PADDING);
   }
 
-  /** Move every part whose key passes `match` by `offset` (e.g. open the bite). Animated. */
+  /**
+   * Move every part whose key passes `match` by `offset` (e.g. open the bite). Animated. Parts with
+   * per-vertex weights (the model's `_bite` attribute) stretch instead, each vertex moving by its share
+   * of `offset`, whatever `match` says: their weights already say what they are tied to.
+   */
   setOffset(match: (key: string) => boolean, offset: THREE.Vector3Like) {
     // One tween for all moving parts, one place() per frame (a tween per part, each calling place(),
     // cost parts² per frame: a stalled fly-in when Cariology opened its arches).
     gsap.killTweensOf(this.biteTween);
     const moves: [THREE.Vector3, THREE.Vector3, THREE.Vector3][] = [];
     for (const [m, s] of this.state) {
+      if (s.stretch) continue;
       const to = match(m.userData.key) ? new THREE.Vector3().copy(offset) : new THREE.Vector3();
       if (!s.bite.equals(to)) moves.push([s.bite, s.bite.clone(), to]);
     }
+    const stretchTo = new THREE.Vector3().copy(offset);
+    if (this.hasStretch && !this.stretchBy.equals(stretchTo)) moves.push([this.stretchBy, this.stretchBy.clone(), stretchTo]);
     if (this.reduced || !moves.length) { for (const [bite, , to] of moves) bite.copy(to); this.place(); return; }
     this.biteTween.t = 0;
     gsap.to(this.biteTween, { t: 1, duration: 0.8, ease: 'power3.inOut', onUpdate: () => {
@@ -599,12 +611,20 @@ export class Viewer {
     m.removeFromParent();
     m.userData = { key: info.key, group: info.group, base: new THREE.Color(vertexColours ? '#ffffff' : info.color), info, vertexColours };
     if (m.geometry.getAttribute('_flow')) m.userData.flowOn = addFlow(material, this.flowTime);
+    // Stretch weights are read on the CPU only: dropped from the geometry so the part batches with its look-alikes.
+    const weights = m.geometry.getAttribute('_bite');
+    let stretch: PartState['stretch'];
+    if (weights) {
+      stretch = { weights: weights.array, rest: (m.geometry.getAttribute('position').array as Float32Array).slice(), at: new THREE.Vector3() };
+      m.geometry.deleteAttribute('_bite');
+      this.hasStretch = true;
+    }
     // Parts are drawn through their batch; a part only joins the scene itself when drawn specially.
     this.meshes.push(m);
     const box = new THREE.Box3().setFromObject(m);
     this.state.set(m, {
       base: m.position.clone(), center: box.getCenter(new THREE.Vector3()), size: box.getSize(new THREE.Vector3()),
-      bite: new THREE.Vector3(), radial: new THREE.Vector3(), grid: null, at: new THREE.Vector3(NaN, NaN, NaN),
+      bite: new THREE.Vector3(), radial: new THREE.Vector3(), grid: null, at: new THREE.Vector3(NaN, NaN, NaN), stretch,
     });
   }
 
@@ -748,6 +768,7 @@ export class Viewer {
     const g = t > 0.5 ? ease((t - 0.5) / 0.5) : 0;
     const next = new THREE.Vector3(), target = new THREE.Vector3();
     for (const [m, s] of this.state) {
+      if (s.stretch && !s.stretch.at.equals(this.stretchBy) && !m.userData.indexing) this.stretchPart(m, s.stretch);
       next.copy(s.base).add(s.bite).addScaledVector(s.radial, ease(spread));
       if (g > 0 && s.grid) next.lerp(target.copy(s.base).add(s.grid), g);
       // Only parts that moved are written: each write touches the batch's matrix texture, and place() runs
@@ -761,6 +782,28 @@ export class Viewer {
       fadedBatch?.mesh.setMatrixAt(fadedInstance!, m.matrixWorld);
     }
     this.needsRender = true;
+  }
+
+  /** Reshape a stretching part: each vertex at its rest place plus its share of the stretch offset. */
+  private stretchPart(m: PartMesh, stretch: NonNullable<PartState['stretch']>) {
+    const { weights, rest, at } = stretch;
+    const attr = m.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const pos = attr.array as Float32Array;
+    const { x, y, z } = this.stretchBy;
+    for (let v = 0; v < weights.length; v++) {
+      const w = weights[v];
+      pos[v * 3] = rest[v * 3] + w * x;
+      pos[v * 3 + 1] = rest[v * 3 + 1] + w * y;
+      pos[v * 3 + 2] = rest[v * 3 + 2] + w * z;
+    }
+    attr.needsUpdate = true;
+    m.geometry.computeBoundingBox();
+    m.geometry.computeBoundingSphere();
+    m.geometry.boundsTree?.refit();
+    const { batch, instance, fadedBatch, fadedInstance } = m.userData as { batch?: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
+    batch?.mesh.setGeometryAt(batch.mesh.getGeometryIdAt(instance), m.geometry);
+    fadedBatch?.mesh.setGeometryAt(fadedBatch.mesh.getGeometryIdAt(fadedInstance!), m.geometry);
+    at.copy(this.stretchBy);
   }
 
   private frameKeys(keys: string[], padding: number, direction?: THREE.Vector3, duration = 1, { context = 0.7, closerOnly = false } = {}) {

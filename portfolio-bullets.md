@@ -61,6 +61,12 @@ deployed statically on Vercel.
 - **Removed three classes of rendering artefact** (stair-stepped zone edges, hairline seams, folded
   slivers) and the see-through holes that appeared as stages played, by moving to closed solid regions,
   boundary snapping, smoothing and draw-priority offsets, verified in zoomed phone screenshots.
+- **Made 46 soft-tissue meshes follow the opening jaw (tongue, lips, salivary glands, floor-of-mouth and
+  pharyngeal muscles) for +54 KB (+4.6%) on the Oral anatomy model**, by baking each vertex's share of the
+  jaw's movement into the GLB at build time (an inverse-distance blend of mandible, hyoid and fixed skull,
+  with the lip cut along the mouth slit) and reshaping only those meshes on the CPU, so muscles tied at
+  both ends stretch instead of tearing loose. Rebuilding just that model now takes **17 s** instead of a
+  full four-model run.
 
 ## Mobile-first product design
 
@@ -141,11 +147,12 @@ its model changed in the same period (7.7 → 17.2 MB), so before and after are 
 | Draw calls, triangles, render times above | `renderer.info.render` and timed renders in headless Chrome 1024×768 with software WebGL, same script (`bench.mjs`) on both builds; "full frame" waits for the GPU with a pixel readback, "main-thread" does not |
 | 2,234 meshes, 2.29M triangles, 10.4 MB | `scripts/extract-bodyparts.mjs` output; `content.test.ts` asserts the 2,234 |
 | 1,200+ flow structures | `content.test.ts` (flow attribute present on more than 1,200 meshes) |
+| 46 stretching meshes, +54 KB (+4.6%), 17 s | `extract-bodyparts.mjs` log (`bite weights: 46 meshes`); dental.glb 1,164,932 → 1,219,036 bytes; `ONLY=dental` run timed with `time` |
 | 16 stages, 161 authored parts, about 2.7M triangles, 0.08 mm | `scripts/build-cariology.mjs` output and `STEP` default |
 | 192,864 triangles, 30 landmarks | `scripts/build-carving-tooth.mjs` output |
 | 20 viewport/subject touch checks, 0 failures | `scripts/touch-check.mjs` run on 5 subjects × 4 widths |
 | 630+ notes | Count of `summary:` entries in `body.ts`, `systems.ts` and `anatomy.ts`; some are shared family notes |
-| 37 tests, 4 skills, 3 agents, 2 hooks, 46 files, about 7,100 lines | `npm test` and the repo tree (source and script files, generated data excluded) |
+| 38 tests, 4 skills, 3 agents, 2 hooks, 46 files, about 7,100 lines | `npm test` and the repo tree (source and script files, generated data excluded) |
 | 10 accuracy findings, 5 review passes | Anatomy-reviewer agent reports (Cariology review: 4 moderate, 6 minor, all fixed) |
 
 **Caveats to keep in mind**

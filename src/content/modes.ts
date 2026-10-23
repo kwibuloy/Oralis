@@ -54,11 +54,13 @@ export const MODES: Mode[] = [
     id: 'dental', name: 'Oral anatomy', short: 'Oral', model: '/models/dental.glb', source: 'bodyparts3d',
     lead: 'The skull, the oral cavity and the 28 permanent teeth with FDI, Universal and Palmer numbering, plus a carving tooth to study from all five surfaces.',
     defaultVisible: ['teeth', 'gingiva'],
-    context: ['mandible', 'maxilla', 'skull'],
+    // The jaws stay faded around the teeth; the skull has its own switch, off at first (faded, it reads as a hollow shell).
+    context: ['mandible', 'maxilla'],
     presets: [
       { label: 'Teeth', groups: ['teeth', 'gingiva'] },
       { label: 'Skull', groups: ['teeth', 'mandible', 'maxilla', 'skull', 'neck-bones'] },
-      { label: 'Oral cavity', groups: ['teeth', 'gingiva', 'tongue', 'palate-pharynx', 'suprahyoid', 'glands', 'lips'] },
+      // The pharyngeal wall and soft palate muscles sit behind the mouth; they stay a layer of their own.
+      { label: 'Oral cavity', groups: ['teeth', 'gingiva', 'tongue', 'suprahyoid', 'glands', 'lips'] },
     ],
   },
   {
