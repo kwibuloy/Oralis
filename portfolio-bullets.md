@@ -79,6 +79,10 @@ deployed statically on Vercel.
   with the lip cut along the mouth slit) and reshaping only those meshes on the CPU, so muscles tied at
   both ends stretch instead of tearing loose. Rebuilding just that model now takes **17 s** instead of a
   full four-model run.
+- **Cut visibly inside-out triangles in the open bite by 77% (224 → 51, in 32 → 13 parts)** while the
+  muscles still trail the jaw by only **0.9 mm** where they attach, by softening how the movement blends in
+  space so neighbouring triangles can't move far apart, turning each normal with its stretched triangle, and
+  shading the inside of stretching parts like the outside instead of as a dark cut face.
 
 ## Mobile-first product design
 
@@ -160,6 +164,7 @@ its model changed in the same period (7.7 → 17.2 MB), so before and after are 
 | 2,234 meshes, 2.29M triangles, 10.4 MB | `scripts/extract-bodyparts.mjs` output; `content.test.ts` asserts the 2,234 |
 | 1,200+ flow structures | `content.test.ts` (flow attribute present on more than 1,200 meshes) |
 | 46 stretching meshes, +54 KB (+4.6%), 17 s | `extract-bodyparts.mjs` log (`bite weights: 46 meshes`); dental.glb 1,164,932 → 1,219,036 bytes; `ONLY=dental` run timed with `time` |
+| Inside-out triangles 224 → 51 (32 → 13 parts), 0.9 mm lag | Each stretching mesh in dental.glb displaced by the full bite offset in Node; a triangle counts when its normal reverses and it is still taller than 0.3 mm (slivers left out); lag is the average shortfall of vertices within 3 mm of the mandible. Before = the pushed commit's model, after = this one |
 | 16 stages, 161 authored parts, about 2.7M triangles, 0.08 mm | `scripts/build-cariology.mjs` output and `STEP` default (the old lesion molar, replaced 2026-10-22) |
 | Cariology 28.7 → 11.1 MB, 11.7 → 4.8 s, 156 parts | `ls` of `public/models/cariology.glb` before (commit `adc844e`) and after; download of both files in headless Chrome with network throttling at 20 Mbit/s and 40 ms (`fetch`, cache off, two runs each, equal); 156 parts from `models-src/cariology-blender.json`. The whole GLB includes the arches, sites and process block, which did not change |
 | Pins 47/82 → 0 (1440 px), 68/82 → 0 (390 px) | Every stage of all three lesions at the opening view, headless Chrome with GPU; a pin counts when hidden or closer than 0.9 of its width to another; also 0 at 1024 and 768 |
