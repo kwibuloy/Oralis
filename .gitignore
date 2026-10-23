@@ -36,3 +36,4 @@ tsconfig.tsbuildinfo
 models-src/cariology.glb
 __pycache__/
 models-src/cariology-blender.blend
+portfolio-bullets.md
