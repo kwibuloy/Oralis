@@ -94,6 +94,18 @@ describe('mode models', () => {
     const groups = new Set(STRUCTURES.filter((s) => s.models.includes('dental')).map((s) => s.group));
     expect([...groups].sort()).toEqual(['gingiva', 'glands', 'lips', 'mandible', 'maxilla', 'neck-bones', 'palate-pharynx', 'skull', 'suprahyoid', 'teeth', 'tongue']);
   });
+
+  it('bakes open-bite stretch weights into the soft parts and the hyoid, and nothing else', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/dental.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    const withBite = new Set<string>(json.nodes
+      .filter((n: { mesh?: number }) => n.mesh !== undefined && '_BITE' in json.meshes[n.mesh].primitives[0].attributes)
+      .map((n: { name: string }) => n.name));
+    const dental = STRUCTURES.filter((s) => s.models.includes('dental'));
+    const follows = (s: (typeof dental)[number]) => ['tongue', 'glands', 'suprahyoid', 'palate-pharynx', 'lips'].includes(s.group) || s.key === 'hyoid-bone';
+    expect(dental.filter((s) => follows(s) && !s.meshIds.every((id) => withBite.has(id))).map((s) => s.sourceName)).toEqual([]);
+    expect(dental.filter((s) => !follows(s) && s.meshIds.some((id) => withBite.has(id))).map((s) => s.sourceName)).toEqual([]);
+  });
 });
 
 describe('physiology functions', () => {
