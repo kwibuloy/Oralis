@@ -118,7 +118,7 @@ interface PartState {
   grid: THREE.Vector3 | null; // offset that places the part in the inventory grid
   at: THREE.Vector3; // position last written to the batches (NaN until first placed)
   /** A part that stretches with the offset: per-vertex share of it (the `_bite` attribute) and its rest shape. */
-  stretch?: { weights: ArrayLike<number>; rest: Float32Array; at: THREE.Vector3 };
+  stretch?: { weights: ArrayLike<number>; rest: Float32Array; restNormals: Float32Array; at: THREE.Vector3 };
 }
 
 /**
@@ -615,8 +615,11 @@ export class Viewer {
 
   // ---------- internals ----------
 
-  /** The material for a part (or, opaque, for a batch of parts that look alike). */
-  private makeMaterial(info: Pickable, vertexColours: boolean, opaque: boolean) {
+  /**
+   * The material for a part (or, opaque, for a batch of parts that look alike). `caps` draws back faces as
+   * flat cut faces; parts that stretch show their inside when they open, shaded like the outside instead.
+   */
+  private makeMaterial(info: Pickable, vertexColours: boolean, opaque: boolean, caps = true) {
     const options: THREE.MeshPhysicalMaterialParameters = {
       color: vertexColours || opaque ? '#ffffff' : info.color, roughness: info.surface?.roughness ?? (info.group === 'teeth' || info.group === 'enamel' ? 0.3 : 0.6), metalness: 0,
       side: THREE.DoubleSide, transparent: !opaque, vertexColors: vertexColours,
@@ -630,27 +633,30 @@ export class Viewer {
       : new THREE.MeshStandardMaterial(options);
     material.userData.cutTint = { value: new THREE.Vector4(0, 0, 0, 0) }; // (a Vector4 defaults to w = 1: a full tint)
     if (info.surface) addSurface(material, info.surface, this.zonePalette, material.userData.cutTint);
-    addCaps(material);
+    if (caps) addCaps(material);
     return material;
   }
 
   private register(mesh: THREE.Mesh, info: Pickable) {
     // A part with its own vertex colours (e.g. a tooth with a lesion painted on) shows them as they are.
     const vertexColours = !!mesh.geometry.getAttribute('color');
-    const material = this.makeMaterial(info, vertexColours, false);
+    const weights = mesh.geometry.getAttribute('_bite');
+    const material = this.makeMaterial(info, vertexColours, false, !weights);
     (mesh.material as THREE.Material).dispose();
     const m = mesh as unknown as PartMesh;
     m.material = material;
     // Bake the world transform so offsets and framing live in one space.
     m.matrixWorld.decompose(m.position, m.quaternion, m.scale);
     m.removeFromParent();
-    m.userData = { key: info.key, group: info.group, base: new THREE.Color(vertexColours ? '#ffffff' : info.color), info, vertexColours };
+    m.userData = { key: info.key, group: info.group, base: new THREE.Color(vertexColours ? '#ffffff' : info.color), info, vertexColours, stretches: !!weights };
     if (m.geometry.getAttribute('_flow')) m.userData.flowOn = addFlow(material, this.flowTime);
     // Stretch weights are read on the CPU only: dropped from the geometry so the part batches with its look-alikes.
-    const weights = m.geometry.getAttribute('_bite');
     let stretch: PartState['stretch'];
     if (weights) {
-      stretch = { weights: weights.array, rest: (m.geometry.getAttribute('position').array as Float32Array).slice(), at: new THREE.Vector3() };
+      stretch = {
+        weights: weights.array, rest: (m.geometry.getAttribute('position').array as Float32Array).slice(),
+        restNormals: (m.geometry.getAttribute('normal').array as Float32Array).slice(), at: new THREE.Vector3(),
+      };
       m.geometry.deleteAttribute('_bite');
       this.hasStretch = true;
     }
@@ -669,7 +675,7 @@ export class Viewer {
     for (const m of parts) {
       const { info, vertexColours } = m.userData as { info: Pickable; vertexColours: boolean };
       const attrs = Object.entries(m.geometry.attributes).map(([n, a]) => `${n}:${a.itemSize}:${a.normalized}`).sort().join();
-      const sig = JSON.stringify([info.surface ?? null, !!info.overlay, info.layer ?? 0, m.material.roughness, vertexColours, attrs, !!m.geometry.index]);
+      const sig = JSON.stringify([info.surface ?? null, !!info.overlay, info.layer ?? 0, m.material.roughness, vertexColours, attrs, !!m.geometry.index, !!m.userData.stretches]);
       if (!groups.has(sig)) groups.set(sig, []);
       groups.get(sig)!.push(m);
     }
@@ -677,7 +683,7 @@ export class Viewer {
       const first = parts[0];
       const vertices = parts.reduce((t, m) => t + m.geometry.getAttribute('position').count, 0);
       const indices = parts.reduce((t, m) => t + (m.geometry.index?.count ?? 0), 0);
-      const material = this.makeMaterial(first.userData.info as Pickable, first.userData.vertexColours as boolean, !faded);
+      const material = this.makeMaterial(first.userData.info as Pickable, first.userData.vertexColours as boolean, !faded, !first.userData.stretches);
       if (faded) { material.opacity = 0.18; material.depthWrite = false; }
       const mesh = new THREE.BatchedMesh(parts.length, vertices, indices, material);
       mesh.sortObjects = false; // opaque: no per-frame depth sort (faded parts are too faint to need one)
@@ -827,11 +833,16 @@ export class Viewer {
     this.needsRender = true;
   }
 
-  /** Reshape a stretching part: each vertex at its rest place plus its share of the stretch offset. */
+  /**
+   * Reshape a stretching part: each vertex at its rest place plus its share of the stretch offset. Normals
+   * turn with their triangles (each rest normal rotated as its face turned, averaged over the faces that
+   * share the vertex); left as they were, stretched areas were lit as if still at rest and looked crumpled.
+   */
   private stretchPart(m: PartMesh, stretch: NonNullable<PartState['stretch']>) {
-    const { weights, rest, at } = stretch;
+    const { weights, rest, restNormals, at } = stretch;
     const attr = m.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const pos = attr.array as Float32Array;
+    const normalAttr = m.geometry.getAttribute('normal') as THREE.BufferAttribute;
+    const pos = attr.array as Float32Array, nrm = normalAttr.array as Float32Array;
     const { x, y, z } = this.stretchBy;
     for (let v = 0; v < weights.length; v++) {
       const w = weights[v];
@@ -839,7 +850,34 @@ export class Viewer {
       pos[v * 3 + 1] = rest[v * 3 + 1] + w * y;
       pos[v * 3 + 2] = rest[v * 3 + 2] + w * z;
     }
+    nrm.fill(0);
+    const index = m.geometry.index!.array;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+    const axis = new THREE.Vector3(), n = new THREE.Vector3(), turn = new THREE.Quaternion();
+    const faceNormal = (p: Float32Array, i: number, j: number, k: number, out: THREE.Vector3) => {
+      e1.set(p[j * 3] - p[i * 3], p[j * 3 + 1] - p[i * 3 + 1], p[j * 3 + 2] - p[i * 3 + 2]);
+      e2.set(p[k * 3] - p[i * 3], p[k * 3 + 1] - p[i * 3 + 1], p[k * 3 + 2] - p[i * 3 + 2]);
+      return out.crossVectors(e1, e2);
+    };
+    for (let t = 0; t < index.length; t += 3) {
+      const i = index[t], j = index[t + 1], k = index[t + 2];
+      faceNormal(rest, i, j, k, a);
+      const area = faceNormal(pos, i, j, k, b).length();
+      if (a.lengthSq() < 1e-14 || area < 1e-7) continue;
+      turn.setFromUnitVectors(a.normalize(), b.normalize());
+      for (const v of [i, j, k]) {
+        n.set(restNormals[v * 3], restNormals[v * 3 + 1], restNormals[v * 3 + 2]).applyQuaternion(turn).multiplyScalar(area);
+        nrm[v * 3] += n.x; nrm[v * 3 + 1] += n.y; nrm[v * 3 + 2] += n.z;
+      }
+    }
+    for (let v = 0; v < weights.length; v++) {
+      axis.set(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]);
+      if (axis.lengthSq() < 1e-20) axis.set(restNormals[v * 3], restNormals[v * 3 + 1], restNormals[v * 3 + 2]);
+      axis.normalize();
+      nrm[v * 3] = axis.x; nrm[v * 3 + 1] = axis.y; nrm[v * 3 + 2] = axis.z;
+    }
     attr.needsUpdate = true;
+    normalAttr.needsUpdate = true;
     m.geometry.computeBoundingBox();
     m.geometry.computeBoundingSphere();
     m.geometry.boundsTree?.refit();

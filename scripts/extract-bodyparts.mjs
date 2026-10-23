@@ -662,9 +662,12 @@ function pinOnCut(tris) {
  * attribute). The mandible, lower teeth and lower gingiva move whole (the viewer does that by key); the
  * hyoid drops about half as far. Parts tied between them and the fixed skull (tongue, floor-of-mouth
  * muscles, glands, lips, pharyngeal wall) stretch: each vertex blends the anchors its part is tied to by
- * inverse distance, so it moves with the bone it lies on and stretches in between.
+ * inverse distance, so it moves with the bone it lies on and stretches in between. The blend is softened
+ * by SOFT: a sharper one let neighbouring triangles move so differently that they folded inside out (dark
+ * patches on the digastric and tongue muscles); 0.3 cm leaves 0.9 mm average lag where parts meet the jaw.
  */
 function computeBiteWeights(geometry) {
+  const SOFT = 0.3; // cm
   const lowerJaw = (g) => g.group === 'mandible' || (/lower/.test(g.sided) && (g.group === 'teeth' || g.group === 'gingiva'));
   const upperJaw = (g) => g.group === 'maxilla' || (/upper/.test(g.sided) && (g.group === 'teeth' || g.group === 'gingiva'));
   const fixed = (g) => g.group === 'skull' || upperJaw(g) || /^(atlas|axis)$/.test(g.name);
@@ -684,7 +687,7 @@ function computeBiteWeights(geometry) {
       let sum = 0, total = 0;
       for (const a of anchors) {
         const d = a.nearest(g.pos[v * 3], g.pos[v * 3 + 1], g.pos[v * 3 + 2]);
-        const k = 1 / (d ** 4 + 1e-4); // a part lying on a bone moves with it; the blend happens in between
+        const k = 1 / (d ** 2 + SOFT ** 2);
         sum += a.value * k; total += k;
       }
       w[v] = sum / total;
@@ -698,36 +701,146 @@ function computeBiteWeights(geometry) {
 }
 
 /**
+ * The source lip is crumpled where the lips meet at each corner: tiny when closed, stretched large when the
+ * bite opens. Taubin-smooth the outer quarter of the lip on each side (fading in, so the middle of the
+ * lips keeps the source shape exactly) and recompute the normals there. Mutates g.pos and g.nrm.
+ */
+function smoothLipCorners(g, half) {
+  const P = g.pos, N = g.nrm, I = g.idx, n = P.length / 3;
+  // One id per point (copies of a point in loose triangles share it).
+  const key = (v) => `${Math.round(P[v * 3] * 1e4)},${Math.round(P[v * 3 + 1] * 1e4)},${Math.round(P[v * 3 + 2] * 1e4)}`;
+  const ids = new Map(), at = Int32Array.from({ length: n }, (_, v) => { const k = key(v); if (!ids.has(k)) ids.set(k, ids.size); return ids.get(k); });
+  const m = ids.size, xyz = new Float64Array(m * 3), nb = Array.from({ length: m }, () => new Set());
+  for (let v = 0; v < n; v++) for (let c = 0; c < 3; c++) xyz[at[v] * 3 + c] = P[v * 3 + c];
+  // Neighbours by nearness, not by shared edges: the crumple is a cluster of tiny triangles joined to nothing.
+  const R = 0.15, cell = (i) => [0, 1, 2].map((c) => Math.floor(xyz[i * 3 + c] / R)), grid = new Map();
+  for (let i = 0; i < m; i++) { const k = cell(i).join(); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+  for (let i = 0; i < m; i++) {
+    const [a, b, c] = cell(i);
+    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) for (const j of grid.get(`${a + x},${b + y},${c + z}`) ?? []) {
+      if (j !== i && Math.hypot(xyz[i * 3] - xyz[j * 3], xyz[i * 3 + 1] - xyz[j * 3 + 1], xyz[i * 3 + 2] - xyz[j * 3 + 2]) < R) nb[i].add(j);
+    }
+  }
+  const strength = Float64Array.from({ length: m }, (_, i) => Math.min(Math.max((Math.abs(xyz[i * 3]) / half - 0.75) / 0.15, 0), 1));
+  const step = (factor) => {
+    const next = xyz.slice();
+    for (let i = 0; i < m; i++) {
+      if (!strength[i] || !nb[i].size) continue;
+      for (let c = 0; c < 3; c++) {
+        let avg = 0;
+        for (const j of nb[i]) avg += xyz[j * 3 + c];
+        next[i * 3 + c] += factor * strength[i] * (avg / nb[i].size - xyz[i * 3 + c]);
+      }
+    }
+    xyz.set(next);
+  };
+  for (let pass = 0; pass < 20; pass++) { step(0.5); step(-0.53); }
+  // Normals in the smoothed area from the new faces, kept on the same side as the source normals.
+  const face = new Float64Array(m * 3);
+  for (let t = 0; t < I.length; t += 3) {
+    const [a, b, c] = [at[I[t]], at[I[t + 1]], at[I[t + 2]]];
+    const u = [0, 1, 2].map((k) => xyz[b * 3 + k] - xyz[a * 3 + k]), v = [0, 1, 2].map((k) => xyz[c * 3 + k] - xyz[a * 3 + k]);
+    const f = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    // Loose triangles may be wound either way: orient each face by its first vertex's source normal.
+    const s = f[0] * N[I[t] * 3] + f[1] * N[I[t] * 3 + 1] + f[2] * N[I[t] * 3 + 2] < 0 ? -1 : 1;
+    for (const p of [a, b, c]) for (let k = 0; k < 3; k++) face[p * 3 + k] += s * f[k];
+  }
+  for (let v = 0; v < n; v++) {
+    const i = at[v], s = strength[i];
+    for (let c = 0; c < 3; c++) P[v * 3 + c] = xyz[i * 3 + c];
+    if (!s) continue;
+    const l = Math.hypot(face[i * 3], face[i * 3 + 1], face[i * 3 + 2]) || 1;
+    const mix = [0, 1, 2].map((c) => (1 - s) * N[v * 3 + c] + s * face[i * 3 + c] / l);
+    const ml = Math.hypot(...mix) || 1;
+    for (let c = 0; c < 3; c++) N[v * 3 + c] = mix[c] / ml;
+  }
+}
+
+/**
  * The lips go by height, not nearness: the upper incisors overlap the lower lip. The source lip is one
- * surface running across the closed mouth, so it is cut along the mouth slit: each triangle goes whole to
- * the lip its centre lies in (below the slit it follows the jaw, above it stays) and the lips part instead
- * of stretching a sheet over the open mouth. Towards the corners the cut gives way to a smooth blend by
- * height, the same for every triangle at a point, so the corners stretch without tearing. Unwelds the lip
- * in `g` (the export's weld joins whatever ends up with equal weights again) and returns the weights.
+ * thin surface running across the closed mouth, so it is cut along the mouth slit, triangles split exactly
+ * on the cut line: below it the lip follows the jaw, above it stays. Towards the corners the cut gives way
+ * to a smooth blend by height, so the corners stretch without tearing. Each cut edge gets a rounded rim
+ * (a tube tapering to nothing at the corners) so the open lips look solid instead of showing their inside;
+ * the rim is schematic, as the source has no inner lip. The corners are smoothed first (smoothLipCorners).
+ * Rewrites the lip in `g` and returns the weights.
  */
 function lipWeights(g) {
   const P = g.pos, N = g.nrm, I = g.idx;
   let half = 0;
   for (let i = 0; i < P.length; i += 3) half = Math.max(half, Math.abs(P[i]));
+  smoothLipCorners(g, half);
   // The slit is the height of the corners (the outer tenth of the lip's width).
   let sum = 0, n = 0;
   for (let i = 0; i < P.length; i += 3) if (Math.abs(P[i]) > half * 0.9) { sum += P[i + 1]; n++; }
   const slit = sum / n;
-  const smooth = (y, blend) => { const t = Math.min(Math.max((slit + blend - y) / (2 * blend), 0), 1); return t * t * (3 - 2 * t); };
+  const BLEND = 0.35; // cm above and below the slit over which a corner stretches
+  const smooth = (y) => { const t = Math.min(Math.max((slit + BLEND - y) / (2 * BLEND), 0), 1); return t * t * (3 - 2 * t); };
   const corner = (x) => Math.min(Math.max((Math.abs(x) / half - 0.7) / 0.25, 0), 1); // 0 mid-lip, 1 at the corners
-  const pos = new Float32Array(I.length * 3), nrm = new Float32Array(I.length * 3), w = new Float32Array(I.length);
+  const weight = (x, y, lower) => (1 - corner(x)) * (lower ? 1 : 0) + corner(x) * smooth(y);
+
+  const pos = [], nrm = [], w = [], cut = [];
+  const emit = (p, nm, lower) => { pos.push(...p); nrm.push(...nm); w.push(weight(p[0], p[1], lower)); };
+  const vert = (v) => [[P[v * 3], P[v * 3 + 1], P[v * 3 + 2]], [N[v * 3], N[v * 3 + 1], N[v * 3 + 2]]];
+  const lerp = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t);
   for (let t = 0; t < I.length; t += 3) {
-    const cy = (P[I[t] * 3 + 1] + P[I[t + 1] * 3 + 1] + P[I[t + 2] * 3 + 1]) / 3;
-    const side = cy < slit ? 1 : 0;
+    const vs = [0, 1, 2].map((k) => vert(I[t + k]));
+    // Split the triangle where it crosses the slit: each piece is a polygon on one side.
+    const sides = [[], []]; // [upper, lower]
     for (let k = 0; k < 3; k++) {
-      const v = I[t + k], o = t + k;
-      for (let c = 0; c < 3; c++) { pos[o * 3 + c] = P[v * 3 + c]; nrm[o * 3 + c] = N[v * 3 + c]; }
-      const c = corner(P[v * 3]);
-      w[o] = (1 - c) * side + c * smooth(P[v * 3 + 1], 0.35);
+      const [p, nm] = vs[k], [q, qn] = vs[(k + 1) % 3];
+      const fp = p[1] - slit, fq = q[1] - slit;
+      sides[fp < 0 ? 1 : 0].push([p, nm]);
+      if ((fp < 0) !== (fq < 0)) {
+        const s = fp / (fp - fq), x = [lerp(p, q, s), lerp(nm, qn, s)];
+        x[0][1] = slit;
+        sides[0].push(x); sides[1].push(x);
+        cut.push(x[0]);
+      }
+    }
+    for (const [lower, poly] of sides.entries()) for (let k = 1; k + 1 < poly.length; k++) {
+      for (const [p, nm] of [poly[0], poly[k], poly[k + 1]]) emit(p, nm, lower === 1);
     }
   }
-  g.pos = pos; g.nrm = nrm; g.idx = Uint32Array.from({ length: I.length }, (_, i) => i);
-  return w;
+
+  // The front edge of the cut, smoothed: per slice of width, the front-most cut point.
+  const SLICES = 48, edge = [];
+  for (let s = 0; s < SLICES; s++) {
+    const x0 = -half + (2 * half * s) / SLICES, x1 = x0 + (2 * half) / SLICES;
+    const inSlice = cut.filter((p) => p[0] >= x0 && p[0] < x1 && corner(p[0]) < 1);
+    if (inSlice.length) edge.push(inSlice.reduce((a, b) => (b[2] > a[2] ? b : a)));
+  }
+  for (let pass = 0; pass < 2; pass++) for (let k = 1; k + 1 < edge.length; k++) edge[k] = [edge[k][0], slit, (edge[k - 1][2] + 2 * edge[k][2] + edge[k + 1][2]) / 4];
+
+  // A rim along that edge for each lip: a tube just behind the lip's surface, tangent to it at the front.
+  const RADIUS = 0.12, RING = 12, skin = pos.length / 3, rim = [];
+  for (const lower of [false, true]) {
+    const base = pos.length / 3, rings = [];
+    for (let k = 0; k < edge.length; k++) {
+      const p = edge[k], r = RADIUS * (1 - corner(p[0]));
+      const prev = edge[Math.max(k - 1, 0)], next = edge[Math.min(k + 1, edge.length - 1)];
+      const tl = Math.hypot(next[0] - prev[0], next[2] - prev[2]) || 1;
+      const tx = (next[0] - prev[0]) / tl, tz = (next[2] - prev[2]) / tl; // along the edge (horizontal)
+      const bx = -tz, bz = tx; // horizontal, across the edge: towards the front
+      const front = bz >= 0 ? 1 : -1;
+      const centre = [p[0] - front * bx * r, slit + (lower ? -0.3 : 0.3) * r, p[2] - front * bz * r];
+      const ring = [];
+      for (let j = 0; j < RING; j++) {
+        const a = (2 * Math.PI * j) / RING, ny = Math.cos(a), nh = Math.sin(a);
+        const nm = [nh * bx * front, ny, nh * bz * front];
+        emit(centre.map((c, i) => c + r * nm[i]), nm, lower);
+        ring.push(base + rings.length * RING + j);
+      }
+      rings.push(ring);
+    }
+    for (let k = 0; k + 1 < rings.length; k++) for (let j = 0; j < RING; j++) {
+      const a = rings[k][j], b = rings[k][(j + 1) % RING], c = rings[k + 1][j], d = rings[k + 1][(j + 1) % RING];
+      rim.push(a, c, b, b, c, d);
+    }
+  }
+  g.pos = Float32Array.from(pos); g.nrm = Float32Array.from(nrm);
+  g.idx = Uint32Array.from([...Array.from({ length: skin }, (_, i) => i), ...rim]);
+  return Float32Array.from(w);
 }
 
 /** Distance from a point to the nearest vertex of a set of position arrays, through a uniform grid (cm). */
