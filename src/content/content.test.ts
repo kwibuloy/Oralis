@@ -7,7 +7,7 @@ import { TISSUES } from './histology';
 import { LANDMARKS, landmarkHasNote } from './carving';
 import { LESION_MODEL, LESION_TYPES, mineralAt, PERIO_ZONES, perioGroup, plaquePH, PROCESS_PARTS, SITE_PINS, SITES, staticGroup, stageGroup, ZONES } from './cariology';
 import { MODES } from './modes';
-import { STRUCTURES } from './structures';
+import { STRUCTURES, structureByKey } from './structures';
 import { fdi, morphology, palmer, parseTooth, universal } from './teeth';
 import { parseRoute } from '../lib/route';
 
@@ -105,6 +105,12 @@ describe('mode models', () => {
     const follows = (s: (typeof dental)[number]) => ['tongue', 'glands', 'suprahyoid', 'palate-pharynx', 'lips'].includes(s.group) || s.key === 'hyoid-bone';
     expect(dental.filter((s) => follows(s) && !s.meshIds.every((id) => withBite.has(id))).map((s) => s.sourceName)).toEqual([]);
     expect(dental.filter((s) => !follows(s) && s.meshIds.some((id) => withBite.has(id))).map((s) => s.sourceName)).toEqual([]);
+  });
+
+  it('uses the Blender upper and lower lips in place of the BodyParts3D lip', () => {
+    const lips = STRUCTURES.filter((s) => s.models.includes('dental') && s.group === 'lips').map((s) => s.key);
+    expect(lips.sort()).toEqual(['lower-lip', 'upper-lip']);
+    expect(structureByKey('lip')?.models).toEqual(['general']);
   });
 });
 
