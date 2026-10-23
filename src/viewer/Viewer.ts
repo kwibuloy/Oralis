@@ -15,6 +15,7 @@ gsap.ticker.lagSmoothing(80, 16);
 
 const SELECT = new THREE.Color('#2563eb');
 const SELECT_MIX = 0.22;
+const SELECT_CUT_MIX = 0.55;
 const SELECT_GLOW = new THREE.Color('#1d4ed8').multiplyScalar(0.32);
 const HOVER_GLOW = new THREE.Color('#2563eb').multiplyScalar(0.12);
 const NO_GLOW = new THREE.Color(0x000000);
@@ -175,7 +176,10 @@ export class Viewer {
   private insetTarget: Insets = { left: 0, right: 0, bottom: 0 };
   private width = 1;
   private height = 1;
-  private pins: { el: HTMLButtonElement; mesh: PartMesh; local: THREE.Vector3; normal: THREE.Vector3 }[] = [];
+  private pins: PinEntry[] = [];
+  // Pin focus (see setPinFocus), and the tapped pin's point that the next selection centres on.
+  private pinFocus = false;
+  private spot: THREE.Vector3 | null = null;
 
   onPick: (key: string | null) => void = () => {};
   onPinPick: (id: string) => void = () => {};
@@ -362,7 +366,7 @@ export class Viewer {
     setTimeout(() => idle(step), 2500);
   }
 
-  /** The colour of each zone a cut face can blend into, by the index baked into the model (_nbr). */
+  /** The colour of each zone's cut faces, by the index baked into the model (_zone). */
   setZonePalette(colours: string[]) {
     colours.slice(0, ZONE_SLOTS).forEach((c, i) => this.zonePalette.value[i].set(c));
     this.needsRender = true;
@@ -388,7 +392,22 @@ export class Viewer {
   select(key: string | null, { frame = true } = {}) {
     this.selected = key;
     this.apply();
-    if (key && frame) this.frameKeys([key], SELECT_PADDING, undefined, 1, { context: SELECT_CONTEXT, closerOnly: true });
+    const spot = this.spot;
+    this.spot = null;
+    if (key && frame) this.frameSelected(key, spot);
+  }
+
+  /**
+   * Pins fly to their own point rather than the middle of the part they sit on (from the same distance):
+   * for big parts with small details, such as the zones of a sectioned tooth.
+   */
+  setPinFocus(on: boolean) {
+    this.pinFocus = on;
+  }
+
+  /** Framing for a selection: the part, centred on `at` when given. */
+  private frameSelected(key: string, at: THREE.Vector3 | null) {
+    this.frameKeys([key], SELECT_PADDING, undefined, 1, { context: SELECT_CONTEXT, closerOnly: true, center: at ?? undefined });
   }
 
   /** Tell the viewer how much of each canvas edge cards cover (0 when none); the view slides to keep framed parts clear of them. */
@@ -437,7 +456,7 @@ export class Viewer {
   private biteTween = { t: 0 };
   private frameNear = 0.1;
   private disposed = false;
-  /** Colours that `blendZones` cut faces fade into (see setZonePalette). */
+  /** Colours of `cutZone` cut faces (see setZonePalette). */
   private zonePalette = { value: Array.from({ length: ZONE_SLOTS }, () => new THREE.Color()) };
   private bvhWorker: GenerateMeshBVHWorker | null = null;
   private lastInput = 0;
@@ -465,7 +484,7 @@ export class Viewer {
 
   /** Pin numbered markers to points on the part with `key` (or each pin's own key); an empty list removes them. */
   setPins(key: string | null, pins: Pin[]) {
-    for (const p of this.pins) p.el.remove();
+    for (const p of this.pins) { p.el.remove(); p.line.remove(); }
     this.pins = [];
     for (const pin of pins) {
       const k = pin.key ?? key;
@@ -477,10 +496,25 @@ export class Viewer {
       el.title = pin.title;
       el.setAttribute('aria-label', `${pin.label}. ${pin.title}`);
       el.dataset.id = pin.id;
-      el.addEventListener('click', () => this.onPinPick(pin.id));
+      el.addEventListener('click', () => {
+        const p = this.pins.find((x) => x.el === el);
+        if (p && this.pinFocus) {
+          const key = p.mesh.userData.key as string, at = this.pinMesh(p).localToWorld(p.local.clone());
+          // Already selected: no select follows, so fly now.
+          if (key === this.selected) this.frameSelected(key, at);
+          else this.spot = at;
+        }
+        this.onPinPick(pin.id);
+      });
+      // A thin line from the pin to its point, shown when the pin is pushed aside by a neighbour.
+      const line = document.createElement('div');
+      line.className = 'pin-line is-hidden';
+      this.pinLayer.prepend(line);
       this.pinLayer.append(el);
-      this.pins.push({ el, mesh, local: new THREE.Vector3(...pin.position), normal: new THREE.Vector3(...pin.normal) });
+      this.pins.push({ el, line, size: 0, mesh, local: new THREE.Vector3(...pin.position), normal: new THREE.Vector3(...pin.normal) });
     }
+    // Pin sizes are read once here (reading them per frame forces a layout).
+    for (const p of this.pins) p.size = p.el.offsetWidth || 24;
     this.needsRender = true;
   }
 
@@ -594,7 +628,8 @@ export class Viewer {
     const material = info.surface?.clearcoat
       ? new THREE.MeshPhysicalMaterial({ ...options, clearcoat: info.surface.clearcoat, clearcoatRoughness: 0.18 })
       : new THREE.MeshStandardMaterial(options);
-    if (info.surface) addSurface(material, info.surface, this.zonePalette);
+    material.userData.cutTint = { value: new THREE.Vector4(0, 0, 0, 0) }; // (a Vector4 defaults to w = 1: a full tint)
+    if (info.surface) addSurface(material, info.surface, this.zonePalette, material.userData.cutTint);
     addCaps(material);
     return material;
   }
@@ -668,8 +703,12 @@ export class Viewer {
   private shown(m: PartMesh): boolean {
     const { key, group } = m.userData as { key: string; group: string };
     if (!this.filter(key)) return false;
-    if (this.isolated && this.selected) return key === this.selected;
-    return this.visible.has(group) || this.context.has(group) || key === this.selected;
+    const inView = (g: string) => this.visible.has(g) || this.context.has(g);
+    // A selected part shows even when its group is hidden (e.g. found by search), unless its key is split
+    // over several meshes (a tissue's fixed part and each stage's patch) and some are in view: then only those.
+    const selected = key === this.selected && (inView(group) || !this.meshes.some((m) => m.userData.key === key && inView(m.userData.group as string)));
+    if (this.isolated && this.selected) return selected;
+    return inView(group) || selected;
   }
 
   private visibleKeys() {
@@ -724,7 +763,11 @@ export class Viewer {
       // Keep each tissue's own hue readable; selection adds a blue glow rather than recolouring.
       const c = m.material.color.copy(colour);
       // Vertex-coloured parts keep their own hues (a tint would turn brown caries purple): glow only.
-      if (key === this.selected) c.lerp(SELECT, m.userData.vertexColours ? SELECT_MIX * 0.25 : SELECT_MIX);
+      // Parts with palette-coloured cut faces (Cariology) get the stronger tint on the outside too, so the
+      // whole part reads as one selection; the cut faces get it in the shader.
+      const cutZone = !!(m.userData.info as Pickable).surface?.cutZone;
+      if (key === this.selected) c.lerp(SELECT, m.userData.vertexColours ? SELECT_MIX * 0.25 : cutZone ? SELECT_CUT_MIX : SELECT_MIX);
+      (m.material.userData.cutTint as { value: THREE.Vector4 }).value.set(SELECT.r, SELECT.g, SELECT.b, key === this.selected ? SELECT_CUT_MIX : 0);
       m.material.emissive.copy(key === this.selected ? SELECT_GLOW : key === this.hovered ? HOVER_GLOW : NO_GLOW);
       // A blue glow on brown caries reads purple: painted parts get only a trace of it.
       if (m.userData.vertexColours) m.material.emissive.multiplyScalar(0.2);
@@ -806,10 +849,18 @@ export class Viewer {
     at.copy(this.stretchBy);
   }
 
-  private frameKeys(keys: string[], padding: number, direction?: THREE.Vector3, duration = 1, { context = 0.7, closerOnly = false } = {}) {
+  private frameKeys(keys: string[], padding: number, direction?: THREE.Vector3, duration = 1, opts: { context?: number; closerOnly?: boolean; center?: THREE.Vector3 } = {}) {
     const box = new THREE.Box3();
     const set = new Set(keys);
-    for (const m of this.meshes) if (set.has(m.userData.key)) box.expandByObject(m);
+    const parts = this.meshes.filter((m) => set.has(m.userData.key));
+    // Meshes sharing a key (a tissue split into a fixed part and a per-stage patch): only the shown ones.
+    const shown = parts.filter((m) => m.visible);
+    for (const m of shown.length ? shown : parts) box.expandByObject(m);
+    this.frameBox(box, padding, direction, duration, opts);
+  }
+
+  /** Frame a box; `center` moves the view's centre (e.g. onto a pin) while keeping the box's distance. */
+  private frameBox(box: THREE.Box3, padding: number, direction?: THREE.Vector3, duration = 1, { context = 0.7, closerOnly = false, center = undefined as THREE.Vector3 | undefined } = {}) {
     if (box.isEmpty()) return;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     const size = box.getSize(new THREE.Vector3());
@@ -837,6 +888,7 @@ export class Viewer {
     const freeW = Math.max(0.45, 1 - (this.insetTarget.left + this.insetTarget.right) / this.width);
     const fit = Math.max(halfH / (tan * freeH), halfW / (tan * this.camera.aspect * freeW)) + halfD;
     const distance = closerOnly && current.length() > 1e-3 ? Math.min(fit * padding, current.length()) : fit * padding;
+    if (center) sphere.center.copy(center);
     const to = sphere.center.clone().add(dir.multiplyScalar(distance));
     // Close enough to inspect a single tooth even when the whole body is framed.
     this.controls.minDistance = Math.max(sphere.radius * 0.01, 0.5);
@@ -847,6 +899,10 @@ export class Viewer {
     this.camera.updateProjectionMatrix();
 
     const d = this.reduced ? 0 : duration;
+    // The newest framing wins: two flights at once each set the camera every frame, and it stalled.
+    gsap.killTweensOf(this.controls.target);
+    gsap.killTweensOf(this.camera.position);
+    this.flying = false;
     if (!d) {
       this.controls.target.copy(sphere.center);
       this.camera.position.copy(to);
@@ -940,19 +996,42 @@ export class Viewer {
     this.apply();
   };
 
+  /** The mesh a pin sits on: when several meshes share its part's key, the one shown now. */
+  private pinMesh(p: { mesh: PartMesh }) {
+    if (p.mesh.visible) return p.mesh;
+    return this.meshes.find((m) => m.visible && m.userData.key === p.mesh.userData.key) ?? p.mesh;
+  }
+
   /** Move each pin over its point; hide pins on hidden parts or on the far side of the part. */
   private placePins() {
     if (!this.pins.length) return;
     const { width, height } = this; // set in resize(): reading the canvas rect every frame forced a layout
     const world = new THREE.Vector3(), toCamera = new THREE.Vector3(), normal = new THREE.Vector3();
+    // Each shown pin's point on screen, then its place: pins that would overlap (a small lesion seen
+    // from afar) are pushed apart until every number is clear, each with a line back to its point.
+    const shown: (PinSpot & { p: PinEntry })[] = [];
     for (const p of this.pins) {
-      p.mesh.localToWorld(world.copy(p.local));
-      normal.copy(p.normal).transformDirection(p.mesh.matrixWorld);
+      const mesh = this.pinMesh(p);
+      mesh.localToWorld(world.copy(p.local));
+      normal.copy(p.normal).transformDirection(mesh.matrixWorld);
       toCamera.copy(this.camera.position).sub(world).normalize();
-      const facing = p.mesh.visible && normal.dot(toCamera) > 0.05;
+      const facing = mesh.visible && normal.dot(toCamera) > 0.05;
       world.project(this.camera);
-      p.el.style.transform = `translate(${((world.x + 1) / 2) * width}px, ${((1 - world.y) / 2) * height}px) translate(-50%, -50%)`;
-      p.el.classList.toggle('is-hidden', this.flying || !facing || world.z > 1);
+      const hidden = this.flying || !facing || world.z > 1;
+      p.el.classList.toggle('is-hidden', hidden);
+      p.line.classList.add('is-hidden');
+      const ax = ((world.x + 1) / 2) * width, ay = ((1 - world.y) / 2) * height;
+      if (hidden) p.el.style.transform = `translate(${ax}px, ${ay}px) translate(-50%, -50%)`;
+      else shown.push({ p, ax, ay, x: ax, y: ay });
+    }
+    spreadPins(shown, width, height);
+    for (const s of shown) {
+      s.p.el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%)`;
+      const dx = s.x - s.ax, dy = s.y - s.ay, length = Math.hypot(dx, dy);
+      if (length < s.p.size * 0.5) continue; // still over its point
+      s.p.line.classList.remove('is-hidden');
+      s.p.line.style.width = `${length}px`;
+      s.p.line.style.transform = `translate(${s.ax}px, ${s.ay}px) rotate(${Math.atan2(dy, dx)}rad)`;
     }
   }
 
@@ -997,6 +1076,42 @@ export class Viewer {
       this.placePins();
     }
   };
+}
+
+interface PinEntry { el: HTMLButtonElement; line: HTMLDivElement; size: number; mesh: PartMesh; local: THREE.Vector3; normal: THREE.Vector3 }
+/** A pin's point on screen (ax, ay) and where it is drawn (x, y), in pixels. */
+interface PinSpot { p: { size: number }; ax: number; ay: number; x: number; y: number }
+
+/**
+ * Push overlapping pins apart until each number is clear of the others (a gap of 4 px), moving each
+ * only as far as needed and keeping it on screen. Pins on the same point start around a circle.
+ */
+function spreadPins(pins: PinSpot[], width: number, height: number) {
+  if (pins.length < 2) return;
+  pins.forEach((s, i) => {
+    if (pins.slice(0, i).some((t) => Math.hypot(t.x - s.x, t.y - s.y) < 0.5)) { s.x += Math.cos(i * 2.4); s.y += Math.sin(i * 2.4); }
+  });
+  for (let pass = 0; pass < 80; pass++) {
+    let overlap = false;
+    for (let i = 0; i < pins.length; i++) {
+      for (let j = i + 1; j < pins.length; j++) {
+        const a = pins[i], b = pins[j];
+        const gap = (a.p.size + b.p.size) / 2 + 4;
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-3;
+        if (d >= gap) continue;
+        overlap = true;
+        const push = (gap - d) / 2 + 0.25;
+        a.x -= (dx / d) * push; a.y -= (dy / d) * push;
+        b.x += (dx / d) * push; b.y += (dy / d) * push;
+      }
+    }
+    for (const s of pins) {
+      const r = s.p.size / 2;
+      s.x = Math.min(width - r, Math.max(r, s.x));
+      s.y = Math.min(height - r, Math.max(r, s.y));
+    }
+    if (!overlap) break;
+  }
 }
 
 /**

@@ -209,8 +209,9 @@ describe('cariology', () => {
       const stages = LESION_MODEL[L.id].stages;
       expect(stages[0].parts.filter((z) => !['enamel', 'dentin', 'cementum', 'pulp'].includes(z)), L.id).toEqual([]);
       expect(stages[stages.length - 1].parts, L.id).toContain('infected-dentin');
-      // The surface zone of an enamel lesion is gone once the lesion has cavitated.
-      if (L.id !== 'root') expect(stages[stages.length - 1].parts).not.toContain('enamel-surface-zone');
+      // A cavitated enamel lesion is still lined by every enamel zone. Its surface zone breaks down only
+      // at the cavity edge (removed within 0.3 mm of it in build_cariology.py), so a ring of it remains.
+      if (L.id !== 'root') for (const z of ['enamel-surface-zone', 'enamel-lesion-body', 'enamel-dark-zone', 'enamel-translucent-zone']) expect(stages[stages.length - 1].parts, `${L.id} ${z}`).toContain(z);
     }
   });
 
