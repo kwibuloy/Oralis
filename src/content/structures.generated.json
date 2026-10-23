@@ -16684,8 +16684,7 @@
   "group": "lips",
   "fma": "FMA59816",
   "models": [
-   "general",
-   "dental"
+   "general"
   ]
  },
  {
@@ -24642,6 +24641,26 @@
   "models": [
    "general",
    "physiology"
+  ]
+ },
+ {
+  "id": "upper-lip",
+  "key": "upper-lip",
+  "name": "upper lip",
+  "group": "lips",
+  "fma": "FMA59817",
+  "models": [
+   "dental"
+  ]
+ },
+ {
+  "id": "lower-lip",
+  "key": "lower-lip",
+  "name": "lower lip",
+  "group": "lips",
+  "fma": "FMA59818",
+  "models": [
+   "dental"
   ]
  }
 ]

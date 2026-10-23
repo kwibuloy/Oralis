@@ -172,7 +172,18 @@ export const NOTES: Record<string, Note> = {
     supply: 'Secretomotor: chorda tympani (VII) via the submandibular ganglion.',
     clinical: 'Many small ducts open along the sublingual fold. A ruptured duct can produce a ranula.',
   },
-  lip: { summary: 'The lips close the oral fissure. Orbicularis oris, the muscle inside them, is not in the source data. With the bite open, the rounded edge of each lip is schematic (the source has the outer surface only), and the corners of the mouth are lightly smoothed.', clinical: 'The vermilion border is checked in every oral cancer screening.' },
+  lip: { summary: 'The lips close the oral fissure. Orbicularis oris, the muscle inside them, is not in the source data.', clinical: 'The vermilion border is checked in every oral cancer screening.' },
+  // Oral anatomy's lips are authored in Blender (scripts/blender/build_lips.py), following the BodyParts3D lip.
+  'upper lip': {
+    summary: 'The upper vermilion, from the vermilion border down to the stomion, where it meets the lower lip. Shown as a smooth solid that follows the outline of the source lip; its depth and the open-mouth shape are schematic. Orbicularis oris, the skin and the inner mucosa are not shown.',
+    supply: 'Sensory: infraorbital nerve (V2). Motor to orbicularis oris: facial nerve (VII).',
+    clinical: 'The vermilion border is checked in every oral cancer screening; a cleft lip runs through the upper lip.',
+  },
+  'lower lip': {
+    summary: 'The lower vermilion, from the stomion down to the vermilion border. Shown as a smooth solid that follows the outline of the source lip and moves with the jaw when the bite opens; its depth and the open-mouth shape are schematic. Orbicularis oris, the skin and the inner mucosa are not shown.',
+    supply: 'Sensory: mental nerve (V3). Motor to orbicularis oris: facial nerve (VII).',
+    clinical: 'The lower lip gets more sun than the upper, so actinic cheilitis and lip cancer are more common there.',
+  },
 };
 
 export const baseName = (sourceName: string) => sourceName.replace(/\b(left|right) /gi, '').toLowerCase();

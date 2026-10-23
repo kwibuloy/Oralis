@@ -23,7 +23,7 @@ function Field({ term, children }: { term: string; children: React.ReactNode }) 
   );
 }
 
-function body(mode: ModeId, key: string): { group: string; color: string; title: string; content: React.ReactNode; ref?: string } | null {
+function body(mode: ModeId, key: string): { group: string; color: string; title: string; content: React.ReactNode; ref?: string; source?: string } | null {
   if (mode === 'histology') {
     const t = tissueByKey(key);
     if (!t) return null;
@@ -68,6 +68,8 @@ function body(mode: ModeId, key: string): { group: string; color: string; title:
   const note = noteFor(s.sourceName);
   return {
     group: GROUPS[s.group]?.label ?? s.group, color, title: s.name, ref: s.fma,
+    // BodyParts3D meshes have FJ ids; the rest (Oral anatomy's lips) are authored for Oralis.
+    source: s.meshIds[0].startsWith('FJ') ? undefined : 'Oralis (Blender)',
     content: (
       <>
         <p className="detail__lead">{note?.summary ?? GROUPS[s.group]?.blurb}</p>
@@ -93,7 +95,7 @@ export default function DetailCard({ mode, selected, isolated, onIsolate, onClea
       {b.ref && (
         <div className="detail__meta">
           <div><small>Atlas reference</small>{b.ref}</div>
-          <div><small>Source</small>BodyParts3D</div>
+          <div><small>Source</small>{b.source ?? 'BodyParts3D'}</div>
         </div>
       )}
       <button className="primary-button" onClick={onIsolate}>
