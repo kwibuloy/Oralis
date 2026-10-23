@@ -172,7 +172,7 @@ export const NOTES: Record<string, Note> = {
     supply: 'Secretomotor: chorda tympani (VII) via the submandibular ganglion.',
     clinical: 'Many small ducts open along the sublingual fold. A ruptured duct can produce a ranula.',
   },
-  lip: { summary: 'The lips close the oral fissure. Orbicularis oris, the muscle inside them, is not in the source data.', clinical: 'The vermilion border is checked in every oral cancer screening.' },
+  lip: { summary: 'The lips close the oral fissure. Orbicularis oris, the muscle inside them, is not in the source data. With the bite open, the rounded edge of each lip is schematic (the source has the outer surface only), and the corners of the mouth are lightly smoothed.', clinical: 'The vermilion border is checked in every oral cancer screening.' },
 };
 
 export const baseName = (sourceName: string) => sourceName.replace(/\b(left|right) /gi, '').toLowerCase();
