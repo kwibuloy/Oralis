@@ -292,7 +292,6 @@ describe('genetics', () => {
   });
 
   it('describes every tooth tissue and gene', () => {
-    for (const t of ['enamel', 'dentin', 'pulp'] as const) expect(PARTS[toothKey('healthy', t)], t).toBeDefined();
     for (const c of CONDITIONS) {
       expect(PARTS[geneKey(c.gene)], c.gene).toBeDefined();
       for (const t of ['enamel', 'dentin'] as const) expect(PARTS[toothKey(c.id, t)], `${c.id} ${t}`).toBeDefined();

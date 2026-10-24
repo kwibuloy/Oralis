@@ -670,12 +670,12 @@ for o in objs.values():
 # stop at each tooth gene: the gene's real first 60 coding bases, its backbone in the gene's colour,
 # grey ladder between (the genes really lie on different chromosomes). The teeth come from
 # models-src/genetics-teeth.glb (build_genetics_teeth.py) and are placed when the file is written:
-# the affected tooth to the left of its gene, a healthy one to the right.
+# each tooth centred above its gene.
 # =====================================================================================
 TEETH_Y = 2 * PROCESS_Y
 GENE_X = {"ENAM": 0.0, "MMP20": 90.0, "FAM83H": 180.0, "DSPP": 270.0}
 GENE_CONDITION = {"ENAM": "ai-hypoplastic", "MMP20": "ai-hypomaturation", "FAM83H": "ai-hypocalcified", "DSPP": "di"}
-TOOTH_SIDE, TOOTH_CEJ_Y = 8.5, 17.0
+TOOTH_CEJ_Y = 17.0
 TEETH_GLB = os.path.join("models-src", "genetics-teeth.glb")
 teeth = {}
 
@@ -774,29 +774,20 @@ for node, o in objs.items():
 for node, o in teeth.items():
     total += write(node, o.key, o.verts, o.faces)
 
-# The molars: each condition beside its gene, and a copy of the healthy molar (sharing its mesh) beside each.
+# The molars: each condition centred above its gene.
 before = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=os.path.abspath(TEETH_GLB))
 molars = [o for o in bpy.data.objects if o not in before and o.type == "MESH"]
 for gene, gx in GENE_X.items():
     for o in molars:
         if o.name.startswith(f"gt-{GENE_CONDITION[gene]}-"):
-            o.location = (gx - TOOTH_SIDE, 0, TEETH_Y + TOOTH_CEJ_Y)
-        elif o.name.startswith("gt-healthy-"):
-            copy = o.copy()  # linked: the same mesh
-            copy.name = f"{o.name}~{gene.lower()}"
-            copy.location = (gx + TOOTH_SIDE, 0, TEETH_Y + TOOTH_CEJ_Y)
-            scene.collection.objects.link(copy)
-for o in molars:
-    if o.name.startswith("gt-healthy-"):
-        bpy.data.objects.remove(o)
-    else:
-        total += len(o.data.polygons)
+            o.location = (gx, 0, TEETH_Y + TOOTH_CEJ_Y)
+            total += len(o.data.polygons)
 
 os.makedirs(os.path.dirname(GLB_OUT) or ".", exist_ok=True)
 # Shape keys go out as morph targets; the app recomputes their normals.
 bpy.ops.export_scene.gltf(filepath=GLB_OUT, export_format="GLB", export_apply=False, export_yup=True, export_morph=True,
-                          export_morph_normal=False, export_vertex_color="ACTIVE", export_draco_mesh_compression_enable=DRACO)
+                          export_morph_normal=False, export_attributes=True, export_draco_mesh_compression_enable=DRACO)
 if BLEND_OUT:
     os.makedirs(os.path.dirname(BLEND_OUT) or ".", exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(BLEND_OUT), compress=True)

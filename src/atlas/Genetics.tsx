@@ -1,7 +1,7 @@
 import { gsap } from 'gsap';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { PEDIGREES, type GeneticsPath as Path, type GeneticsView, type Pattern } from '../content/genetics';
-import type { Viewer } from '../viewer/Viewer';
+import type { SurfaceStyle, Viewer } from '../viewer/Viewer';
 import { Segmented } from './controls';
 
 const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -12,6 +12,31 @@ const FLICK_MS = 160;
 /** Paths with more stops than this get a counter and arrows instead of a row of dots. */
 const MAX_DOTS = 6;
 const PHONE = '(max-width: 860px)';
+
+// How the Teeth path's tissues look (src/viewer/surface.ts; sizes in millimetres). Cut faces stay flat.
+const ENAMEL: SurfaceStyle = { roughness: 0.26, clearcoat: 0.6, grain: 0.12, grainSize: 0.4, perikymata: 0.5, perikymataSpacing: 0.12, bump: 0.25, flatCut: true };
+const TOOTH_LOOK: Record<string, SurfaceStyle> = {
+  enamel: ENAMEL,
+  // Hard but thin: dentin shows through, and the perikymata and grooves stand out.
+  'ai-hypoplastic-enamel': { ...ENAMEL, perikymata: 0.9, stain: '#d9be8a', stainAmount: 0.35, stainSize: 1.2 },
+  // Soft, opaque and mottled chalky white to yellow-brown.
+  'ai-hypomaturation-enamel': { roughness: 0.72, grain: 0.35, grainSize: 0.35, bump: 0.35, stain: '#b4864a', stainAmount: 0.6, stainSize: 0.7, flatCut: true },
+  // Very soft, rough, stained yellow-brown to brown.
+  'ai-hypocalcified-enamel': { roughness: 0.86, grain: 0.45, grainSize: 0.3, bump: 0.6, stain: '#6f4a22', stainAmount: 0.45, stainSize: 0.5, flatCut: true },
+  // Normal enamel over soft dentin, chipping away.
+  'di-enamel': { ...ENAMEL, perikymata: 0.3 },
+  // Opalescent: amber with grey-blue patches and a soft sheen.
+  'di-dentin': { roughness: 0.32, clearcoat: 0.4, grain: 0.15, grainSize: 0.5, stain: '#7d8796', stainAmount: 0.22, stainSize: 1.1, flatCut: true },
+  dentin: { roughness: 0.55, grain: 0.15, grainSize: 0.4, bump: 0.15, flatCut: true },
+  cementum: { roughness: 0.78, grain: 0.25, grainSize: 0.3, bump: 0.2, flatCut: true },
+  pulp: { roughness: 0.7, grain: 0.25, grainSize: 0.25, stain: '#8f2f3c', stainAmount: 0.3, stainSize: 0.45 },
+};
+/** The finish of a Teeth-path part (gt-<condition>-<tissue>); other parts keep the default. */
+export function toothLook(key: string): SurfaceStyle | undefined {
+  const m = /^gt-(.+)-(enamel|dentin|cementum|pulp)$/.exec(key);
+  if (!m) return undefined;
+  return TOOTH_LOOK[key.slice(3)] ?? TOOTH_LOOK[m[2]];
+}
 
 /**
  * Genetics: the model is the timeline. One paused GSAP timeline holds a whole path (camera framing

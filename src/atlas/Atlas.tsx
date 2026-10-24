@@ -27,7 +27,7 @@ import Icon from './Icon';
 import SubjectPicker from './SubjectPicker';
 import Search, { type SearchItem } from './Search';
 import Timeline from './Timeline';
-import { GeneticsPath } from './Genetics';
+import { GeneticsPath, toothLook } from './Genetics';
 import './atlas.css';
 
 type ArchFilter = 'both' | 'upper' | 'lower';
@@ -82,7 +82,7 @@ interface Layer { id: string; label: string; color: string; count: number }
 
 function layersFor(modeId: ModeId, model: string, bySystem: boolean): Layer[] {
   if (modeId === 'histology') return TISSUES.map((t) => ({ id: t.key, label: t.name, color: t.color, count: 1 }));
-  if (modeId === 'genetics') return [{ id: MODEL_GROUP, label: 'DNA', color: GENETIC_PARTS['dna-sugar'].color, count: MODEL_PARTS.length }, { id: 'process', label: 'Processes', color: GENETIC_PARTS['tx-mrna'].color, count: GENETIC_PROCESS_PARTS.length }, { id: 'teeth', label: 'Teeth', color: GENETIC_PARTS['gt-healthy-enamel'].color, count: GENETIC_TEETH_PARTS.length }];
+  if (modeId === 'genetics') return [{ id: MODEL_GROUP, label: 'DNA', color: GENETIC_PARTS['dna-sugar'].color, count: MODEL_PARTS.length }, { id: 'process', label: 'Processes', color: GENETIC_PARTS['tx-mrna'].color, count: GENETIC_PROCESS_PARTS.length }, { id: 'teeth', label: 'Teeth', color: GENETIC_PARTS['gt-gene-dspp'].color, count: GENETIC_TEETH_PARTS.length }];
   const inModel = structuresIn(model);
   const rank = (g: string) => SYSTEMS.findIndex((s) => s.id === GROUP_SYSTEM[g]);
   const order = bySystem ? [...GROUP_ORDER].sort((a, b) => rank(a) - rank(b)) : GROUP_ORDER;
@@ -174,7 +174,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       if (modeId === 'genetics') {
         // Nodes are part keys, or `key~piece` where a part appears more than once (the processes path).
         const p = GENETIC_PARTS[nodeKey(node)];
-        return p ? { key: nodeKey(node), group: nodeGroup(node), color: p.color } : null;
+        return p ? { key: nodeKey(node), group: nodeGroup(node), color: p.color, surface: toothLook(nodeKey(node)) } : null;
       }
       if (node in CARVING_COLOUR) return { key: node, group: 'carving', color: CARVING_COLOUR[node] };
       if (modeId === 'cariology') { const part = cariologyPart(node); if (part) return part; }

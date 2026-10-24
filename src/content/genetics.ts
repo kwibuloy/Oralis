@@ -286,13 +286,7 @@ export const CONDITIONS: Condition[] = [
     tissue: { enamel: 'Normal enamel that chips away from the soft dentin, here lost from the biting surface.', dentin: 'Amber, poorly mineralised, opalescent dentin that wears quickly. It fills the pulp chamber and canals over the years, often completely.', pulp: 'A thin remnant of the pulp chamber; the canals have already filled in.', cementum: 'Normal cementum, on roots that are short and thin.' },
   },
 ];
-export const HEALTHY_TISSUE: Record<ToothTissue, string> = {
-  enamel: 'Healthy enamel: thickest over the cusps (about 2.5 mm on a molar), thinning to nothing at the neck.',
-  dentin: 'Healthy dentin with a scalloped junction to the enamel.',
-  cementum: 'Healthy cementum: a thin layer over the roots, where the periodontal ligament fibres attach.',
-  pulp: 'Healthy pulp: a chamber with horns under the cusps, and canals in the roots. The mesial root has two canals, buccal and lingual, on either side of this cut; they meet near the root tip, which is why only its tip shows.',
-};
-export const TEETH_NOTE = 'The genes are lined up on one ladder only to study them: ENAM and DSPP lie on chromosome 4, MMP20 on 11, FAM83H on 8. The teeth are lower first molars cut in half lengthwise, beside a healthy one.';
+export const TEETH_NOTE = 'The genes are lined up on one ladder only to study them: ENAM and DSPP lie on chromosome 4, MMP20 on 11, FAM83H on 8. The teeth are lower first molars cut in half lengthwise.';
 
 const TISSUE_COLOR: Record<ToothTissue, string> = { enamel: '#f4efe4', dentin: '#e7cf9a', cementum: '#dcc69a', pulp: '#c8594f' };
 const CONDITION_COLOR: Partial<Record<string, string>> = { 'ai-hypoplastic-enamel': '#efe4c4', 'ai-hypomaturation-enamel': '#ead9b4', 'ai-hypocalcified-enamel': '#c99a5b', 'di-enamel': '#ddd6c4', 'di-dentin': '#b07a3f' };
@@ -301,10 +295,11 @@ export const toothKey = (id: string, tissue: ToothTissue) => `gt-${id}-${tissue}
 export const geneKey = (gene: string) => `gt-gene-${gene.toLowerCase()}`;
 export const TOOTH_TISSUES: ToothTissue[] = ['enamel', 'dentin', 'cementum', 'pulp'];
 for (const t of TOOTH_TISSUES) {
-  PARTS[toothKey('healthy', t)] = { name: `${cap(t)} · healthy`, color: TISSUE_COLOR[t], note: HEALTHY_TISSUE[t] };
   for (const c of CONDITIONS) {
     // Amelogenesis imperfecta leaves the cementum as it is.
-    const note = c.tissue[t] ?? (t === 'cementum' && c.id.startsWith('ai-') ? 'Normal cementum: this form affects only the enamel.' : undefined);
+    const note = (c.tissue[t] ?? (t === 'cementum' && c.id.startsWith('ai-') ? 'Normal cementum: this form affects only the enamel.' : undefined))
+      // The cut passes between the mesial root's two canals, so only their meeting point near the tip shows.
+      ?.concat(t === 'pulp' && c.id.startsWith('ai-') ? ' The mesial root has two canals, buccal and lingual, either side of this cut; they meet near the root tip, which is why only its tip shows.' : '');
     if (note) PARTS[toothKey(c.id, t)] = { name: `${cap(t)} · ${c.short}`, color: CONDITION_COLOR[`${c.id}-${t}`] ?? TISSUE_COLOR[t], note };
   }
 }
@@ -345,19 +340,19 @@ export const partByKey = (key: string) => PARTS[key];
 
 // ---------- Teeth path ----------
 
-/** The Teeth path lies below the processes path: a ladder with a stop at each gene (x), the affected tooth left of it, a healthy one right. */
+/** The Teeth path lies below the processes path: a ladder with a stop at each gene (x), the affected molar centred above it. */
 export const TEETH_Y = 2 * PROCESS_Y;
 const GENE_X: Record<string, number> = { ENAM: 0, MMP20: 90, FAM83H: 180, DSPP: 270 };
 const PATTERN_WORDS: Record<Pattern, string> = { AD: 'autosomal dominant', AR: 'autosomal recessive' };
 export const TEETH_STEPS: PathStep[] = CONDITIONS.map((c) => ({
   title: c.name,
   size: `${c.gene} gene · ${c.band} · usually ${PATTERN_WORDS[c.pattern]}`,
-  text: `${c.shows} Left, the affected tooth; right, a healthy one.`,
-  // On a phone, room around both teeth and the ladder below them.
-  view: { center: [GENE_X[c.gene], TEETH_Y + 11, 0], width: 44, height: 30, phoneWidth: 36 },
+  text: c.shows,
+  // The molar centred above its gene, with the ladder below it.
+  view: { center: [GENE_X[c.gene], TEETH_Y + 12, 0], width: 24, height: 30, phoneWidth: 20 },
   pattern: c.pattern,
 }));
-export const TEETH_PARTS = [...TOOTH_TISSUES.map((t) => toothKey('healthy', t)), ...CONDITIONS.flatMap((c) => TOOTH_TISSUES.map((t) => toothKey(c.id, t)).filter((k) => PARTS[k])), ...CONDITIONS.map((c) => geneKey(c.gene)), 'gt-between'];
+export const TEETH_PARTS = [...CONDITIONS.flatMap((c) => TOOTH_TISSUES.map((t) => toothKey(c.id, t)).filter((k) => PARTS[k])), ...CONDITIONS.map((c) => geneKey(c.gene)), 'gt-between'];
 
 // ---------- the model ----------
 

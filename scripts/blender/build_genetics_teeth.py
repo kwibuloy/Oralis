@@ -1,5 +1,5 @@
-"""The Genetics Teeth path's molars: a healthy lower first molar (the Cariology molar's shape, from
-cariology_shape.py) and four inherited conditions, each cut in half along the mesiodistal plane
+"""The Genetics Teeth path's molars: four inherited conditions built on a healthy lower first molar
+(the Cariology molar's shape, from cariology_shape.py), each cut in half along the mesiodistal plane
 through both roots, so enamel, dentin, cementum and pulp show on the cut face (GENETICS_PLAN.md, step 5).
 
 Run headless (Blender 4.x), from the repo root; build_genetics.py then places the teeth on the path:
@@ -184,41 +184,65 @@ def balls(centres, r):
     return d
 
 
+def noise(scale, seed, octaves=10):
+    """Smooth 3D noise in about -1..1 over the lattice: sums of sines along random directions (no grid artefacts)."""
+    rng = np.random.default_rng(seed)
+    n = np.zeros(TS.shape, np.float32)
+    for _ in range(octaves):
+        d = rng.normal(size=3)
+        d /= np.linalg.norm(d)
+        k = rng.uniform(0.7, 1.6) / scale
+        n += np.sin((X3 * d[0] + Y3 * d[1] + Z3 * d[2]) * k + rng.uniform(0, 6.3)).astype(np.float32)
+    return n / np.sqrt(octaves / 2)
+
+
+def near_surface(T, depth):
+    """Inside the tooth and within `depth` of its surface."""
+    return np.maximum(T, -T - depth)
+
+
 def healthy():
     return tissues(TS, DS, PULP, CEJ, Z3)
 
 
 def hypoplastic():
-    # Enamel only 0.3 mm thick over an unchanged DEJ, with pits in its surface.
+    """Enamel only 0.3 mm thick over an unchanged DEJ, with pits and horizontal grooves where enamel
+    formation stopped for a while (as in clinical photographs)."""
     T = np.maximum(TS, DS - 0.3)
     pits = [(x, y, S.occlusal_height(np.array(x), np.array(y)) - 1.9) for x, y in ((-2.0, 1.6), (0.6, 2.4), (2.6, 1.2), (-0.8, 3.4), (1.6, 3.9))]
     pits += [(x, 4.35, z) for x, z in ((-2.4, 4.6), (0.4, 3.6), (2.6, 4.2), (-1.0, 2.4))]
     pits += [(x, 0.15, S.occlusal_height(np.array(x), np.array(0.15)) - 1.75) for x in (-2.3, 1.4)]
     T = np.maximum(T, -balls(pits, 0.32))
+    # Two grooves round the crown, slightly wavy, 0.2 mm deep in the 0.3 mm enamel.
+    for z0, seed in ((2.6, 3), (4.3, 4)):
+        level = z0 + CEJ + 0.15 * noise(2.5, seed, 6)
+        groove = np.maximum(np.abs(Z3 - level) - 0.22, -T - 0.2)
+        T = np.maximum(T, -groove)
     return tissues(T, DS, PULP, CEJ, Z3)
 
 
 def hypomaturation():
-    # Normal thickness; soft enamel chipped off the lingual cusp tips, and off the outline seen in the cut.
+    """Normal thickness; soft enamel flaked off in ragged chips at the cusp tips and along the outline."""
     chips = [(-2.6, 2.85, 8.55), (1.75, 2.95, 8.35)]
     chips += [(x, 0.1, S.occlusal_height(np.array(x), np.array(0.1)) + 0.45) for x in (-3.3, 2.9)]
-    T = np.maximum(TS, -balls(chips, 1.05))
+    ragged = 0.25 * noise(0.5, 5)
+    T = np.maximum(TS, -(balls(chips, 1.05) + ragged))
     return tissues(T, DS, PULP, CEJ, Z3)
 
 
 def hypocalcified():
-    # Normal thickness at eruption, then worn away on the biting surface down into the dentin.
-    # Worn down across the cusps into the dentin.
-    worn = Z3 - (4.4 + 0.15 * np.sin(1.7 * X3) + 0.1 * np.sin(2.3 * Y3 + 1.0))
-    rough = 0.05 * np.sin(9 * X3) * np.sin(8 * Y3 + 1) * np.sin(7 * Z3 + 2)  # soft enamel, uneven surface
-    # What is left of the soft enamel on the upper crown is a thin worn rim over the dentin.
-    thin = np.where(Z3 > CEJ + 3.0, DS - 0.45, -1.0)
+    """Normal thickness at eruption, then worn down across the cusps into the dentin, with an uneven,
+    ragged edge; what is left of the soft enamel on the upper crown is a thin rough rim."""
+    worn = Z3 - (4.4 + 0.3 * noise(1.6, 6) + 0.12 * noise(0.5, 7))
+    rough = 0.06 * noise(0.35, 8)
+    thin = np.where(Z3 > CEJ + 3.0, DS - 0.45 - 0.08 * noise(0.6, 9), -1.0)
     T = np.maximum.reduce([TS + np.where(Z3 > CEJ + 0.5, rough, 0), worn, thin])
     return tissues(T, DS, PULP, CEJ, Z3)
 
 
 def di():
-    """Bulb-shaped crown with a narrow neck, short thin roots; the pulp nearly filled in; enamel lost occlusally."""
+    """Bulb-shaped crown with a narrow neck, short thin roots; the pulp nearly filled in; enamel flaked
+    away in patches, mostly from the biting surface, baring the amber dentin."""
     def warp(x, y, z):
         bump = lambda c, w: np.exp(-((z - c) / w) ** 2)
         s = 1 + 0.12 * bump(3.4, 2.2) - 0.17 * bump(-0.2, 1.1) - 0.12 * (z < -1.0) * np.clip(-(z + 1.0) / 3.0, 0, 1)
@@ -236,40 +260,36 @@ def di():
     xw, yw, zw, _ = warp(X3, Y3, Z3)
     D = TSS_DI + S.enamel_thickness(xw, yw, zw)
     cej = S.cej(xw, yw)
-    # Enamel has broken away from the biting surface, leaving the soft dentin exposed (it wears fast).
-    cap = Z3 - (4.6 + 0.35 * np.sin(1.3 * X3 + 0.5))
+    # The soft dentin wears fast once the enamel goes: cusps flattened by attrition.
+    T = np.maximum(T, Z3 - (6.0 + 0.3 * noise(1.5, 13)))
+    # Enamel has flaked off the upper crown along a ragged line, and in patches lower down.
+    edge = Z3 - (cej + 2.6 + 0.4 * noise(1.2, 10) + 0.12 * noise(0.4, 11))
+    flakes = np.where(Z3 > cej + 1.0, noise(0.9, 12) - 0.6, -1.0)  # positive in patches: enamel gone there
+    cap = np.maximum(edge, flakes)
     remnant = field_by_slabs(field(S.pulp)) + 0.45  # the pulp narrowed by dentin: chamber thinned, canals gone
-    out = tissues(T, D, remnant, cej, Z3, enamel_cap=cap)
-    return out
+    return tissues(T, D, remnant, cej, Z3, enamel_cap=cap)
 
 
-CONDITIONS = {"healthy": healthy, "ai-hypoplastic": hypoplastic, "ai-hypomaturation": hypomaturation,
+# The healthy molar is only the base the conditions are built from; it is not shown.
+CONDITIONS = {"ai-hypoplastic": hypoplastic, "ai-hypomaturation": hypomaturation,
               "ai-hypocalcified": hypocalcified, "di": di}
 COLOURS = {"enamel": "#f4efe4", "dentin": "#e7cf9a", "cementum": "#dcc69a", "pulp": "#c8594f"}
-# Enamel painted in patches (vertex colours, which the app shows as they are): from, to.
-MOTTLED = {"gt-ai-hypomaturation-enamel": ("#f6f2e8", "#c49a5e")}
 
 
-def linear(hex_colour):
-    return np.array([(int(hex_colour[i:i + 2], 16) / 255) ** 2.2 for i in (1, 3, 5)])
-
-
-def mottle(me, a, b):
-    """Patches of colour b on a: a smooth 3D noise (sums of sines along fixed directions), thresholded softly."""
+def mark_cut(me):
+    """_cut = 1 on the flat cut face (y = 0, facing -y), 0 elsewhere: the app keeps cut faces flat while it
+    gives the tooth's natural surface its gloss, grain and stains (src/viewer/surface.ts)."""
     co = np.empty(len(me.vertices) * 3, np.float32)
     me.vertices.foreach_get("co", co)
-    co = co.reshape(-1, 3).astype(np.float64)
-    rng = np.random.default_rng(7)
-    n = np.zeros(len(co))
-    for _ in range(12):
-        d = rng.normal(size=3)
-        n += np.sin(co @ (d / np.linalg.norm(d)) * rng.uniform(1.2, 3.2) + rng.uniform(0, 6.3))
-    t = np.clip((n / 3.4 - 0.05) * 2.2 + 0.5, 0, 1)
-    t = t * t * (3 - 2 * t)
-    col = linear(a)[None, :] * (1 - t[:, None]) + linear(b)[None, :] * t[:, None]
-    attr = me.color_attributes.new("Color", "FLOAT_COLOR", "POINT")
-    attr.data.foreach_set("color", np.hstack([col, np.ones((len(col), 1))]).astype(np.float32).ravel())
-    me.color_attributes.active_color = attr
+    co = co.reshape(-1, 3)
+    attr = me.attributes.new("_cut", "FLOAT", "CORNER")
+    vals = np.zeros(len(me.loops), np.float32)
+    for poly in me.polygons:
+        if poly.normal.y < -0.99 and all(abs(co[v][1]) < 1e-4 for v in poly.vertices):
+            for li in poly.loop_indices:
+                vals[li] = 1.0
+    attr.data.foreach_set("value", vals)
+
 
 for cond, make in CONDITIONS.items():
     if ONLY and cond not in ONLY:
@@ -283,12 +303,11 @@ for cond, make in CONDITIONS.items():
             continue
         me.name = name
         me.set_sharp_from_angle(angle=math.radians(35))  # flat cut faces, smooth tooth surfaces
+        mark_cut(me)
         m = bpy.data.materials.new(name)
         c = tuple((int(COLOURS[tissue][i:i + 2], 16) / 255) ** 2.2 for i in (1, 3, 5))
         m.diffuse_color = (*c, 1.0)
         me.materials.append(m)
-        if name in MOTTLED:
-            mottle(me, *MOTTLED[name])
         ob = bpy.data.objects.new(name, me)
         bpy.context.scene.collection.objects.link(ob)
         log(f"  {name}: {len(me.polygons)} faces")
@@ -298,5 +317,5 @@ for o in list(bpy.data.objects):
         bpy.data.objects.remove(o)
 os.makedirs(os.path.dirname(GLB_OUT) or ".", exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=GLB_OUT, export_format="GLB", export_apply=False, export_yup=True,
-                          export_vertex_color="ACTIVE", export_draco_mesh_compression_enable=True)
+                          export_attributes=True, export_draco_mesh_compression_enable=True)
 log(f"wrote {GLB_OUT}")
