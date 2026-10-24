@@ -1,0 +1,14 @@
+{
+  "source": "NCBI RefSeq NM_014208.3 (DSPP mRNA, MANE Select) and NC_000004.12:87608529-87616872 (GRCh38), fetched by scripts/fetch-dspp.mjs",
+  "gene": "DSPP",
+  "map": "4q22.1",
+  "mrna": "NM_014208.3",
+  "chromosome": "NC_000004.12",
+  "exon2Coding": "ATGAAGATAATTACATATTTTTGCATTTGGGCAGTAGCATGGGCCATTCCA",
+  "intronStart": "GTAAGTATGCCTTTCTTAGAAAACCTCTTC",
+  "intronEnd": "TTTCAATAGCCAGTATTTTCTACTTGGCAG",
+  "intronLength": 1145,
+  "exon3Start": "GTTCCTCAAAGCAAACCACTGGAGAGACATGTCGAAAAATCCATGAATTTGCATCTCCTA",
+  "proteinStart": "MKIITYFCIWAVAWAIPVPQSKPLERHVEKSMNLHLL",
+  "signalPeptide": 15
+}

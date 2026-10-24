@@ -1,4 +1,4 @@
-export type ModeId = 'general' | 'physiology' | 'dental' | 'histology' | 'cariology';
+export type ModeId = 'general' | 'physiology' | 'dental' | 'histology' | 'cariology' | 'genetics';
 
 export interface Preset {
   label: string;
@@ -24,6 +24,8 @@ export interface Mode {
   systems?: boolean;
   /** Function-only subject: function switches and descriptions instead of layers (content/function.ts). */
   functionView?: boolean;
+  /** Path subject: swipe sideways along the model through steps (content/genetics.ts) instead of orbiting it. */
+  path?: boolean;
 }
 
 // Everything except skin, which would hide the rest. Students narrow it down with the system chips.
@@ -80,6 +82,13 @@ export const MODES: Mode[] = [
       { label: 'Tooth', groups: ['enamel', 'dentin', 'pulp', 'neurovascular', 'cementum'] },
       { label: 'Periodontium', groups: ['cementum', 'pdl', 'lamina-dura', 'bone', 'gingiva'] },
     ],
+  },
+  {
+    id: 'genetics', name: 'Genetics', short: 'Genetics', model: '/models/genetics.glb', source: 'blender',
+    lead: 'Travel along a DNA ladder: the real start of the DSPP tooth gene, its base pairs, and the strands unzipping. (Path test: the full DNA, Processes and Teeth views come next.)',
+    defaultVisible: ['dna'],
+    path: true,
+    presets: [],
   },
 ];
 

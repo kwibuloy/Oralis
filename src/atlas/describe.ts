@@ -1,6 +1,7 @@
 import { GROUPS } from '../content/anatomy';
 import { PROCESS_PARTS, siteById, ZONES, zoneOfPart } from '../content/cariology';
 import { CARVING_TOOTH } from '../content/carving';
+import { PARTS as GENETIC_PARTS } from '../content/genetics';
 import { tissueByKey } from '../content/histology';
 import type { ModeId } from '../content/modes';
 import { structureByKey } from '../content/structures';
@@ -9,6 +10,7 @@ import { toothNumber, type Arch, type NumberingSystem } from '../content/teeth';
 /** Short display label for a picked key, used by the hover tag and the list. */
 export function labelFor(mode: ModeId, key: string, system: NumberingSystem): string {
   if (mode === 'histology') return tissueByKey(key)?.name ?? key;
+  if (mode === 'genetics') return GENETIC_PARTS[key]?.name ?? key;
   if (key in CARVING_TOOTH.parts) return CARVING_TOOTH.parts[key].name;
   if (mode === 'cariology') {
     if (key.startsWith('cl-')) return ZONES[zoneOfPart(key)]?.name ?? key;

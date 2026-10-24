@@ -61,6 +61,18 @@ export interface Pin {
   key?: string;
 }
 
+/** What a path subject frames at one moment: a box around `center` (model units), seen from the front. */
+export interface PathView {
+  center: [number, number, number];
+  width: number;
+  height: number;
+}
+/** Path gestures: how far (px) a press travels before it is read as a swipe, and how fast a vertical one turns (rad/px). */
+const SWIPE_START = 8;
+const SPIN_PER_PX = 0.008;
+/** The path camera looks slightly down on the model. */
+const PATH_TILT = 0.16;
+
 /** Pixels of each canvas edge hidden behind cards. */
 export interface Insets {
   left: number;
@@ -119,6 +131,8 @@ interface PartState {
   at: THREE.Vector3; // position last written to the batches (NaN until first placed)
   /** A part that stretches with the offset: per-vertex share of it (the `_bite` attribute) and its rest shape. */
   stretch?: { weights: ArrayLike<number>; rest: Float32Array; restNormals: Float32Array; at: THREE.Vector3 };
+  /** A part with shape keys (glTF morph targets): its rest shape, each target's offsets by name, and the weights last applied. */
+  morph?: { rest: Float32Array; restNormals: Float32Array; targets: { name: string; position: Float32Array; normal: Float32Array | null }[]; at: string };
 }
 
 /**
@@ -186,6 +200,19 @@ export class Viewer {
   /** Playback position (0..1), reported about ten times a second while playing. */
   onTime: (t: number) => void = () => {};
   onHover: (key: string | null, at: { x: number; y: number } | null) => void = () => {};
+  /** Path mode: a sideways swipe moved by `dx` px (positive = finger moved right), and its end with the finger's speed (px/ms). */
+  onTravel: (dx: number) => void = () => {};
+  onTravelEnd: (velocity: number) => void = () => {};
+
+  // Path mode (see setPathMode): the framed box, the turn around the path's axis and the pinch zoom.
+  private pathMode = false;
+  private pathView: PathView = { center: [0, 0, 0], width: 1, height: 1 };
+  private pathSpin = 0;
+  private pathZoom = 1;
+  private gesture: { x: number; y: number; dir: 'h' | 'v' | 'pinch' | null; spin: number; zoom: number; pinch: number; last: [number, number][] } | null = null;
+  private pointers = new Map<number, { x: number; y: number }>();
+  private wheelEnd = 0;
+  private morphWeights: Record<string, number> = {};
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -219,6 +246,10 @@ export class Viewer {
     canvas.addEventListener('pointerup', this.handleUp);
     canvas.addEventListener('pointermove', this.handleMove);
     canvas.addEventListener('pointerleave', this.handleLeave);
+    canvas.addEventListener('pointerdown', this.pathDown);
+    canvas.addEventListener('pointermove', this.pathMove);
+    canvas.addEventListener('pointerup', this.pathUp);
+    canvas.addEventListener('pointercancel', this.pathUp);
     this.pinLayer = document.createElement('div');
     this.pinLayer.className = 'pins';
     (canvas.parentElement ?? document.body).append(this.pinLayer);
@@ -394,7 +425,8 @@ export class Viewer {
     this.apply();
     const spot = this.spot;
     this.spot = null;
-    if (key && frame) this.frameSelected(key, spot);
+    // On a path the camera belongs to the timeline: a selection highlights without flying.
+    if (key && frame && !this.pathMode) this.frameSelected(key, spot);
   }
 
   /**
@@ -426,7 +458,7 @@ export class Viewer {
     this.gridDirty = true;
     this.apply();
     this.place();
-    if (this.selected) this.frameKeys(on ? [this.selected] : this.visibleKeys(), on ? 1.5 : FIT_PADDING);
+    if (this.selected && !this.pathMode) this.frameKeys(on ? [this.selected] : this.visibleKeys(), on ? 1.5 : FIT_PADDING);
   }
 
   /**
@@ -564,6 +596,149 @@ export class Viewer {
   }
 
   /**
+   * Path subjects (Genetics): no orbiting. A sideways swipe or trackpad scroll is reported through
+   * onTravel / onTravelEnd for the caller's timeline to move along the path; an up/down swipe turns
+   * the view around the path's axis (x); pinch and wheel zoom; a tap still picks. The camera frames
+   * whatever setPathView last gave, at once, so a timeline can drive it every frame.
+   */
+  setPathMode(on: boolean) {
+    this.pathMode = on;
+    this.controls.enabled = !on;
+    this.pathSpin = 0;
+    this.pathZoom = 1;
+    if (on) this.applyPath();
+  }
+
+  setPathView(view: PathView) {
+    this.pathView = view;
+    if (this.pathMode) this.applyPath();
+  }
+
+  /** Shape-key weights by name (e.g. { unzip: 0.4 }), applied to every part that has keys of those names. */
+  setMorphWeights(weights: Record<string, number>) {
+    this.morphWeights = weights;
+    for (const [m, s] of this.state) if (s.morph) this.morphPart(m, s.morph);
+  }
+
+  /** Put the camera on the current path view: framed in the space between the cards, turned and zoomed. */
+  private applyPath() {
+    const { center, height } = this.pathView;
+    // A long stretch fitted across a portrait phone comes out thin: show the middle part of it larger.
+    const width = this.pathView.width * (this.camera.aspect < 0.8 ? 0.6 : 1);
+    const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+    // Fitted above the bottom bar; a card opening at the side only slides the view over (see resize), it never zooms out.
+    const freeH = Math.max(0.3, 1 - this.insetTarget.bottom / this.height);
+    const distance = Math.max(height / 2 / (tan * freeH), width / 2 / (tan * this.camera.aspect)) * this.pathZoom;
+    const target = new THREE.Vector3(...center);
+    const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pathSpin);
+    gsap.killTweensOf(this.controls.target);
+    gsap.killTweensOf(this.camera.position);
+    this.flying = false;
+    this.controls.target.copy(target);
+    this.camera.position.copy(target).add(new THREE.Vector3(0, distance * PATH_TILT, distance).applyQuaternion(turn));
+    this.camera.up.set(0, 1, 0).applyQuaternion(turn);
+    this.camera.lookAt(target);
+    this.frameNear = Math.max(distance / 100, 0.01);
+    this.camera.far = distance * 20;
+    this.camera.updateProjectionMatrix();
+    this.needsRender = true;
+  }
+
+  private pathDown = (e: PointerEvent) => {
+    if (!this.pathMode) return;
+    this.canvas.setPointerCapture?.(e.pointerId);
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const two = [...this.pointers.values()];
+    this.gesture = two.length >= 2
+      ? { x: 0, y: 0, dir: 'pinch', spin: this.pathSpin, zoom: this.pathZoom, pinch: Math.hypot(two[0].x - two[1].x, two[0].y - two[1].y), last: [] }
+      : { x: e.clientX, y: e.clientY, dir: null, spin: this.pathSpin, zoom: this.pathZoom, pinch: 0, last: [[performance.now(), e.clientX]] };
+  };
+
+  private pathMove = (e: PointerEvent) => {
+    const g = this.gesture;
+    if (!this.pathMode || !g || !this.pointers.has(e.pointerId)) return;
+    const prev = this.pointers.get(e.pointerId)!;
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (g.dir === 'pinch') {
+      const two = [...this.pointers.values()];
+      if (two.length < 2) return;
+      this.pathZoom = THREE.MathUtils.clamp(g.zoom * g.pinch / Math.max(20, Math.hypot(two[0].x - two[1].x, two[0].y - two[1].y)), 0.25, 3);
+      this.applyPath();
+      return;
+    }
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    // The first few pixels decide the direction; the rest of the swipe keeps it.
+    if (!g.dir && Math.hypot(dx, dy) > SWIPE_START) g.dir = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+    if (g.dir === 'h') {
+      this.onTravel(e.clientX - prev.x);
+      g.last.push([performance.now(), e.clientX]);
+      if (g.last.length > 6) g.last.shift();
+    } else if (g.dir === 'v') {
+      this.pathSpin = g.spin + dy * SPIN_PER_PX;
+      this.applyPath();
+    }
+  };
+
+  private pathUp = (e: PointerEvent) => {
+    if (!this.pathMode || !this.pointers.has(e.pointerId)) return;
+    this.pointers.delete(e.pointerId);
+    const g = this.gesture;
+    if (!g) return;
+    if (g.dir === 'pinch') { if (!this.pointers.size) this.gesture = null; return; }
+    if (g.dir === 'h') {
+      const [t0, x0] = g.last[0], [t1, x1] = g.last[g.last.length - 1];
+      this.onTravelEnd(t1 > t0 ? (x1 - x0) / (t1 - t0) : 0);
+    }
+    this.gesture = null;
+  };
+
+  /** Path mode's wheel: sideways scroll (trackpads) travels, settling a moment after it stops; up/down zooms. */
+  private pathWheel(e: WheelEvent) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      this.onTravel(-e.deltaX);
+      clearTimeout(this.wheelEnd);
+      this.wheelEnd = window.setTimeout(() => this.onTravelEnd(0), 160);
+      return;
+    }
+    this.pathZoom = THREE.MathUtils.clamp(this.pathZoom * Math.exp(e.deltaY * 0.0012), 0.25, 3);
+    this.applyPath();
+  }
+
+  /** Apply the shape-key weights to a part: rest shape plus each key's offsets, normals likewise, then into its batch. */
+  private morphPart(m: PartMesh, morph: NonNullable<PartState['morph']>) {
+    const weights = morph.targets.map((t) => this.morphWeights[t.name] ?? 0);
+    const at = weights.join();
+    if (at === morph.at || m.userData.indexing) return;
+    const pos = m.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const nrm = m.geometry.getAttribute('normal') as THREE.BufferAttribute;
+    const p = pos.array as Float32Array, n = nrm.array as Float32Array;
+    p.set(morph.rest);
+    n.set(morph.restNormals);
+    morph.targets.forEach((t, i) => {
+      const w = weights[i];
+      if (!w) return;
+      for (let k = 0; k < p.length; k++) p[k] += w * t.position[k];
+      if (t.normal) for (let k = 0; k < n.length; k++) n[k] += w * t.normal[k];
+    });
+    for (let k = 0; k < n.length; k += 3) {
+      const l = Math.hypot(n[k], n[k + 1], n[k + 2]) || 1;
+      n[k] /= l; n[k + 1] /= l; n[k + 2] /= l;
+    }
+    pos.needsUpdate = true;
+    nrm.needsUpdate = true;
+    m.geometry.computeBoundingBox();
+    m.geometry.computeBoundingSphere();
+    m.geometry.boundsTree?.refit();
+    const { batch, instance, fadedBatch, fadedInstance } = m.userData as { batch?: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
+    batch?.mesh.setGeometryAt(batch.mesh.getGeometryIdAt(instance), m.geometry);
+    fadedBatch?.mesh.setGeometryAt(fadedBatch.mesh.getGeometryIdAt(fadedInstance!), m.geometry);
+    morph.at = at;
+    this.needsRender = true;
+  }
+
+  /**
    * Show a muscle's line of pull: arrows at both ends of its long axis pointing inwards, because a
    * muscle shortens and draws its attachments together. Null removes it.
    */
@@ -606,6 +781,11 @@ export class Viewer {
     this.canvas.removeEventListener('pointerup', this.handleUp);
     this.canvas.removeEventListener('pointermove', this.handleMove);
     this.canvas.removeEventListener('pointerleave', this.handleLeave);
+    this.canvas.removeEventListener('pointerdown', this.pathDown);
+    this.canvas.removeEventListener('pointermove', this.pathMove);
+    this.canvas.removeEventListener('pointerup', this.pathUp);
+    this.canvas.removeEventListener('pointercancel', this.pathUp);
+    clearTimeout(this.wheelEnd);
     gsap.killTweensOf(this.biteTween);
     for (const [m] of this.state) { m.geometry.dispose(); m.material.dispose(); }
     for (const b of this.batches) { b.mesh.dispose(); (b.mesh.material as THREE.Material).dispose(); }
@@ -660,13 +840,36 @@ export class Viewer {
       m.geometry.deleteAttribute('_bite');
       this.hasStretch = true;
     }
+    // Shape keys are applied on the CPU too (setMorphWeights): a batch draws no morph targets. glTF
+    // targets are offsets from the rest shape; their names come from the mesh's target dictionary.
+    let morph: PartState['morph'];
+    const targets = m.geometry.morphAttributes.position;
+    if (targets?.length) {
+      const names = Object.entries(mesh.morphTargetDictionary ?? {}).sort((a, b) => a[1] - b[1]).map(([name]) => name);
+      const flat = (a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute) => {
+        const out = new Float32Array(a.count * 3);
+        for (let i = 0; i < a.count; i++) { out[i * 3] = a.getX(i); out[i * 3 + 1] = a.getY(i); out[i * 3 + 2] = a.getZ(i); }
+        return out;
+      };
+      morph = {
+        rest: flat(m.geometry.getAttribute('position')), restNormals: flat(m.geometry.getAttribute('normal')), at: '',
+        targets: targets.map((t, i) => ({ name: names[i] ?? String(i), position: flat(t), normal: m.geometry.morphAttributes.normal?.[i] ? flat(m.geometry.morphAttributes.normal[i]) : null })),
+      };
+      // Plain, writable copies of the attributes (the loader's may share one interleaved buffer).
+      m.geometry.setAttribute('position', new THREE.BufferAttribute(morph.rest.slice(), 3));
+      m.geometry.setAttribute('normal', new THREE.BufferAttribute(morph.restNormals.slice(), 3));
+      m.geometry.morphAttributes = {};
+      m.morphTargetInfluences = undefined;
+      m.morphTargetDictionary = undefined;
+    }
     // Parts are drawn through their batch; a part only joins the scene itself when drawn specially.
     this.meshes.push(m);
     const box = new THREE.Box3().setFromObject(m);
     this.state.set(m, {
       base: m.position.clone(), center: box.getCenter(new THREE.Vector3()), size: box.getSize(new THREE.Vector3()),
-      bite: new THREE.Vector3(), radial: new THREE.Vector3(), grid: null, at: new THREE.Vector3(NaN, NaN, NaN), stretch,
+      bite: new THREE.Vector3(), radial: new THREE.Vector3(), grid: null, at: new THREE.Vector3(NaN, NaN, NaN), stretch, morph,
     });
+    if (morph) this.morphPart(m, morph);
   }
 
   /** Group parts that look alike into batches (see Batch); `faded` builds see-through ones for context parts. */
@@ -993,6 +1196,7 @@ export class Viewer {
    * zones behind it show as holes.
    */
   private guardWheel = (e: WheelEvent) => {
+    if (this.pathMode) { this.pathWheel(e); return; }
     if (e.deltaY >= 0) return;
     const h = this.hit(e);
     const d = this.camera.position.distanceTo(this.controls.target);
@@ -1085,6 +1289,7 @@ export class Viewer {
     const shift = Math.round(box.height * (box.width > 860 ? SHIFT_DESKTOP : SHIFT_PHONE) + this.inset.bottom / 2);
     this.camera.setViewOffset(box.width, box.height, shiftX, shift, box.width, box.height);
     this.camera.updateProjectionMatrix();
+    if (this.pathMode) this.applyPath(); // the framing depends on the aspect and the insets
     this.needsRender = true;
   }
 

@@ -1,4 +1,5 @@
 import { GROUPS, noteFor } from '../content/anatomy';
+import { PARTS as GENETIC_PARTS } from '../content/genetics';
 import { tissueByKey } from '../content/histology';
 import type { ModeId } from '../content/modes';
 import { GROUP_COLOR, structureByKey } from '../content/structures';
@@ -40,6 +41,10 @@ function body(mode: ModeId, key: string): { group: string; color: string; title:
         </>
       ),
     };
+  }
+  if (mode === 'genetics') {
+    const p = GENETIC_PARTS[key];
+    return p ? { group: 'DNA', color: p.color, title: p.name, content: <p className="detail__lead">{p.note}</p> } : null;
   }
   const s = structureByKey(key);
   if (!s) return null;

@@ -6,6 +6,7 @@ import { bloodColour, brainArea, DEOXYGENATED, flowFunction, FUNCTION_CONTEXT, F
 import { TISSUES } from './histology';
 import { LANDMARKS, landmarkHasNote } from './carving';
 import { LESION_MODEL, LESION_TYPES, mineralAt, PERIO_ZONES, perioGroup, plaquePH, PROCESS_PARTS, SITE_PINS, SITES, staticGroup, stageGroup, ZONES } from './cariology';
+import { CONDITIONS, DNA_LEVELS, DSPP, DSPP_PROTEIN, geneKey, MODEL_GROUP, MODEL_PARTS, PARTS, partner, PATH_STEPS, PEDIGREES, PROCESS_STEPS, toothKey, toRna, translate } from './genetics';
 import { MODES } from './modes';
 import { STRUCTURES, structureByKey } from './structures';
 import { fdi, morphology, palmer, parseTooth, universal } from './teeth';
@@ -64,10 +65,11 @@ describe('content coverage', () => {
   it('labels every group used by the model and by the modes', () => {
     for (const s of STRUCTURES) expect(GROUPS[s.group], s.group).toBeDefined();
     const tissueKeys = new Set(TISSUES.map((t) => t.key));
-    // Cariology's groups are its authored lesion parts (checked in its own tests below).
+    // Cariology's groups are its authored lesion parts (checked in its own tests below); Genetics has one group.
     for (const m of MODES.filter((x) => x.id !== 'cariology')) {
       for (const g of [...m.defaultVisible, ...(m.context ?? [])]) {
-        expect(m.source === 'blender' ? tissueKeys.has(g) : g in GROUPS, `${m.id}: ${g}`).toBe(true);
+        const known = m.id === 'genetics' ? g === MODEL_GROUP : m.source === 'blender' ? tissueKeys.has(g) : g in GROUPS;
+        expect(known, `${m.id}: ${g}`).toBe(true);
       }
     }
   });
@@ -83,7 +85,7 @@ describe('mode models', () => {
 
   it.each(MODES.map((m) => [m.id, m] as const))('%s model contains everything its content expects', (_, m) => {
     const names = glbNodeNames(m.model.replace('/models/', ''));
-    const expected = m.source === 'blender'
+    const expected = m.id === 'genetics' ? MODEL_PARTS : m.source === 'blender'
       ? TISSUES.map((t) => t.key)
       : STRUCTURES.filter((s) => s.models.includes(m.id)).flatMap((s) => s.meshIds);
     expect(expected.length).toBeGreaterThan(0);
@@ -255,6 +257,78 @@ describe('cariology', () => {
     // Frequent sugar keeps the pH down and costs more mineral than one intake.
     expect(mineralAt(120, 'frequent')).toBeLessThan(mineralAt(120, 'single'));
     expect(mineralAt(120, 'single')).toBeGreaterThan(0.97);
+  });
+});
+
+describe('genetics', () => {
+  it('gives every part a name, a colour and a note, and every step only known parts', () => {
+    for (const [k, p] of Object.entries(PARTS)) {
+      expect(p.note.length, k).toBeGreaterThan(30);
+      expect(p.color, k).toMatch(/^#[0-9a-f]{6}$/);
+    }
+    for (const s of [...DNA_LEVELS, ...PROCESS_STEPS]) for (const k of s.parts) expect(PARTS[k], `${s.title} ${k}`).toBeDefined();
+    expect(DNA_LEVELS).toHaveLength(5);
+  });
+
+  it('uses the real DSPP stretch: start codon, whole codons, an intron from GT to AG', () => {
+    expect(DSPP.exon2Coding.startsWith('ATG')).toBe(true);
+    expect(DSPP.exon2Coding.length % 3).toBe(0);
+    expect(DSPP.intronStart.startsWith('GT')).toBe(true);
+    expect(DSPP.intronEnd.endsWith('AG')).toBe(true);
+    expect(DSPP.ladder).toMatch(/^[ATGC]+$/);
+  });
+
+  it('pairs A with T and G with C, and copies DNA into RNA with U', () => {
+    expect(partner('ATGC')).toBe('TACG');
+    expect(partner(partner(DSPP.ladder))).toBe(DSPP.ladder);
+    expect(toRna('ATGT')).toBe('AUGU');
+    expect(translate('AUGUAAUAGUGA')).toBe('M***');
+  });
+
+  it('translates the spliced RNA into the start of the real DSPP protein (NP_055023)', () => {
+    expect(DSPP_PROTEIN).toBe(DSPP.proteinStart);
+    expect(DSPP_PROTEIN.startsWith('M')).toBe(true);
+    expect(DSPP_PROTEIN).not.toContain('*');
+  });
+
+  it('describes every tooth tissue and gene; dentinogenesis imperfecta has no pulp left', () => {
+    for (const t of ['enamel', 'dentin', 'pulp'] as const) expect(PARTS[toothKey('healthy', t)], t).toBeDefined();
+    for (const c of CONDITIONS) {
+      expect(PARTS[geneKey(c.gene)], c.gene).toBeDefined();
+      for (const t of ['enamel', 'dentin'] as const) expect(PARTS[toothKey(c.id, t)], `${c.id} ${t}`).toBeDefined();
+      expect(Boolean(PARTS[toothKey(c.id, 'pulp')]), c.id).toBe(c.id !== 'di');
+    }
+  });
+
+  it('draws family trees that fit their pattern', () => {
+    const ad = PEDIGREES.AD.people;
+    for (const p of ad) if (p.status === 'a' && p.parents) expect(p.parents.some((i) => ad[i].status === 'a')).toBe(true);
+    expect(ad.some((p) => p.status === 'c')).toBe(false);
+    expect(ad.filter((p) => p.status === 'a').map((p) => p.generation)).toEqual(expect.arrayContaining([1, 2, 3]));
+    const ar = PEDIGREES.AR.people;
+    for (const p of ar) {
+      if (!p.parents) continue;
+      const [m, f] = p.parents.map((i) => ar[i].status);
+      // An affected child needs a changed copy from both parents; a child of an affected parent carries at least one.
+      if (p.status === 'a') expect(m !== '' && f !== '').toBe(true);
+      if (m === 'a' || f === 'a') expect(p.status).not.toBe('');
+      if (m === '' && f === '') expect(p.status).toBe('');
+    }
+    expect(ar.some((p) => p.status === 'a' && p.parents?.every((i) => ar[i].status === 'c'))).toBe(true);
+  });
+
+  it('builds the ladder from the real sequence, with an unzip shape on every part', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/genetics.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    for (const k of MODEL_PARTS) expect(PARTS[k], k).toBeDefined();
+    for (const mesh of json.meshes) expect(mesh.extras?.targetNames, mesh.name).toContain('unzip');
+    // Each base pair is two half rungs, one per letter (18 vertices each): an A–T pair puts one half in
+    // each of the A and T parts, so each holds one half per A–T pair of the sequence; likewise G and C.
+    const vertices = (k: string) => json.accessors[json.meshes.find((m: { name: string }) => m.name === k).primitives[0].attributes.POSITION].count;
+    const count = (bases: string) => [...DSPP.ladder].filter((b) => bases.includes(b)).length;
+    for (const k of ['dna-base-a', 'dna-base-t']) expect(vertices(k), k).toBe(count('AT') * 18);
+    for (const k of ['dna-base-g', 'dna-base-c']) expect(vertices(k), k).toBe(count('GC') * 18);
+    for (const s of PATH_STEPS) for (const name of Object.keys(s.morph)) expect(name).toBe('unzip');
   });
 });
 
