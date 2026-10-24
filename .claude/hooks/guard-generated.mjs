@@ -19,8 +19,9 @@ const RULES = [
   [/^src\/content\/cariology-lesions\.generated\.json$/, 'Written by scripts/extract-bodyparts.mjs from the Blender lesion molar and its manifest (stages, parts, pins); names and notes live in src/content/cariology.ts.'],
   [/^models-src\/carving-molar\.glb$/, 'It is built by scripts/build-carving-tooth.mjs; change the script, then re-run it and extract-bodyparts.mjs.'],
   [/^src\/content\/carving\.generated\.json$/, 'Landmark positions come from scripts/build-carving-tooth.mjs; names and notes live in src/content/carving.ts.'],
-  [/^models-src\/cariology\.glb$/, 'It is built by scripts/build-cariology.mjs (only its process block is used); change the script, then re-run it and extract-bodyparts.mjs.'],
-  [/^src\/content\/cariology(-sites)?\.generated\.json$/, 'Written by scripts/build-cariology.mjs (old lesion molar, unused) and extract-bodyparts.mjs (site pins); names and notes live in src/content/cariology.ts.'],
+  [/^models-src\/cariology\.glb$/, 'It is built by scripts/build-cariology.mjs (the process block); change the script, then re-run it and extract-bodyparts.mjs.'],
+  [/^src\/content\/cariology-sites\.generated\.json$/, 'Written by extract-bodyparts.mjs (site pins); names and notes live in src/content/cariology.ts.'],
+  [/^src\/content\/genetics-sequence\.generated\.json$/, 'The real DSPP stretch, fetched from NCBI by scripts/fetch-dspp.mjs; never type a sequence by hand.'],
 ];
 
 const hit = RULES.find(([re]) => re.test(rel));

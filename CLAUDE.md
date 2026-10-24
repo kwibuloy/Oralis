@@ -21,7 +21,7 @@ This file points; it does not document. Read the files it names.
 | Carving tooth (run before extract) | `node scripts/build-carving-tooth.mjs` → `models-src/carving-molar.glb`, `src/content/carving.generated.json` |
 | Oral anatomy lips, Blender (run before extract) | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_lips.py -- models-src/lips.glb models-src/lips.blend` |
 | Cariology lesion molar, Blender (run before extract; see `scripts/blender/CARIOLOGY_TOOTH.md`) | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_cariology.py -- models-src/cariology-blender.glb models-src/cariology-blender.blend` → also `models-src/cariology-blender.json` |
-| Cariology process block (run before extract) | `node scripts/build-cariology.mjs` → `models-src/cariology.glb` (its old lesion molar is unused) |
+| Cariology process block (run before extract) | `node scripts/build-cariology.mjs` → `models-src/cariology.glb` |
 | General, Physiology, Oral anatomy + Cariology models (+ `cariology-lesions.generated.json`) | `node scripts/extract-bodyparts.mjs <human-atlas checkout>` |
 | Histology model | `"/d/Blender/blender.exe" -b --factory-startup -P scripts/blender/build_histology.py -- public/models/histology.glb models-src/histology.blend` |
 

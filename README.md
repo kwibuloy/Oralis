@@ -41,7 +41,8 @@ Import the repository, leave **Root Directory** at the repo root, and keep the d
 ## Rebuilding the models
 
 ```bash
-# The carving tooth and the cariology lesion molar (merged into their models by the next step)
+# The carving tooth and the cariology process block (merged into their models by the next step;
+# the lesion molar comes from scripts/blender/build_cariology.py)
 node scripts/build-carving-tooth.mjs
 node scripts/build-cariology.mjs
 
@@ -75,7 +76,8 @@ stylised for teaching.
 - General and Oral anatomy: [BodyParts3D 4.0](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/),
   Database Center for Life Science, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), via
   [ashemag/human-atlas](https://github.com/ashemag/human-atlas), which also inspired the interface.
-- Histology model: authored for Oralis in Blender. Cariology's lesion molar and process block:
-  authored for Oralis in code (`scripts/build-cariology.mjs`); lesion sizes are schematic.
+- Histology model: authored for Oralis in Blender. Cariology's lesion molar: authored for Oralis in
+  Blender (`scripts/blender/build_cariology.py`); process block in code (`scripts/build-cariology.mjs`);
+  lesion sizes are schematic.
 
 For education only. Not for diagnosis or treatment planning.

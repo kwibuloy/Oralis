@@ -576,8 +576,7 @@ function carveSites(geometry) {
  *     with _CUT (1 on a cut face) and _ZONE (the part's index in `regions`, for the zone palette) per
  *     vertex; its custom normals are kept. Writes src/content/cariology-lesions.generated.json: per
  *     lesion, the parts of each stage and a pin on the cut face of each lesion zone and the pulp;
- *   - the process block (µm) from models-src/cariology.glb (scripts/build-cariology.mjs), whose old
- *     lesion molar (cl-*) is no longer used.
+ *   - the process block (µm) from models-src/cariology.glb (scripts/build-cariology.mjs).
  */
 async function addCariologyParts(doc, buffer, scene, archRightEdge) {
   const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setBuffer(buffer);
