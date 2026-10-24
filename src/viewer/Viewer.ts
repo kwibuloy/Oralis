@@ -627,7 +627,8 @@ export class Viewer {
     const width = this.pathView.width * (this.camera.aspect < 0.8 ? 0.6 : 1);
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
     // Fitted above the bottom bar; a card opening at the side only slides the view over (see resize), it never zooms out.
-    const freeH = Math.max(0.3, 1 - this.insetTarget.bottom / this.height);
+    // The header and subject picker take the top of the canvas too (more of it on phones).
+    const freeH = Math.max(0.3, 1 - this.insetTarget.bottom / this.height - (this.width > 860 ? 0.1 : 0.16));
     const distance = Math.max(height / 2 / (tan * freeH), width / 2 / (tan * this.camera.aspect)) * this.pathZoom;
     const target = new THREE.Vector3(...center);
     const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pathSpin);
@@ -728,6 +729,8 @@ export class Viewer {
     }
     pos.needsUpdate = true;
     nrm.needsUpdate = true;
+    // Keys exported without normals (parts that grow from a shrunk start): shade from the new shape.
+    if (morph.targets.some((t) => !t.normal)) m.geometry.computeVertexNormals();
     m.geometry.computeBoundingBox();
     m.geometry.computeBoundingSphere();
     m.geometry.boundsTree?.refit();

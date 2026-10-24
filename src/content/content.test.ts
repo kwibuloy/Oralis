@@ -6,7 +6,7 @@ import { bloodColour, brainArea, DEOXYGENATED, flowFunction, FUNCTION_CONTEXT, F
 import { TISSUES } from './histology';
 import { LANDMARKS, landmarkHasNote } from './carving';
 import { LESION_MODEL, LESION_TYPES, mineralAt, PERIO_ZONES, perioGroup, plaquePH, PROCESS_PARTS, SITE_PINS, SITES, staticGroup, stageGroup, ZONES } from './cariology';
-import { CONDITIONS, DNA_LEVELS, DSPP, DSPP_PROTEIN, geneKey, MODEL_GROUP, MODEL_PARTS, PARTS, partner, PATH_STEPS, PEDIGREES, PROCESS_STEPS, toothKey, toRna, translate } from './genetics';
+import { CONDITIONS, DNA_LEVELS, DSPP, DSPP_PROTEIN, geneKey, MODEL_GROUP, MODEL_PARTS, nodeKey, PARTS, partner, PEDIGREES, PROCESS_MOTION, PROCESS_PARTS as GENETIC_PROCESS_PARTS, PROCESS_STEPS, toothKey, toRna, translate } from './genetics';
 import { MODES } from './modes';
 import { STRUCTURES, structureByKey } from './structures';
 import { fdi, morphology, palmer, parseTooth, universal } from './teeth';
@@ -317,18 +317,35 @@ describe('genetics', () => {
     expect(ar.some((p) => p.status === 'a' && p.parents?.every((i) => ar[i].status === 'c'))).toBe(true);
   });
 
-  it('builds the ladder from the real sequence, with an unzip shape on every part', () => {
+  it('builds the double helix from the real sequence, and every level of the DNA path', () => {
     const buf = readFileSync(resolve(__dirname, '../../public/models/genetics.glb'));
     const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
     for (const k of MODEL_PARTS) expect(PARTS[k], k).toBeDefined();
-    for (const mesh of json.meshes) expect(mesh.extras?.targetNames, mesh.name).toContain('unzip');
     // Each base pair is two half rungs, one per letter (18 vertices each): an A–T pair puts one half in
     // each of the A and T parts, so each holds one half per A–T pair of the sequence; likewise G and C.
     const vertices = (k: string) => json.accessors[json.meshes.find((m: { name: string }) => m.name === k).primitives[0].attributes.POSITION].count;
     const count = (bases: string) => [...DSPP.ladder].filter((b) => bases.includes(b)).length;
     for (const k of ['dna-base-a', 'dna-base-t']) expect(vertices(k), k).toBe(count('AT') * 18);
     for (const k of ['dna-base-g', 'dna-base-c']) expect(vertices(k), k).toBe(count('GC') * 18);
-    for (const s of PATH_STEPS) for (const name of Object.keys(s.morph)) expect(name).toBe('unzip');
+    // Every stop frames ground to the right of the last, and its level's parts are in the model.
+    DNA_LEVELS.forEach((s, i) => { if (i) expect(s.view.center[0]).toBeGreaterThan(DNA_LEVELS[i - 1].view.center[0]); });
+    for (const l of DNA_LEVELS) for (const k of l.parts.filter((p) => !p.endsWith('-groove'))) expect(MODEL_PARTS, k).toContain(k);
+  });
+
+  it('has every processes part in the model, and a shape key for every motion track', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/genetics.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    const keys = new Set<string>(json.nodes.map((n: { name: string }) => nodeKey(n.name)));
+    for (const k of keys) expect(PARTS[k], k).toBeDefined();
+    for (const k of GENETIC_PROCESS_PARTS) expect(keys.has(k), k).toBe(true);
+    const targets = new Set<string>(json.meshes.flatMap((m: { extras?: { targetNames?: string[] } }) => m.extras?.targetNames ?? []));
+    for (const name of Object.keys(PROCESS_MOTION)) expect(targets.has(name), name).toBe(true);
+    for (const t of targets) expect(PROCESS_MOTION[t], t).toBeDefined();
+    // Tracks run forward in time within the path's stops.
+    for (const [name, track] of Object.entries(PROCESS_MOTION)) {
+      track.forEach(([t], i) => { if (i) expect(t, name).toBeGreaterThan(track[i - 1][0]); });
+      expect(track[track.length - 1][0], name).toBeLessThanOrEqual(PROCESS_STEPS.length - 1);
+    }
   });
 });
 

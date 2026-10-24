@@ -85,7 +85,7 @@ export const MODES: Mode[] = [
   },
   {
     id: 'genetics', name: 'Genetics', short: 'Genetics', model: '/models/genetics.glb', source: 'blender',
-    lead: 'Travel along a DNA ladder: the real start of the DSPP tooth gene, its base pairs, and the strands unzipping. (Path test: the full DNA, Processes and Teeth views come next.)',
+    lead: 'Travel along DNA as it packs: the double helix of a real tooth gene (DSPP), nucleosomes, the chromatin fibre, loops and the chromosome. Processes and Teeth come next.',
     defaultVisible: ['dna'],
     path: true,
     presets: [],

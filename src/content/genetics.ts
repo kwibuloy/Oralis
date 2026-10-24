@@ -55,6 +55,7 @@ export const PARTS: Record<string, Part> = {
   'dna-base-t': { name: 'Thymine (T)', color: BASE_COLOR.T, note: 'A pyrimidine (one ring). Pairs with adenine (A) by two hydrogen bonds. RNA has uracil (U) in its place.' },
   'dna-base-g': { name: 'Guanine (G)', color: BASE_COLOR.G, note: 'A purine (two rings). Pairs with cytosine (C) by three hydrogen bonds, so G–C rich stretches hold together more strongly.' },
   'dna-base-c': { name: 'Cytosine (C)', color: BASE_COLOR.C, note: 'A pyrimidine (one ring). Pairs with guanine (G) by three hydrogen bonds.' },
+  'rna-base-u': { name: 'Uracil (U)', color: BASE_COLOR.U, note: 'A pyrimidine (one ring) found in RNA in place of thymine. Pairs with adenine (A). The other RNA bases, A, G and C, are the same as in DNA.' },
   'dna-hbond': { name: 'Hydrogen bonds', color: '#d0d5dd', note: 'Weak bonds that hold the two bases of a pair together: two between A and T, three between G and C. Weak enough for helicase to unzip them, strong enough together to keep the helix closed.' },
   'dna-major-groove': { name: 'Major groove', color: '#d0d5dd', note: 'The wider of the two grooves between the backbones. Proteins that switch genes on and off read the base sequence mostly through it, without opening the helix.' },
   'dna-minor-groove': { name: 'Minor groove', color: '#d0d5dd', note: 'The narrower groove. The two grooves alternate because the sugars of a base pair sit on one side of the pair, not opposite each other.' },
@@ -113,18 +114,20 @@ export interface Step {
   /** Parts first shown or most important at this step (labels and the step card). */
   parts: string[];
 }
-export interface DnaLevel extends Step { size: string }
+/** What the camera frames at a stop on the path: a box around `center` (model units; glTF axes, the path runs along +x). */
+export interface PathView { center: [number, number, number]; width: number; height: number }
+export interface DnaLevel extends Step { size: string; view: PathView }
 
 export const DNA_LEVELS: DnaLevel[] = [
-  { title: 'Double helix', size: 'About 2 nm across · about 3.5 nm per turn', parts: ['dna-sugar', 'dna-phosphate', 'dna-base-a', 'dna-base-t', 'dna-base-g', 'dna-base-c', 'dna-hbond', 'dna-major-groove', 'dna-minor-groove'],
+  { title: 'Double helix', view: { center: [13.8, 0, 0], width: 31, height: 8 }, size: 'About 2 nm across · about 3.5 nm per turn', parts: ['dna-sugar', 'dna-phosphate', 'dna-base-a', 'dna-base-t', 'dna-base-g', 'dna-base-c', 'dna-hbond', 'dna-major-groove', 'dna-minor-groove'],
     text: 'Two strands twist into a right-handed helix, about 10.5 base pairs per turn. Each rung is a base pair: A with T, G with C. The letters are real: the start of the coding part of DSPP, a tooth gene.' },
-  { title: 'Nucleosomes', size: 'About 11 nm across', parts: ['dna-histone-octamer', 'dna-wrapped-dna', 'dna-linker-dna', 'dna-h1'],
+  { title: 'Nucleosomes', view: { center: [74, 0, 0], width: 84, height: 24 }, size: 'About 11 nm across', parts: ['dna-histone-octamer', 'dna-wrapped-dna', 'dna-linker-dna', 'dna-h1'],
     text: 'DNA winds about 1.7 times round a spool of eight histone proteins, a nucleosome. Linker DNA joins one to the next, like beads on a string.' },
-  { title: 'Chromatin fibre', size: 'About 30 nm across (textbook model)', parts: ['dna-fibre'],
+  { title: 'Chromatin fibre', view: { center: [157, 0, 0], width: 76, height: 36 }, size: 'About 30 nm across (textbook model)', parts: ['dna-fibre'],
     text: 'Nucleosomes coil into a thicker fibre, about six per turn. This is the classic textbook model; in living cells the packing may be less regular.' },
-  { title: 'Loops', size: 'About 300 nm across', parts: ['dna-loops', 'dna-scaffold'],
+  { title: 'Loops', view: { center: [262, 0, 0], width: 124, height: 104 }, size: 'About 300 nm across', parts: ['dna-loops', 'dna-scaffold'],
     text: 'The fibre folds into loops held at their bases by a protein scaffold. Further folding packs them into condensed chromatin, about 700 nm across.' },
-  { title: 'Chromosome', size: 'About 1.4 µm across', parts: ['dna-p-arm', 'dna-q-arm', 'dna-centromere', 'dna-kinetochore', 'dna-telomere'],
+  { title: 'Chromosome', view: { center: [420, -26, 0], width: 86, height: 150 }, size: 'About 1.4 µm across', parts: ['dna-p-arm', 'dna-q-arm', 'dna-centromere', 'dna-kinetochore', 'dna-telomere'],
     text: 'Just before a cell divides, the packed DNA shows as an X: two identical sister chromatids, copies made when the DNA was copied, joined at the centromere. Drawn like chromosome 4, which carries the DSPP and ENAM tooth genes.' },
 ];
 export const DNA_NOTE = 'Schematic. Each level really is thicker than the last (about 700 times from the double helix to the chromosome); the sizes are squeezed so all five fit on one path.';
@@ -132,9 +135,9 @@ export const DNA_NOTE = 'Schematic. Each level really is thicker than the last (
 // ---------- Processes view: one path, three sections ----------
 
 export const SECTIONS = ['Copying DNA (replication)', 'Reading DNA (transcription)', 'Making a protein (translation)'] as const;
-export interface ProcessStep extends Step { section: 0 | 1 | 2 }
+export interface ProcessStep extends Step { section: 0 | 1 | 2; view: PathView }
 
-export const PROCESS_STEPS: ProcessStep[] = [
+const PROCESS_TEXT: Omit<ProcessStep, 'view'>[] = [
   { section: 0, title: 'Unzipping', parts: ['rep-helicase', 'rep-topoisomerase', 'rep-ssb'],
     text: 'Helicase unzips the double helix at the replication fork. Topoisomerase, ahead of it, relieves the twisting; single-strand binding proteins keep the strands apart.' },
   { section: 0, title: 'Primers', parts: ['rep-primase', 'rep-rna-primer'],
@@ -166,7 +169,71 @@ export const PROCESS_STEPS: ProcessStep[] = [
   { section: 2, title: 'Protein', parts: ['tl-polypeptide'],
     text: 'The chain is released and folds. From DSPP come dentin sialoprotein and dentin phosphoprotein, which guide how dentin mineralises. A fault in DSPP gives dentinogenesis imperfecta, in the Teeth view.' },
 ];
-export const PROCESS_NOTE = 'Schematic shapes; spacing and speed are not to scale.';
+/**
+ * The processes path lies below the DNA path in the same model (PROCESS_Y), left to right: the
+ * replication fork at x = 0, the gene being read around x = 90, the ribosome on the mRNA from x = 150.
+ * Each stop's frame is [centre x, centre y, width, height] in that local layout.
+ */
+export const PROCESS_Y = -300;
+const PROCESS_FRAMES: [number, number, number, number][] = [
+  [0, 0.5, 32, 18], [19, 0, 46, 20], [19, 1, 48, 20], [21, -2, 48, 20], [8, 0, 72, 20],
+  [82, 0, 32, 18], [88, 0, 30, 18], [99, 6, 40, 26], [101, 8, 40, 26], [105, 8, 48, 28],
+  [152, 1, 40, 30], [152, 5, 44, 38], [176, 9, 52, 42], [248, 6, 48, 40], [244, 10, 54, 42],
+];
+export const PROCESS_STEPS: ProcessStep[] = PROCESS_TEXT.map((s, i) => {
+  const [x, y, width, height] = PROCESS_FRAMES[i];
+  return { ...s, view: { center: [x, PROCESS_Y + y, 0], width, height } };
+});
+export const PROCESS_NOTE = 'Proteins are simple shapes at about their real size next to the 2 nm DNA. The mRNA’s letters are spaced out 2.5 times to be readable; speeds are not to scale.';
+
+/** A shape key's weight over the path's time (time = stop index; between stops, linear). */
+export type Track = [number, number][];
+/** Steps of a growing strand: shape keys `${name}-1`…`${name}-n`, each adding the next piece, from t0 to t1. */
+const growth = (name: string, n: number, t0: number, t1: number): Record<string, Track> =>
+  Object.fromEntries(Array.from({ length: n }, (_, k) => [`${name}-${k + 1}`, [[t0 + ((t1 - t0) * k) / n, 0], [t0 + ((t1 - t0) * (k + 1)) / n, 1]]]));
+
+/**
+ * Motion on the processes path. Every key is a shape key in the model (scripts/blender/build_genetics.py),
+ * stored as an offset that adds to the others: `-show` grows a part from its centre, `-hide` shrinks it
+ * to its centre, `-move…` slides it, and numbered keys grow a strand piece by piece.
+ */
+export const PROCESS_MOTION: Record<string, Track> = {
+  // replication (stops 0–4)
+  'primase-show': [[0, 0], [0.4, 1], [1.2, 1], [1.6, 0]],
+  'primers-show': [[0.2, 0], [0.9, 1], [3.0, 1], [3.5, 0]],
+  ...growth('lead', 6, 1, 2),
+  'lpol-show': [[1, 0], [1.15, 1], [2.9, 1], [3.2, 0]],
+  'lpol-move1': [[1, 0], [1.8, 1]],
+  'lpol-move2': [[1.8, 0], [2, 1]],
+  ...growth('frag3', 3, 2, 2.25), ...growth('frag2', 3, 2.25, 2.5), ...growth('frag1', 3, 2.5, 2.75), ...growth('frag0', 3, 2.75, 3),
+  'gpol-show': [[2, 0], [2.1, 1], [2.9, 1], [3.2, 0]],
+  'gpol-move': [[2, 0], [3, 1]],
+  'ligase-show': [[3.3, 0], [3.8, 1]],
+  // transcription (stops 5–9)
+  'rnap-move': [[5, 0], [6, 1]],
+  'bubble-open': [[5.2, 0], [6, 1], [8.3, 1], [8.9, 0]],
+  ...growth('ex1', 3, 6.1, 6.45), ...growth('intron', 3, 6.45, 6.75), ...growth('ex2', 3, 6.75, 7),
+  'cap-show': [[6.3, 0], [6.5, 1]],
+  'intron-hide': [[7.2, 0], [7.8, 1]],
+  'ex2-join': [[7.2, 0], [7.8, 1]],
+  'rnap-hide': [[8.2, 0], [8.8, 1]],
+  'tail-show': [[8.2, 0], [8.8, 1]],
+  // translation (stops 10–14)
+  'large-show': [[10, 0], [10.7, 1]],
+  'ribo-move1': [[11, 0], [12, 1]],
+  'ribo-move2': [[12, 0], [13, 1]],
+  'trna1-hide': [[11.1, 0], [11.4, 1]],
+  'trna2-show': [[11, 0], [11.3, 1]],
+  'trna2-hide': [[12.2, 0], [12.5, 1]],
+  ...growth('chain', 12, 11, 12),
+  'rf-show': [[12.5, 0], [13, 1]],
+  'rf-hide': [[13.3, 0], [13.7, 1]],
+  'small-leave': [[13, 0], [14, 1]],
+  'large-leave': [[13, 0], [14, 1]],
+  'fold': [[13, 0], [14, 1]],
+};
+/** Parts of the processes path in the model. */
+export const PROCESS_PARTS = Object.keys(PARTS).filter((k) => /^(rep|tx|tl)-/.test(k));
 
 // ---------- Teeth view: one stop per gene ----------
 
@@ -271,24 +338,26 @@ export const PEDIGREES: Record<Pattern, Pedigree> = {
 
 export const partByKey = (key: string) => PARTS[key];
 
-// ---------- the model so far: the path test (GENETICS_PLAN.md, step 2) ----------
+// ---------- the model ----------
 
-/** Parts in public/models/genetics.glb (built by scripts/blender/build_genetics.py), all in one group. */
-export const MODEL_PARTS = ['dna-sugar', 'dna-phosphate', 'dna-hbond', 'dna-base-a', 'dna-base-t', 'dna-base-g', 'dna-base-c'];
+/** Parts in public/models/genetics.glb (built by scripts/blender/build_genetics.py), all in one group. The grooves are spaces, not parts. */
+export const MODEL_PARTS = DNA_LEVELS.flatMap((l) => l.parts).filter((k) => !k.endsWith('-groove'));
 export const MODEL_GROUP = 'dna';
 
-/** A stop on the path: what the camera frames (model units, glTF axes: the ladder runs along +x) and the shape-key weights. */
-export interface PathStep {
-  title: string;
-  text: string;
-  size?: string;
-  view: { center: [number, number, number]; width: number; height: number };
-  morph: Record<string, number>;
-}
-const LADDER_NM = DSPP.ladder.length * 0.34;
-export const PATH_STEPS: PathStep[] = [
-  { title: 'Double helix', size: DNA_LEVELS[0].size, text: DNA_LEVELS[0].text, view: { center: [LADDER_NM / 2, 0, 0], width: LADDER_NM + 4, height: 8 }, morph: { unzip: 0 } },
-  { title: 'Base pairs', size: 'One base pair every 0.34 nm', text: 'A pairs with T by two hydrogen bonds, G with C by three, so the two strands carry the same message in mirror form. Tap a rung to read about its base.', view: { center: [5, 0, 0], width: 9, height: 5 }, morph: { unzip: 0 } },
-  { title: 'Unzipping', size: 'The first step of copying DNA', text: 'Helicase breaks the hydrogen bonds and the strands part at a fork. Each strand is now a template for a new partner (Processes, coming next).', view: { center: [19, 0, 0], width: 17, height: 10 }, morph: { unzip: 1 } },
-];
-export const PATH_NOTE = 'Path test: one stretch of ladder with three stops. The full DNA, Processes and Teeth paths come next.';
+/** A stop on a path: its card text and what the camera frames. */
+export interface PathStep { title: string; text: string; size?: string; view: PathView }
+/** One path the student travels: its stops, the shape-key motion along it, the group it shows, and the card's eyebrow per stop. */
+export interface GeneticsPath { id: GeneticsView; group: string; steps: PathStep[]; motion: Record<string, Track>; eyebrow: (i: number) => string; note: string }
+export const PATHS: Partial<Record<GeneticsView, GeneticsPath>> = {
+  dna: { id: 'dna', group: MODEL_GROUP, steps: DNA_LEVELS, motion: {}, eyebrow: (i) => `DNA packing · ${i + 1} of ${DNA_LEVELS.length}`, note: DNA_NOTE },
+  process: {
+    id: 'process', group: 'process', steps: PROCESS_STEPS, motion: PROCESS_MOTION, note: PROCESS_NOTE,
+    eyebrow: (i) => {
+      const section = PROCESS_STEPS[i].section, inSection = PROCESS_STEPS.filter((p) => p.section === section);
+      return `${SECTIONS[section]} · ${inSection.indexOf(PROCESS_STEPS[i]) + 1} of ${inSection.length}`;
+    },
+  },
+};
+/** The group a model node belongs to: process nodes start rep-/tx-/tl- or carry a `~` suffix (a second copy of a part). */
+export const nodeKey = (node: string) => node.split('~')[0];
+export const nodeGroup = (node: string) => (node.includes('~') || /^(rep|tx|tl)-/.test(node) ? 'process' : MODEL_GROUP);

@@ -8,6 +8,7 @@ import { writeFileSync } from 'node:fs';
 const MRNA = 'NM_014208.3';
 const CHROM = { acc: 'NC_000004.12', start: 87608529, stop: 87616872 };
 const EXON3_TAKE = 60; // coding bases of exon 3 shown after the splice
+const GENOMIC_TAKE = 240; // chromosome bases from the start codon on: the ladder copied and read on the processes path
 
 const eutils = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&retmode=text';
 const get = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${url}`); return r.text(); };
@@ -17,7 +18,7 @@ const version = gb.match(/^VERSION\s+(\S+)/m)[1];
 if (version !== MRNA) throw new Error(`Expected ${MRNA}, NCBI returned ${version}`);
 const mrna = gb.slice(gb.indexOf('\nORIGIN')).replace(/[^acgt]/g, '').toUpperCase();
 const exons = [...gb.matchAll(/^ {5}exon {12}(\d+)\.\.(\d+)/gm)].map((m) => [Number(m[1]), Number(m[2])]);
-const [cdsStart] = gb.match(/^ {5}CDS {13}(\d+)\.\.(\d+)/m).slice(1).map(Number);
+const [cdsStart, cdsEnd] = gb.match(/^ {5}CDS {13}(\d+)\.\.(\d+)/m).slice(1).map(Number);
 const protein = gb.match(/\/translation="([^"]+)"/)[1].replace(/\s/g, '');
 const map = gb.match(/\/map="([^"]+)"/)[1];
 const sigEnd = Number(gb.match(/^ {5}sig_peptide {5}\d+\.\.(\d+)/m)[1]);
@@ -34,12 +35,16 @@ const i2 = genomic.indexOf(mrna.slice(ex2[0] - 1, ex2[1]));
 const i3 = genomic.indexOf(mrna.slice(ex3[0] - 1, ex3[1]));
 if (i2 < 0 || i3 < 0) throw new Error('Exons 2 and 3 not found in the genomic region');
 const intron = genomic.slice(i2 + (ex2[1] - ex2[0] + 1), i3);
+const startInGenomic = i2 + (cdsStart - ex2[0]);
 
 const out = {
   source: `NCBI RefSeq ${MRNA} (DSPP mRNA, MANE Select) and ${CHROM.acc}:${CHROM.start}-${CHROM.stop} (GRCh38), fetched by scripts/fetch-dspp.mjs`,
   gene: 'DSPP', map, mrna: MRNA, chromosome: CHROM.acc,
   // Coding strand, 5′→3′.
   exon2Coding, intronStart: intron.slice(0, 30), intronEnd: intron.slice(-30), intronLength: intron.length, exon3Start,
+  genomicFromStart: genomic.slice(startInGenomic, startInGenomic + GENOMIC_TAKE),
+  // The real stop codon at the end of the coding sequence (mRNA letters as DNA, T for U).
+  stopCodon: mrna.slice(cdsEnd - 3, cdsEnd),
   // First amino acids of the protein (NP_055023), for the translation check; signal peptide length in amino acids.
   proteinStart: protein.slice(0, (exon2Coding.length + exon3Start.length) / 3),
   signalPeptide: (sigEnd - cdsStart + 1) / 3,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { baseName, GROUP_SYSTEM, GROUPS, SYSTEMS, type SystemId } from '../content/anatomy';
 import { bloodColour, brainArea, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, type FunctionId } from '../content/function';
-import { MODEL_GROUP, MODEL_PARTS, PARTS as GENETIC_PARTS } from '../content/genetics';
+import { MODEL_GROUP, MODEL_PARTS, nodeGroup, nodeKey, PARTS as GENETIC_PARTS, PATHS as GENETIC_PATHS, PROCESS_PARTS as GENETIC_PROCESS_PARTS, VIEW_OPTIONS as GENETIC_VIEWS, type GeneticsView } from '../content/genetics';
 import { TISSUES } from '../content/histology';
 import { modeById, type ModeId } from '../content/modes';
 import { BODYPARTS3D, SITE } from '../content/site';
@@ -81,7 +81,7 @@ interface Layer { id: string; label: string; color: string; count: number }
 
 function layersFor(modeId: ModeId, model: string, bySystem: boolean): Layer[] {
   if (modeId === 'histology') return TISSUES.map((t) => ({ id: t.key, label: t.name, color: t.color, count: 1 }));
-  if (modeId === 'genetics') return [{ id: MODEL_GROUP, label: 'DNA', color: GENETIC_PARTS['dna-sugar'].color, count: MODEL_PARTS.length }];
+  if (modeId === 'genetics') return [{ id: MODEL_GROUP, label: 'DNA', color: GENETIC_PARTS['dna-sugar'].color, count: MODEL_PARTS.length }, { id: 'process', label: 'Processes', color: GENETIC_PARTS['tx-mrna'].color, count: GENETIC_PROCESS_PARTS.length }];
   const inModel = structuresIn(model);
   const rank = (g: string) => SYSTEMS.findIndex((s) => s.id === GROUP_SYSTEM[g]);
   const order = bySystem ? [...GROUP_ORDER].sort((a, b) => rank(a) - rank(b)) : GROUP_ORDER;
@@ -137,6 +137,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const cariTimeline = cario && cariView !== 'sites';
   // Genetics: swipe along the ladder (GeneticsPath) instead of orbiting.
   const isPath = !!mode.path;
+  const [geneView, setGeneView] = useState<GeneticsView>('dna');
+  const genePath = GENETIC_PATHS[geneView]!;
+  const geneViews = GENETIC_VIEWS.filter(([v]) => GENETIC_PATHS[v]);
 
   const layers = useMemo(() => layersFor(modeId, modelName, !!mode.systems), [modeId, modelName, mode.systems]);
   // In the Function view the skeleton stays faded behind the systems for orientation.
@@ -168,8 +171,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         return t ? { key: t.key, group: t.key, color: t.color } : null;
       }
       if (modeId === 'genetics') {
-        const p = GENETIC_PARTS[node];
-        return p ? { key: node, group: MODEL_GROUP, color: p.color } : null;
+        // Nodes are part keys, or `key~piece` where a part appears more than once (the processes path).
+        const p = GENETIC_PARTS[nodeKey(node)];
+        return p ? { key: nodeKey(node), group: nodeGroup(node), color: p.color } : null;
       }
       if (node in CARVING_COLOUR) return { key: node, group: 'carving', color: CARVING_COLOUR[node] };
       if (modeId === 'cariology') { const part = cariologyPart(node); if (part) return part; }
@@ -193,7 +197,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     const left = cover.right && layers && layers.offsetParent ? layers.getBoundingClientRect().right : 0;
     const bar = root.current?.querySelector<HTMLElement>('.timeline--rich');
     const phone = matchMedia('(max-width: 860px)').matches;
-    const barCover = bar && phone ? root.current!.clientHeight - bar.offsetTop : 0;
+    // Genetics' step card is tall enough to count on every screen size.
+    const barCover = bar && (phone || bar.classList.contains('path-card')) ? root.current!.clientHeight - bar.offsetTop : 0;
     viewer.current?.setInsets({ left, right: cover.right, bottom: Math.max(cover.bottom, barCover) });
   }, []);
   const setSheetInset = useCallback((cover: SheetCover) => { sheetCover.current = cover; applyInsets(); }, [applyInsets]);
@@ -210,7 +215,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   // the unchanging rest of its section; the arches with the sites (gingiva faded, so root caries
   // shows, and the jaws left out so the teeth fill the screen); or the process block with the
   // biofilm faded so the bacteria inside show.
-  const shown = !cario ? { visible, context } : cariView === 'lesion'
+  const shown = isPath ? { visible: [genePath.group], context: [] } : !cario ? { visible, context } : cariView === 'lesion'
     ? { visible: [staticGroup(lesionKind), stageGroup(lesionKind, stage), perioGroup(lesionKind)], context: [] }
     : cariView === 'sites' ? { visible: ['teeth', 'sites'], context: ['gingiva'] }
       : { visible: ['pr-enamel', 'pr-pellicle', 'pr-bacteria'], context: ['pr-biofilm'] };
@@ -358,7 +363,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       ...Object.entries(PROCESS_PARTS).filter(([k]) => !/pr-band-[1-4]/.test(k)).map(([k, p]) => ({ key: k, label: k === 'pr-band-0' ? 'Enamel prisms' : p.name, group: 'Caries process', color: p.colour })),
     ];
     if (modeId === 'histology') return TISSUES.map((t) => ({ key: t.key, label: t.name, group: 'Tissue', color: t.color }));
-    if (modeId === 'genetics') return MODEL_PARTS.map((k) => ({ key: k, label: GENETIC_PARTS[k].name, group: 'DNA', color: GENETIC_PARTS[k].color }));
+    if (modeId === 'genetics') return [...MODEL_PARTS, ...GENETIC_PROCESS_PARTS].map((k) => ({ key: k, label: GENETIC_PARTS[k].name, group: k.startsWith('dna-') ? 'DNA' : 'Processes', color: GENETIC_PARTS[k].color }));
     return structuresIn(modelName).map((s) => ({ key: s.key, label: labelFor(modeId, s.key, system), group: GROUPS[s.group].label, color: GROUP_COLOR[s.group] }));
   }, [modeId, modelName, system, carving, cario]);
   const onSearch = (key: string) => {
@@ -568,7 +573,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           <ProcessHead minute={minute} scenario={scenario} onScenario={(s) => { setScenario(s); scrub(0); }} />
         </Timeline>
       ) : null) : carving ? null : isPath ? (
-        <GeneticsPath viewer={viewer} ready={ready} />
+        <GeneticsPath viewer={viewer} ready={ready} path={genePath} views={geneViews} onView={(v) => { setSelected(null); setGeneView(v); }} />
       ) : inFunction ? (
         <Timeline label="Function" playing={ready && playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed} />
       ) : (
