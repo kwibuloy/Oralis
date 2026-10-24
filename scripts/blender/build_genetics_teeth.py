@@ -3,7 +3,7 @@
 through both roots, so enamel, dentin, cementum and pulp show on the cut face (GENETICS_PLAN.md, step 5).
 
 Run headless (Blender 4.x), from the repo root; build_genetics.py then places the teeth on the path:
-    blender -b --factory-startup -P scripts/blender/build_genetics_teeth.py -- models-src/genetics-teeth.glb
+    blender -b --factory-startup -P scripts/blender/build_genetics_teeth.py -- models-src/genetics-teeth.blend
 
 Objects are named `gt-<condition>-<tissue>` (keys in src/content/genetics.ts), all at the origin:
 millimetres, Z up, +X distal, -Y buccal, z = 0 at the buccal cervical line (as cariology_shape.py).
@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cariology_shape as S  # noqa: E402
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-GLB_OUT = argv[0] if argv else "models-src/genetics-teeth.glb"
+BLEND_OUT = argv[0] if argv else "models-src/genetics-teeth.blend"
 H = float(os.environ.get("TEETH_H", 0.05))
 ONLY = [s for s in os.environ.get("TEETH_ONLY", "").split(",") if s]
 T0 = time.time()
@@ -159,6 +159,7 @@ log("fields ready")
 def tissues(T, D, P, cej, Z, enamel_cap=None):
     """Enamel, dentin, cementum and pulp from the tooth (T), DEJ (D) and pulp (P) fields.
     The dentin's outer surface is the DEJ on the crown and 0.15 mm under the root surface below it."""
+    D = D + scallop()  # the DEJ is faintly scalloped, not smooth
     w = np.clip((Z - cej + 0.05) / 0.2, 0, 1)
     inner = w * D + (1 - w) * (T + 0.15)
     enamel = np.maximum.reduce([T, -inner, cej - Z])
@@ -172,7 +173,59 @@ def tissues(T, D, P, cej, Z, enamel_cap=None):
     }
     if P is not None:
         out["pulp"] = np.maximum.reduce([P, inner + 0.05, T])
+    # What each tissue's cut-face pattern follows (see bake_patterns): enamel rods run out from the DEJ,
+    # dentinal tubules out from the pulp, cementum lamellae along the root surface.
+    out["_fields"] = {"enamel": D, "dentin": P if P is not None else inner, "cementum": -T}
     return out
+
+
+_scallop = []
+
+
+def scallop():
+    if not _scallop:
+        _scallop.append(0.035 * noise(0.22, 21, 8))
+    return _scallop[0]
+
+
+def sample(arr, pts):
+    """Trilinear interpolation of a lattice field at points (N, 3), Blender millimetres."""
+    g = pts / H - I0
+    top = np.array(arr.shape) - 1.001
+    g = np.clip(g, 0, top)
+    i = np.floor(g).astype(int)
+    f = g - i
+    out = np.zeros(len(pts))
+    for dx in (0, 1):
+        for dy in (0, 1):
+            for dz in (0, 1):
+                wgt = (f[:, 0] if dx else 1 - f[:, 0]) * (f[:, 1] if dy else 1 - f[:, 1]) * (f[:, 2] if dz else 1 - f[:, 2])
+                out += wgt * arr[i[:, 0] + dx, i[:, 1] + dy, i[:, 2] + dz]
+    return out
+
+
+def bake_patterns(me, field, tissue):
+    """Per-vertex _dir (the direction a tissue's structures run, in glTF axes) and _depth (distance used for
+    incremental lines), for the app's cut-face streaks and bands (src/viewer/surface.ts)."""
+    co = np.empty(len(me.vertices) * 3, np.float32)
+    me.vertices.foreach_get("co", co)
+    pts = co.reshape(-1, 3).astype(np.float64)
+    depth = sample(field, pts)
+    grad = np.stack([(sample(field, pts + e) - sample(field, pts - e)) / (2 * H) for e in np.eye(3) * H], axis=1)
+    if tissue == "dentin":
+        grad = -grad if np.mean(depth) < 0 else grad  # away from the pulp
+        # Tubules run in a gentle S from the pulp to the DEJ (primary curvature), bending in the cut plane.
+        ln = np.linalg.norm(grad, axis=1, keepdims=True)
+        d = grad / np.maximum(ln, 1e-9)
+        bend = np.cross(d, np.array([0.0, 1.0, 0.0]))
+        grad = d + 0.35 * np.sin(np.abs(depth) * 1.3)[:, None] * bend
+    ln = np.linalg.norm(grad, axis=1, keepdims=True)
+    d = np.where(ln > 1e-6, grad / np.maximum(ln, 1e-9), 0.0)
+    d_gltf = np.stack([d[:, 0], d[:, 2], -d[:, 1]], axis=1)  # Blender (x, y, z) -> glTF (x, z, -y)
+    a = me.attributes.new("_dir", "FLOAT_VECTOR", "POINT")
+    a.data.foreach_set("vector", d_gltf.astype(np.float32).ravel())
+    b = me.attributes.new("_depth", "FLOAT", "POINT")
+    b.data.foreach_set("value", np.abs(depth).astype(np.float32))
 
 
 def balls(centres, r):
@@ -282,20 +335,17 @@ def mark_cut(me):
     co = np.empty(len(me.vertices) * 3, np.float32)
     me.vertices.foreach_get("co", co)
     co = co.reshape(-1, 3)
-    attr = me.attributes.new("_cut", "FLOAT", "CORNER")
-    vals = np.zeros(len(me.loops), np.float32)
-    for poly in me.polygons:
-        if poly.normal.y < -0.99 and all(abs(co[v][1]) < 1e-4 for v in poly.vertices):
-            for li in poly.loop_indices:
-                vals[li] = 1.0
-    attr.data.foreach_set("value", vals)
+    attr = me.attributes.new("_cut", "FLOAT", "POINT")
+    attr.data.foreach_set("value", (np.abs(co[:, 1]) < 1e-4).astype(np.float32))  # on the cut plane
 
 
 for cond, make in CONDITIONS.items():
     if ONLY and cond not in ONLY:
         continue
     log(cond)
-    for tissue, arr in make().items():
+    made = make()
+    patterns = made.pop("_fields")
+    for tissue, arr in made.items():
         name = f"gt-{cond}-{tissue}"
         me = cut_half(bl_mesh(name, arr))
         if not len(me.polygons):
@@ -304,6 +354,8 @@ for cond, make in CONDITIONS.items():
         me.name = name
         me.set_sharp_from_angle(angle=math.radians(35))  # flat cut faces, smooth tooth surfaces
         mark_cut(me)
+        if tissue in patterns:
+            bake_patterns(me, patterns[tissue], tissue)
         m = bpy.data.materials.new(name)
         c = tuple((int(COLOURS[tissue][i:i + 2], 16) / 255) ** 2.2 for i in (1, 3, 5))
         m.diffuse_color = (*c, 1.0)
@@ -315,7 +367,8 @@ for cond, make in CONDITIONS.items():
 for o in list(bpy.data.objects):
     if o.name.startswith("_"):
         bpy.data.objects.remove(o)
-os.makedirs(os.path.dirname(GLB_OUT) or ".", exist_ok=True)
-bpy.ops.export_scene.gltf(filepath=GLB_OUT, export_format="GLB", export_apply=False, export_yup=True,
-                          export_attributes=True, export_draco_mesh_compression_enable=True)
-log(f"wrote {GLB_OUT}")
+# Saved as a .blend (not a GLB): build_genetics.py copies the objects from it, custom attributes and all
+# (Blender's glTF importer cannot read Draco-compressed custom attributes back).
+os.makedirs(os.path.dirname(BLEND_OUT) or ".", exist_ok=True)
+bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(BLEND_OUT), compress=True)
+log(f"wrote {BLEND_OUT}")

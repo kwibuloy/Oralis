@@ -669,14 +669,14 @@ for o in objs.values():
 # The Teeth path (stops in genetics.ts: TEETH_STEPS), PROCESS_Y further down again. A ladder with a
 # stop at each tooth gene: the gene's real first 60 coding bases, its backbone in the gene's colour,
 # grey ladder between (the genes really lie on different chromosomes). The teeth come from
-# models-src/genetics-teeth.glb (build_genetics_teeth.py) and are placed when the file is written:
+# models-src/genetics-teeth.blend (build_genetics_teeth.py) and are placed when the file is written:
 # each tooth centred above its gene.
 # =====================================================================================
 TEETH_Y = 2 * PROCESS_Y
 GENE_X = {"ENAM": 0.0, "MMP20": 90.0, "FAM83H": 180.0, "DSPP": 270.0}
 GENE_CONDITION = {"ENAM": "ai-hypoplastic", "MMP20": "ai-hypomaturation", "FAM83H": "ai-hypocalcified", "DSPP": "di"}
 TOOTH_CEJ_Y = 17.0
-TEETH_GLB = os.path.join("models-src", "genetics-teeth.glb")
+TEETH_BLEND = os.path.join("models-src", "genetics-teeth.blend")
 teeth = {}
 
 
@@ -775,9 +775,11 @@ for node, o in teeth.items():
     total += write(node, o.key, o.verts, o.faces)
 
 # The molars: each condition centred above its gene.
-before = set(bpy.data.objects)
-bpy.ops.import_scene.gltf(filepath=os.path.abspath(TEETH_GLB))
-molars = [o for o in bpy.data.objects if o not in before and o.type == "MESH"]
+with bpy.data.libraries.load(os.path.abspath(TEETH_BLEND), link=False) as (src, dst):
+    dst.objects = [n for n in src.objects if n.startswith("gt-")]
+molars = [o for o in dst.objects if o is not None and o.type == "MESH"]
+for o in molars:
+    scene.collection.objects.link(o)
 for gene, gx in GENE_X.items():
     for o in molars:
         if o.name.startswith(f"gt-{GENE_CONDITION[gene]}-"):

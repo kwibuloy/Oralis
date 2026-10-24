@@ -340,6 +340,10 @@ describe('genetics', () => {
     // The fetched letters translate into each gene's real first amino acids (RefSeq, MANE Select).
     for (const [gene, g] of Object.entries(DSPP.teethGenes)) expect(translate(toRna(g.codingStart)), gene).toBe(g.proteinStart);
     for (const s of TEETH_STEPS) expect(s.pattern).toMatch(/^A[DR]$/);
+    // Hard tissues carry what the app needs for their finish: the cut-face marker and the rod/tubule directions and depths.
+    const teethMeshes = json.meshes.filter((m: { name: string }) => /^gt-.+-(enamel|dentin|cementum)/.test(m.name));
+    expect(teethMeshes.length).toBeGreaterThan(0);
+    for (const m of teethMeshes) for (const a of ['_CUT', '_DIR', '_DEPTH']) expect(Object.keys(m.primitives[0].attributes), `${m.name} ${a}`).toContain(a);
   });
 
   it('has every processes part in the model, and a shape key for every motion track', () => {

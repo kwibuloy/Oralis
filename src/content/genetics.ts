@@ -115,7 +115,7 @@ export interface Step {
   parts: string[];
 }
 /** What the camera frames at a stop on the path: a box around `center` (model units; glTF axes, the path runs along +x). */
-export interface PathView { center: [number, number, number]; width: number; height: number; phoneWidth?: number }
+export interface PathView { center: [number, number, number]; width: number; height: number; phoneWidth?: number; yaw?: number }
 export interface DnaLevel extends Step { size: string; view: PathView }
 
 export const DNA_LEVELS: DnaLevel[] = [
@@ -349,7 +349,8 @@ export const TEETH_STEPS: PathStep[] = CONDITIONS.map((c) => ({
   size: `${c.gene} gene · ${c.band} · usually ${PATTERN_WORDS[c.pattern]}`,
   text: c.shows,
   // The molar centred above its gene, with the ladder below it.
-  view: { center: [GENE_X[c.gene], TEETH_Y + 12, 0], width: 24, height: 30, phoneWidth: 20 },
+  // Opens turned a little, so the tooth reads as 3D; the student can turn it any way from there.
+  view: { center: [GENE_X[c.gene], TEETH_Y + 12, 0], width: 24, height: 30, phoneWidth: 20, yaw: 0.45 },
   pattern: c.pattern,
 }));
 export const TEETH_PARTS = [...CONDITIONS.flatMap((c) => TOOTH_TISSUES.map((t) => toothKey(c.id, t)).filter((k) => PARTS[k])), ...CONDITIONS.map((c) => geneKey(c.gene)), 'gt-between'];
@@ -363,17 +364,22 @@ export const MODEL_GROUP = 'dna';
 /** A stop on a path: its card text, what the camera frames, and a family tree to show with it (Teeth). */
 export interface PathStep { title: string; text: string; size?: string; view: PathView; pattern?: Pattern }
 /** One path the student travels: its stops, the shape-key motion along it, the group it shows, and the card's eyebrow per stop. */
-export interface GeneticsPath { id: GeneticsView; group: string; steps: PathStep[]; motion: Record<string, Track>; eyebrow: (i: number) => string; note: string }
+/** `orbit`: turn the model freely instead of swiping along the path (the card moves between stops). */
+export interface GeneticsPath { id: GeneticsView; group: string; steps: PathStep[]; motion: Record<string, Track>; eyebrow: (i: number) => string; note: string; hint: string; orbit?: boolean }
+const SWIPE_HINT = 'Swipe sideways to travel · up or down to turn · pinch to zoom · tap a part';
 export const PATHS: Partial<Record<GeneticsView, GeneticsPath>> = {
-  dna: { id: 'dna', group: MODEL_GROUP, steps: DNA_LEVELS, motion: {}, eyebrow: (i) => `DNA packing · ${i + 1} of ${DNA_LEVELS.length}`, note: DNA_NOTE },
+  dna: { id: 'dna', group: MODEL_GROUP, steps: DNA_LEVELS, motion: {}, eyebrow: (i) => `DNA packing · ${i + 1} of ${DNA_LEVELS.length}`, note: DNA_NOTE, hint: SWIPE_HINT },
   process: {
-    id: 'process', group: 'process', steps: PROCESS_STEPS, motion: PROCESS_MOTION, note: PROCESS_NOTE,
+    id: 'process', group: 'process', steps: PROCESS_STEPS, motion: PROCESS_MOTION, note: PROCESS_NOTE, hint: SWIPE_HINT,
     eyebrow: (i) => {
       const section = PROCESS_STEPS[i].section, inSection = PROCESS_STEPS.filter((p) => p.section === section);
       return `${SECTIONS[section]} · ${inSection.indexOf(PROCESS_STEPS[i]) + 1} of ${inSection.length}`;
     },
   },
-  teeth: { id: 'teeth', group: 'teeth', steps: TEETH_STEPS, motion: {}, eyebrow: (i) => `Inherited tooth conditions · ${i + 1} of ${TEETH_STEPS.length}`, note: TEETH_NOTE },
+  teeth: {
+    id: 'teeth', group: 'teeth', steps: TEETH_STEPS, motion: {}, eyebrow: (i) => `Inherited tooth conditions · ${i + 1} of ${TEETH_STEPS.length}`, note: TEETH_NOTE, orbit: true,
+    hint: 'Drag to turn the tooth any way · pinch to zoom · tap a part · the dots go to the next tooth',
+  },
 };
 /** A model node's part key: nodes are keys, or `key~piece` where a part appears more than once. */
 export const nodeKey = (node: string) => node.split('~')[0];

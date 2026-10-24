@@ -14,21 +14,28 @@ const MAX_DOTS = 6;
 const PHONE = '(max-width: 860px)';
 
 // How the Teeth path's tissues look (src/viewer/surface.ts; sizes in millimetres). Cut faces stay flat.
-const ENAMEL: SurfaceStyle = { roughness: 0.26, clearcoat: 0.6, grain: 0.12, grainSize: 0.4, perikymata: 0.5, perikymataSpacing: 0.12, bump: 0.25, flatCut: true };
+// Cut faces: faint rods (streaks along _dir) and growth lines (bands across _depth), baked by build_genetics_teeth.py.
+const ENAMEL_CUT: SurfaceStyle = { streaks: 0.22, streakSize: 0.06, bands: 0.1, bandSpacing: 0.28 };
+const DENTIN_CUT: SurfaceStyle = { streaks: 0.18, streakSize: 0.07, bands: 0.06, bandSpacing: 0.35 };
+// Outside: warmer at the neck, where dentin shows through; lighter and cooler at the edges (translucent enamel).
+const ENAMEL: SurfaceStyle = {
+  ...ENAMEL_CUT, roughness: 0.24, clearcoat: 0.65, grain: 0.22, grainSize: 0.35, perikymata: 0.8, perikymataSpacing: 0.1, bump: 0.4,
+  neck: '#dcc391', neckAmount: 0.45, neckHeight: 3.5, rim: 0.35, flatCut: true,
+};
 const TOOTH_LOOK: Record<string, SurfaceStyle> = {
   enamel: ENAMEL,
   // Hard but thin: dentin shows through, and the perikymata and grooves stand out.
   'ai-hypoplastic-enamel': { ...ENAMEL, perikymata: 0.9, stain: '#d9be8a', stainAmount: 0.35, stainSize: 1.2 },
   // Soft, opaque and mottled chalky white to yellow-brown.
-  'ai-hypomaturation-enamel': { roughness: 0.72, grain: 0.35, grainSize: 0.35, bump: 0.35, stain: '#b4864a', stainAmount: 0.6, stainSize: 0.7, flatCut: true },
+  'ai-hypomaturation-enamel': { ...ENAMEL_CUT, roughness: 0.72, grain: 0.4, grainSize: 0.3, bump: 0.5, stain: '#b4864a', stainAmount: 0.6, stainSize: 0.7, neck: '#d8bf8c', neckAmount: 0.3, neckHeight: 3, flatCut: true },
   // Very soft, rough, stained yellow-brown to brown.
-  'ai-hypocalcified-enamel': { roughness: 0.86, grain: 0.45, grainSize: 0.3, bump: 0.6, stain: '#6f4a22', stainAmount: 0.45, stainSize: 0.5, flatCut: true },
+  'ai-hypocalcified-enamel': { ...ENAMEL_CUT, roughness: 0.86, grain: 0.55, grainSize: 0.28, bump: 0.8, stain: '#6f4a22', stainAmount: 0.45, stainSize: 0.5, flatCut: true },
   // Normal enamel over soft dentin, chipping away.
   'di-enamel': { ...ENAMEL, perikymata: 0.3 },
   // Opalescent: amber with grey-blue patches and a soft sheen.
-  'di-dentin': { roughness: 0.32, clearcoat: 0.4, grain: 0.15, grainSize: 0.5, stain: '#7d8796', stainAmount: 0.22, stainSize: 1.1, flatCut: true },
-  dentin: { roughness: 0.55, grain: 0.15, grainSize: 0.4, bump: 0.15, flatCut: true },
-  cementum: { roughness: 0.78, grain: 0.25, grainSize: 0.3, bump: 0.2, flatCut: true },
+  'di-dentin': { ...DENTIN_CUT, roughness: 0.32, clearcoat: 0.4, grain: 0.2, grainSize: 0.45, bump: 0.3, stain: '#7d8796', stainAmount: 0.22, stainSize: 1.1, rim: 0.2, flatCut: true },
+  dentin: { ...DENTIN_CUT, roughness: 0.55, grain: 0.25, grainSize: 0.35, bump: 0.3, flatCut: true },
+  cementum: { bands: 0.08, bandSpacing: 0.12, roughness: 0.8, grain: 0.35, grainSize: 0.25, bump: 0.45, flatCut: true },
   pulp: { roughness: 0.7, grain: 0.25, grainSize: 0.25, stain: '#8f2f3c', stainAmount: 0.3, stainSize: 0.45 },
 };
 /** The finish of a Teeth-path part (gt-<condition>-<tissue>); other parts keep the default. */
@@ -71,14 +78,16 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
     const v = viewer.current;
     if (!v || !ready) return;
     setStep(0);
+    // Teeth: turn the tooth freely; the card's dots and arrows move between stops.
+    v.setPathOrbit(!!path.orbit);
     const frame = (i: number) => {
-      const { center, width, height, phoneWidth } = steps[i].view;
-      return { cx: center[0], cy: center[1], cz: center[2], w: width, h: height, pw: phoneWidth ?? width * 0.6 };
+      const { center, width, height, phoneWidth, yaw } = steps[i].view;
+      return { cx: center[0], cy: center[1], cz: center[2], w: width, h: height, pw: phoneWidth ?? width * 0.6, yaw: yaw ?? 0 };
     };
     const names = Object.keys(path.motion);
     const state: Record<string, number> = { ...frame(0), ...Object.fromEntries(names.map((n) => [n, path.motion[n][0][1]])) };
     const apply = () => {
-      v.setPathView({ center: [state.cx, state.cy, state.cz], width: state.w, height: state.h, phoneWidth: state.pw });
+      v.setPathView({ center: [state.cx, state.cy, state.cz], width: state.w, height: state.h, phoneWidth: state.pw, yaw: state.yaw });
       v.setMorphWeights(Object.fromEntries(names.map((n) => [n, state[n]])));
     };
     const timeline = gsap.timeline({ paused: true });
@@ -119,6 +128,7 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
       timeline.kill();
       v.onTravel = () => {};
       v.onTravelEnd = () => {};
+      v.setPathOrbit(false);
     };
   }, [viewer, ready, path, steps, last]);
 
@@ -153,7 +163,7 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
           <p className="path-card__text">{s.text}</p>
           {s.pattern && <FamilyTree pattern={s.pattern} />}
           <div className="path-card__foot">
-            {!travelled && step === 0 && <p className="path-card__hint">Swipe sideways to travel · up or down to turn · pinch to zoom · tap a part</p>}
+            {!travelled && step === 0 && <p className="path-card__hint">{path.hint}</p>}
             <p className="path-card__note">{path.note}</p>
           </div>
         </div>

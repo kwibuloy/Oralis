@@ -68,6 +68,8 @@ export interface PathView {
   height: number;
   /** Width to frame on a portrait phone, where a long stretch fitted across comes out thin (default 0.6 × width). */
   phoneWidth?: number;
+  /** Turn the view this far (radians) round the vertical axis, so a model reads as 3D rather than face-on. */
+  yaw?: number;
 }
 /** Path gestures: how far (px) a press travels before it is read as a swipe, and how fast a vertical one turns (rad/px). */
 const SWIPE_START = 8;
@@ -208,6 +210,8 @@ export class Viewer {
 
   // Path mode (see setPathMode): the framed box, the turn around the path's axis and the pinch zoom.
   private pathMode = false;
+  /** Path mode with free turning (Genetics' Teeth): OrbitControls round the stop instead of swipe-to-travel. */
+  private pathOrbit = false;
   private pathView: PathView = { center: [0, 0, 0], width: 1, height: 1 };
   private pathSpin = 0;
   private pathZoom = 1;
@@ -611,6 +615,21 @@ export class Viewer {
     if (on) this.applyPath();
   }
 
+  /**
+   * On a path, turn freely round the current stop (drag any way, pinch or wheel to zoom) instead of
+   * travelling by swipe; the caller moves between stops with setPathView. Off: swipe-to-travel again.
+   */
+  setPathOrbit(on: boolean) {
+    this.pathOrbit = on;
+    this.controls.enabled = !this.pathMode || on;
+    this.pathSpin = 0;
+    this.pathZoom = 1;
+    this.camera.up.set(0, 1, 0);
+    this.controls.minDistance = 1;
+    this.controls.maxDistance = 1e4;
+    if (this.pathMode) this.applyPath();
+  }
+
   setPathView(view: PathView) {
     this.pathView = view;
     if (this.pathMode) this.applyPath();
@@ -640,7 +659,8 @@ export class Viewer {
     gsap.killTweensOf(this.camera.position);
     this.flying = false;
     this.controls.target.copy(target);
-    this.camera.position.copy(target).add(new THREE.Vector3(0, distance * PATH_TILT, distance).applyQuaternion(turn));
+    const yaw = this.pathView.yaw ?? 0;
+    this.camera.position.copy(target).add(new THREE.Vector3(distance * Math.sin(yaw), distance * PATH_TILT, distance * Math.cos(yaw)).applyQuaternion(turn));
     this.camera.up.set(0, 1, 0).applyQuaternion(turn);
     this.camera.lookAt(target);
     this.frameNear = Math.max(distance / 100, 0.01);
@@ -650,7 +670,7 @@ export class Viewer {
   }
 
   private pathDown = (e: PointerEvent) => {
-    if (!this.pathMode) return;
+    if (!this.pathMode || this.pathOrbit) return;
     this.canvas.setPointerCapture?.(e.pointerId);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const two = [...this.pointers.values()];
@@ -661,7 +681,7 @@ export class Viewer {
 
   private pathMove = (e: PointerEvent) => {
     const g = this.gesture;
-    if (!this.pathMode || !g || !this.pointers.has(e.pointerId)) return;
+    if (!this.pathMode || this.pathOrbit || !g || !this.pointers.has(e.pointerId)) return;
     const prev = this.pointers.get(e.pointerId)!;
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (g.dir === 'pinch') {
@@ -685,7 +705,7 @@ export class Viewer {
   };
 
   private pathUp = (e: PointerEvent) => {
-    if (!this.pathMode || !this.pointers.has(e.pointerId)) return;
+    if (!this.pathMode || this.pathOrbit || !this.pointers.has(e.pointerId)) return;
     this.pointers.delete(e.pointerId);
     const g = this.gesture;
     if (!g) return;
@@ -1203,7 +1223,7 @@ export class Viewer {
    * zones behind it show as holes.
    */
   private guardWheel = (e: WheelEvent) => {
-    if (this.pathMode) { this.pathWheel(e); return; }
+    if (this.pathMode && !this.pathOrbit) { this.pathWheel(e); return; }
     if (e.deltaY >= 0) return;
     const h = this.hit(e);
     const d = this.camera.position.distanceTo(this.controls.target);
@@ -1296,7 +1316,8 @@ export class Viewer {
     const shift = Math.round(box.height * (box.width > 860 ? SHIFT_DESKTOP : SHIFT_PHONE) + this.inset.bottom / 2);
     this.camera.setViewOffset(box.width, box.height, shiftX, shift, box.width, box.height);
     this.camera.updateProjectionMatrix();
-    if (this.pathMode) this.applyPath(); // the framing depends on the aspect and the insets
+    // The framing depends on the aspect and the insets (while turning freely, the student's view is kept).
+    if (this.pathMode && !this.pathOrbit) this.applyPath();
     this.needsRender = true;
   }
 
