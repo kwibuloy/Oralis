@@ -619,6 +619,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           </p>
           <p>Histology model: authored for {SITE.name} in Blender. It is schematic; proportions are stylised for teaching.</p>
           <p>Cariology: the lesion molar and the enamel and biofilm block are authored for {SITE.name} in code; lesion sizes are schematic, and the sites on the scanned teeth are painted to show where.</p>
+          <p>Genetics: modelled for {SITE.name} in Blender; the molars share the Cariology molar's shape. DNA and RNA letters are real, from <a href="https://www.ncbi.nlm.nih.gov/refseq/">NCBI RefSeq</a> (DSPP, ENAM, MMP20, FAM83H) and GRCh38; proteins are simple shapes at about their real size, and the packing levels are squeezed to fit one path.</p>
           <p>Not in the source data: muscles of mastication, maxillary and mandibular nerves, facial nerve and lower cranial nerves, external carotid artery and its branches, parotid gland, lung tissue, third molars, primary teeth.</p>
           <p>For study only. Not for diagnosis or treatment planning. <a href={SITE.repo}>Source code</a> (MIT).</p>
         </aside>

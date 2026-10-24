@@ -25,7 +25,7 @@ export const SUBJECTS: Subject[] = [
   { id: 'occlusion', name: 'Oral physiology & occlusion', group: 'Physiology', planned: 'Upper and lower arches that open and close, contact points, jaw movement and the TMJ.' },
   { id: 'biochem', name: 'Biochemistry', group: 'Chemistry & genetics', planned: 'Glucose, amino acids, and an enzyme binding its substrate, from PDB structures.' },
   { id: 'orgchem', name: 'Organic chemistry', group: 'Chemistry & genetics', planned: 'Ball-and-stick molecules, functional groups, and the monomers of dental materials.' },
-  { id: 'genetics', name: 'Genetics', group: 'Chemistry & genetics', planned: 'The DNA double helix, a chromosome, and a replication / transcription animation.' },
+  { id: 'genetics', name: 'Genetics', group: 'Chemistry & genetics', planned: 'Swipe along DNA as it packs into a chromosome, watch the DSPP tooth gene being copied, read and made into a protein, and see inherited enamel and dentin defects beside their genes.' },
   { id: 'microbio', name: 'Microbiology', group: 'Micro, histo & path', planned: 'Streptococcus mutans and other bacteria, virus shapes, and a biofilm.' },
   { id: 'histology', name: 'General & oral histology', group: 'Micro, histo & path', planned: 'Layered tissue blocks: enamel, dentin, pulp and periodontal ligament.' },
   { id: 'pathology', name: 'Pathology', group: 'Micro, histo & path', planned: 'Healthy and diseased tissue side by side: an ulcer, a cyst, a tumour.' },
