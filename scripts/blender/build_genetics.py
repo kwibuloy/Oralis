@@ -680,17 +680,18 @@ TEETH_BLEND = os.path.join("models-src", "genetics-teeth.blend")
 teeth = {}
 
 
-def tobj(key):
-    node = f"{key}~teeth"
+def tobj(key, gene=None):
+    # A gene's stretch gets its own nodes (key~teeth~gene), so the app can show one gene with its tooth.
+    node = f"{key}~teeth~{gene.lower()}" if gene else f"{key}~teeth"
     if node not in teeth:
         teeth[node] = Obj(node, key)
     return teeth[node]
 
 
-def ladder(x0, x1, seq=None, backbone_key="gt-between"):
+def ladder(x0, x1, seq=None, backbone_key="gt-between", gene=None):
     """A stretch of ladder: real letters when `seq` is given, plain grey otherwise."""
     for s in (0, 1):
-        tobj(backbone_key).tube([backbone(x, s) for x in frange(x0, x1, 0.08)], BACKBONE_R)
+        tobj(backbone_key, gene).tube([backbone(x, s) for x in frange(x0, x1, 0.08)], BACKBONE_R)
     i = 0
     x = x0 + RISE / 2
     while x < x1:
@@ -698,11 +699,11 @@ def ladder(x0, x1, seq=None, backbone_key="gt-between"):
         mid = mul(add(p0, p1), 0.5)
         b = seq[i] if seq else None
         for p, bb in ((p0, b), (p1, PAIR[b] if b else None)):
-            tobj(BASE_KEY[bb] if bb else "gt-between").tube([p, sub(mid, mul(norm(sub(mid, p)), HBOND_GAP / 2))], RUNG_R, sides=8)
-            tobj("dna-phosphate" if seq else "gt-between").sphere(p, PHOSPHATE_R, rings=8, segments=12)
+            tobj(BASE_KEY[bb] if bb else "gt-between", gene).tube([p, sub(mid, mul(norm(sub(mid, p)), HBOND_GAP / 2))], RUNG_R, sides=8)
+            tobj("dna-phosphate" if seq else "gt-between", gene).sphere(p, PHOSPHATE_R, rings=8, segments=12)
         if seq:
             inward = norm(sub(mid, p0))
-            tobj("dna-hbond").tube([sub(mid, mul(inward, HBOND_GAP / 2 + 0.02)), add(mid, mul(inward, HBOND_GAP / 2 + 0.02))], HBOND_R, sides=6)
+            tobj("dna-hbond", gene).tube([sub(mid, mul(inward, HBOND_GAP / 2 + 0.02)), add(mid, mul(inward, HBOND_GAP / 2 + 0.02))], HBOND_R, sides=6)
         x += RISE
         i += 1
 
@@ -712,7 +713,7 @@ for gene, gx in GENE_X.items():
     seq = DSPP["teethGenes"][gene]["codingStart"]
     half = len(seq) * RISE / 2
     ladder(x_prev, gx - half)
-    ladder(gx - half, gx + half, seq, f"gt-gene-{gene.lower()}")
+    ladder(gx - half, gx + half, seq, f"gt-gene-{gene.lower()}", gene)
     x_prev = gx + half
 ladder(x_prev, 300.0)
 for o in teeth.values():

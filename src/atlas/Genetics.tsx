@@ -65,6 +65,8 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
   // More shows the text, the family tree and the note.
   const [phone, setPhone] = useState(() => matchMedia(PHONE).matches);
   const [open, setOpen] = useState(false);
+  // Examining a stop's model (Teeth): it turns freely and everything else hides; Back returns to travelling.
+  const [examining, setExamining] = useState(false);
   useEffect(() => {
     const mq = matchMedia(PHONE);
     const on = () => setPhone(mq.matches);
@@ -78,8 +80,7 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
     const v = viewer.current;
     if (!v || !ready) return;
     setStep(0);
-    // Teeth: turn the tooth freely; the card's dots and arrows move between stops.
-    v.setPathOrbit(!!path.orbit);
+    setExamining(false);
     const frame = (i: number) => {
       const { center, width, height, phoneWidth, yaw } = steps[i].view;
       return { cx: center[0], cy: center[1], cz: center[2], w: width, h: height, pw: phoneWidth ?? width * 0.6, yaw: yaw ?? 0 };
@@ -108,6 +109,7 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
     let snap: gsap.core.Tween | null = null;
     const show = () => { timeline.time(nav.t); apply(); setStep(Math.round(nav.t)); };
     go.current = (t, animate) => {
+      setExamining(false);
       snap?.kill();
       const target = Math.min(Math.max(t, 0), last);
       if (!animate) { nav.t = target; show(); return; }
@@ -128,9 +130,19 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
       timeline.kill();
       v.onTravel = () => {};
       v.onTravelEnd = () => {};
-      v.setPathOrbit(false);
     };
   }, [viewer, ready, path, steps, last]);
+
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || !ready || !examining || !path.examine) return;
+    v.setFilter(path.examine(step));
+    v.setPathOrbit(true);
+    return () => {
+      v.setPathOrbit(false);
+      v.setFilter(() => true);
+    };
+  }, [viewer, ready, examining, path, step]);
 
   const s = steps[Math.min(step, last)];
   return (
@@ -141,7 +153,9 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
       <p className="path-card__eyebrow">{path.eyebrow(Math.min(step, last))}</p>
       <h2 className="path-card__title">{s.title}</h2>
       <div className="path-card__nav">
-        {steps.length > MAX_DOTS ? (
+        {examining ? (
+          <p className="path-card__examining">Drag to turn · pinch to zoom</p>
+        ) : steps.length > MAX_DOTS ? (
           <div className="path-card__stepper">
             <button aria-label="Previous stop" disabled={step === 0} onClick={() => go.current(step - 1, true)}>‹</button>
             <span className="path-card__count" aria-live="polite">{step + 1} / {steps.length}</span>
@@ -154,6 +168,11 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
               <button key={x.title} aria-label={`Go to ${x.title}`} aria-current={i === step ? 'step' : undefined} onClick={() => go.current(i, true)}><i /></button>
             ))}
           </div>
+        )}
+        {path.examine && (
+          <button className="path-card__examine" aria-pressed={examining} onClick={() => setExamining((e) => !e)}>
+            {examining ? 'Back' : 'Examine'}
+          </button>
         )}
         {phone && <button className="path-card__more" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? 'Less' : 'More'}</button>}
       </div>

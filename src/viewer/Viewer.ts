@@ -167,7 +167,7 @@ export class Viewer {
 
   private visible = new Set<string>();
   private context = new Set<string>();
-  private filter: (key: string) => boolean = () => true;
+  private filter: (key: string, node: string) => boolean = () => true;
   private selected: string | null = null;
   private hovered: string | null = null;
   private isolated = false;
@@ -284,8 +284,9 @@ export class Viewer {
     gltf.scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const info = describe(mesh.name) ?? describe(mesh.parent?.name ?? '');
-      if (info) add.push([mesh, info]);
+      const own = describe(mesh.name);
+      const info = own ?? describe(mesh.parent?.name ?? '');
+      if (info) { mesh.userData.node = own ? mesh.name : mesh.parent?.name; add.push([mesh, info]); }
     });
     this.compiling = true; // no drawing until the shaders are built (see compileAsync below)
     for (const [mesh, info] of add) this.register(mesh, info);
@@ -417,8 +418,8 @@ export class Viewer {
     this.place();
   }
 
-  /** Further restrict visibility with a predicate on structure key (e.g. one arch). */
-  setFilter(fn: (key: string) => boolean) {
+  /** Further restrict visibility with a predicate on structure key (e.g. one arch) or the model's node name. */
+  setFilter(fn: (key: string, node: string) => boolean) {
     this.filter = fn;
     this.gridDirty = true;
     this.apply();
@@ -855,7 +856,7 @@ export class Viewer {
     // Bake the world transform so offsets and framing live in one space.
     m.matrixWorld.decompose(m.position, m.quaternion, m.scale);
     m.removeFromParent();
-    m.userData = { key: info.key, group: info.group, base: new THREE.Color(vertexColours ? '#ffffff' : info.color), info, vertexColours, stretches: !!weights };
+    m.userData = { key: info.key, node: mesh.userData.node as string, group: info.group, base: new THREE.Color(vertexColours ? '#ffffff' : info.color), info, vertexColours, stretches: !!weights };
     if (m.geometry.getAttribute('_flow')) m.userData.flowOn = addFlow(material, this.flowTime);
     // Stretch weights are read on the CPU only: dropped from the geometry so the part batches with its look-alikes.
     let stretch: PartState['stretch'];
@@ -937,8 +938,8 @@ export class Viewer {
   }
 
   private shown(m: PartMesh): boolean {
-    const { key, group } = m.userData as { key: string; group: string };
-    if (!this.filter(key)) return false;
+    const { key, node, group } = m.userData as { key: string; node: string; group: string };
+    if (!this.filter(key, node)) return false;
     const inView = (g: string) => this.visible.has(g) || this.context.has(g);
     // A selected part shows even when its group is hidden (e.g. found by search), unless its key is split
     // over several meshes (a tissue's fixed part and each stage's patch) and some are in view: then only those.

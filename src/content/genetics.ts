@@ -364,8 +364,8 @@ export const MODEL_GROUP = 'dna';
 /** A stop on a path: its card text, what the camera frames, and a family tree to show with it (Teeth). */
 export interface PathStep { title: string; text: string; size?: string; view: PathView; pattern?: Pattern }
 /** One path the student travels: its stops, the shape-key motion along it, the group it shows, and the card's eyebrow per stop. */
-/** `orbit`: turn the model freely instead of swiping along the path (the card moves between stops). */
-export interface GeneticsPath { id: GeneticsView; group: string; steps: PathStep[]; motion: Record<string, Track>; eyebrow: (i: number) => string; note: string; hint: string; orbit?: boolean }
+/** `examine`: each stop has a model to examine on its own: turned freely, with everything but it and its gene hidden. */
+export interface GeneticsPath { id: GeneticsView; group: string; steps: PathStep[]; motion: Record<string, Track>; eyebrow: (i: number) => string; note: string; hint: string; examine?: (i: number) => (key: string, node: string) => boolean }
 const SWIPE_HINT = 'Swipe sideways to travel · up or down to turn · pinch to zoom · tap a part';
 export const PATHS: Partial<Record<GeneticsView, GeneticsPath>> = {
   dna: { id: 'dna', group: MODEL_GROUP, steps: DNA_LEVELS, motion: {}, eyebrow: (i) => `DNA packing · ${i + 1} of ${DNA_LEVELS.length}`, note: DNA_NOTE, hint: SWIPE_HINT },
@@ -377,11 +377,12 @@ export const PATHS: Partial<Record<GeneticsView, GeneticsPath>> = {
     },
   },
   teeth: {
-    id: 'teeth', group: 'teeth', steps: TEETH_STEPS, motion: {}, eyebrow: (i) => `Inherited tooth conditions · ${i + 1} of ${TEETH_STEPS.length}`, note: TEETH_NOTE, orbit: true,
-    hint: 'Drag to turn the tooth any way · pinch to zoom · tap a part · the dots go to the next tooth',
+    id: 'teeth', group: 'teeth', steps: TEETH_STEPS, motion: {}, eyebrow: (i) => `Inherited tooth conditions · ${i + 1} of ${TEETH_STEPS.length}`, note: TEETH_NOTE, hint: SWIPE_HINT,
+    // The tooth and its gene's stretch of ladder (nodes key~teeth~<gene>); the grey ladder and other teeth hide.
+    examine: (i) => (key, node) => key.startsWith(`gt-${CONDITIONS[i].id}-`) || node.endsWith(`~teeth~${CONDITIONS[i].gene.toLowerCase()}`),
   },
 };
 /** A model node's part key: nodes are keys, or `key~piece` where a part appears more than once. */
 export const nodeKey = (node: string) => node.split('~')[0];
-/** Its view: teeth nodes start gt- or end ~teeth; processes nodes start rep-/tx-/tl- or carry another `~` piece. */
-export const nodeGroup = (node: string) => (node.startsWith('gt-') || node.endsWith('~teeth') ? 'teeth' : node.includes('~') || /^(rep|tx|tl)-/.test(node) ? 'process' : MODEL_GROUP);
+/** Its view: teeth nodes start gt- or carry ~teeth (a gene's stretch: ~teeth~<gene>); processes nodes start rep-/tx-/tl- or carry another `~` piece. */
+export const nodeGroup = (node: string) => (node.startsWith('gt-') || /~teeth(~|$)/.test(node) ? 'teeth' : node.includes('~') || /^(rep|tx|tl)-/.test(node) ? 'process' : MODEL_GROUP);

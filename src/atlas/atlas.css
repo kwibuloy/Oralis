@@ -355,6 +355,8 @@
 .path-card__bar { flex: 1; min-width: 24px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .path-card__bar i { display: block; height: 100%; background: var(--ink); transition: width var(--t-ui); }
 .path-card__more { flex: none; min-height: 40px; padding: 0 14px; border: 0; border-radius: 12px; background: var(--card-muted); color: var(--ink); font-size: var(--text-sm); font-weight: 600; }
+.path-card__examine { flex: none; margin-left: auto; min-height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-size: var(--text-sm); font-weight: 600; }
+.path-card__examining { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--muted); }
 .path-card__body { display: grid; gap: 6px; }
 .path-card__size { font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
 .path-card__text { font-size: var(--text-sm); color: var(--ink-2); }
