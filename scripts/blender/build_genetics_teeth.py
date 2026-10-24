@@ -208,10 +208,12 @@ def hypomaturation():
 
 def hypocalcified():
     # Normal thickness at eruption, then worn away on the biting surface down into the dentin.
-    # Low enough that the dentin is bared in the middle of the cut, where the DEJ dips under the fossa.
-    worn = Z3 - (4.1 + 0.15 * np.sin(1.7 * X3) + 0.1 * np.sin(2.3 * Y3 + 1.0))
+    # Worn down across the cusps into the dentin.
+    worn = Z3 - (4.4 + 0.15 * np.sin(1.7 * X3) + 0.1 * np.sin(2.3 * Y3 + 1.0))
     rough = 0.05 * np.sin(9 * X3) * np.sin(8 * Y3 + 1) * np.sin(7 * Z3 + 2)  # soft enamel, uneven surface
-    T = np.maximum(TS + np.where(Z3 > CEJ + 0.5, rough, 0), worn)
+    # What is left of the soft enamel on the upper crown is a thin worn rim over the dentin.
+    thin = np.where(Z3 > CEJ + 3.0, DS - 0.45, -1.0)
+    T = np.maximum.reduce([TS + np.where(Z3 > CEJ + 0.5, rough, 0), worn, thin])
     return tissues(T, DS, PULP, CEJ, Z3)
 
 

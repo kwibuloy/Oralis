@@ -66,6 +66,8 @@ export interface PathView {
   center: [number, number, number];
   width: number;
   height: number;
+  /** Width to frame on a portrait phone, where a long stretch fitted across comes out thin (default 0.6 × width). */
+  phoneWidth?: number;
 }
 /** Path gestures: how far (px) a press travels before it is read as a swipe, and how fast a vertical one turns (rad/px). */
 const SWIPE_START = 8;
@@ -624,7 +626,7 @@ export class Viewer {
   private applyPath() {
     const { center, height } = this.pathView;
     // A long stretch fitted across a portrait phone comes out thin: show the middle part of it larger.
-    const width = this.pathView.width * (this.camera.aspect < 0.8 ? 0.6 : 1);
+    const width = this.camera.aspect < 0.8 ? this.pathView.phoneWidth ?? this.pathView.width * 0.6 : this.pathView.width;
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
     // Fitted above the bottom bar; a card opening at the side only slides the view over (see resize), it never zooms out.
     // The header and subject picker take the top of the canvas too (more of it on phones).

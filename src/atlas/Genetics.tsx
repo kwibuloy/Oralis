@@ -9,6 +9,9 @@ const REDUCED_MOTION = typeof matchMedia !== 'undefined' && matchMedia('(prefers
 const pxPerStep = () => Math.min(window.innerWidth * 0.75, 560);
 /** How far a flick carries: the finger's speed (steps per ms) times this, at most one step. */
 const FLICK_MS = 160;
+/** Paths with more stops than this get a counter and arrows instead of a row of dots. */
+const MAX_DOTS = 6;
+const PHONE = '(max-width: 860px)';
 
 /**
  * Genetics: the model is the timeline. One paused GSAP timeline holds a whole path (camera framing
@@ -26,6 +29,16 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
   const [travelled, setTravelled] = useState(false);
   const go = useRef<(t: number, animate: boolean) => void>(() => {});
   const card = useRef<HTMLElement>(null);
+  // On phones the card opens as a peek (switch, title, stop controls) so the model keeps the screen;
+  // More shows the text, the family tree and the note.
+  const [phone, setPhone] = useState(() => matchMedia(PHONE).matches);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const mq = matchMedia(PHONE);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   // Each stop's card opens at its title (on phones the card scrolls).
   useEffect(() => { card.current?.scrollTo?.({ top: 0 }); }, [step, path]);
 
@@ -34,13 +47,13 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
     if (!v || !ready) return;
     setStep(0);
     const frame = (i: number) => {
-      const { center, width, height } = steps[i].view;
-      return { cx: center[0], cy: center[1], cz: center[2], w: width, h: height };
+      const { center, width, height, phoneWidth } = steps[i].view;
+      return { cx: center[0], cy: center[1], cz: center[2], w: width, h: height, pw: phoneWidth ?? width * 0.6 };
     };
     const names = Object.keys(path.motion);
     const state: Record<string, number> = { ...frame(0), ...Object.fromEntries(names.map((n) => [n, path.motion[n][0][1]])) };
     const apply = () => {
-      v.setPathView({ center: [state.cx, state.cy, state.cz], width: state.w, height: state.h });
+      v.setPathView({ center: [state.cx, state.cy, state.cz], width: state.w, height: state.h, phoneWidth: state.pw });
       v.setMorphWeights(Object.fromEntries(names.map((n) => [n, state[n]])));
     };
     const timeline = gsap.timeline({ paused: true });
@@ -92,16 +105,34 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
       </div>
       <p className="path-card__eyebrow">{path.eyebrow(Math.min(step, last))}</p>
       <h2 className="path-card__title">{s.title}</h2>
-      {s.size && <p className="path-card__size">{s.size}</p>}
-      <p className="path-card__text">{s.text}</p>
-      {s.pattern && <FamilyTree pattern={s.pattern} />}
-      <div className="path-card__dots">
-        {steps.map((x, i) => (
-          <button key={x.title} aria-label={`Go to ${x.title}`} aria-current={i === step ? 'step' : undefined} onClick={() => go.current(i, true)}><i /></button>
-        ))}
+      <div className="path-card__nav">
+        {steps.length > MAX_DOTS ? (
+          <div className="path-card__stepper">
+            <button aria-label="Previous stop" disabled={step === 0} onClick={() => go.current(step - 1, true)}>‹</button>
+            <span className="path-card__count" aria-live="polite">{step + 1} / {steps.length}</span>
+            <span className="path-card__bar" aria-hidden="true"><i style={{ width: `${(step / last) * 100}%` }} /></span>
+            <button aria-label="Next stop" disabled={step === last} onClick={() => go.current(step + 1, true)}>›</button>
+          </div>
+        ) : (
+          <div className="path-card__dots">
+            {steps.map((x, i) => (
+              <button key={x.title} aria-label={`Go to ${x.title}`} aria-current={i === step ? 'step' : undefined} onClick={() => go.current(i, true)}><i /></button>
+            ))}
+          </div>
+        )}
+        {phone && <button className="path-card__more" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? 'Less' : 'More'}</button>}
       </div>
-      {!travelled && <p className="path-card__hint">Swipe sideways to travel · up or down to turn · pinch to zoom · tap a part</p>}
-      <p className="path-card__note">{path.note}</p>
+      {(!phone || open) && (
+        <div className="path-card__body">
+          {s.size && <p className="path-card__size">{s.size}</p>}
+          <p className="path-card__text">{s.text}</p>
+          {s.pattern && <FamilyTree pattern={s.pattern} />}
+          <div className="path-card__foot">
+            {!travelled && step === 0 && <p className="path-card__hint">Swipe sideways to travel · up or down to turn · pinch to zoom · tap a part</p>}
+            <p className="path-card__note">{path.note}</p>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -141,8 +172,14 @@ function FamilyTree({ pattern }: { pattern: Pattern }) {
             );
           })}
         </g>
-        {['I', 'II', 'III'].map((g, i) => <text key={g} x="0" y={22 + i * 51} fill="var(--muted)" fontSize="10" fontWeight="600">{g}</text>)}
+        {['I', 'II', 'III'].map((g, i) => <text key={g} x="0" y={22 + i * 51} fill="var(--ink-2)" fontSize="12" fontWeight="600">{g}</text>)}
       </svg>
+      <ul className="path-card__key" aria-label="Key">
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" fill="var(--ink-2)" /></svg>Affected</li>
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="var(--card)" stroke="var(--ink-2)" strokeWidth="1.4" /></svg>Unaffected</li>
+        {people.some((p) => p.status === 'c') && <li><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="var(--card)" stroke="var(--ink-2)" strokeWidth="1.4" /><circle cx="8" cy="8" r="2.2" fill="var(--ink-2)" /></svg>Carrier</li>}
+        <li>□ male · ○ female</li>
+      </ul>
       <figcaption>{note}</figcaption>
     </figure>
   );

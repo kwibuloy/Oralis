@@ -60,18 +60,18 @@ export const PARTS: Record<string, Part> = {
   'dna-major-groove': { name: 'Major groove', color: '#d0d5dd', note: 'The wider of the two grooves between the backbones. Proteins that switch genes on and off read the base sequence mostly through it, without opening the helix.' },
   'dna-minor-groove': { name: 'Minor groove', color: '#d0d5dd', note: 'The narrower groove. The two grooves alternate because the sugars of a base pair sit on one side of the pair, not opposite each other.' },
   // level 2: nucleosomes
-  'dna-histone-octamer': { name: 'Histone octamer', color: '#a48de0', note: 'Eight histone proteins, two each of H2A, H2B, H3 and H4. About 147 base pairs of DNA wrap round it about 1.7 times, making a nucleosome.' },
-  'dna-wrapped-dna': { name: 'Nucleosome DNA', color: '#6c7fa8', note: 'The 147 base pairs wrapped round the histone octamer. Wrapped DNA is harder to read; chemical tags on the histone tails loosen or tighten it (epigenetics).' },
-  'dna-linker-dna': { name: 'Linker DNA', color: '#6c7fa8', note: 'The stretch between two nucleosomes, usually 20–80 base pairs, giving the “beads on a string” look: a fibre about 11 nm wide.' },
+  'dna-histone-octamer': { name: 'Histone octamer', color: '#8b6fd6', note: 'Eight histone proteins, two each of H2A, H2B, H3 and H4. About 147 base pairs of DNA wrap round it about 1.7 times, making a nucleosome.' },
+  'dna-wrapped-dna': { name: 'Nucleosome DNA', color: '#566a96', note: 'The 147 base pairs wrapped round the histone octamer. Wrapped DNA is harder to read; chemical tags on the histone tails loosen or tighten it (epigenetics).' },
+  'dna-linker-dna': { name: 'Linker DNA', color: '#566a96', note: 'The stretch between two nucleosomes, usually 20–80 base pairs, giving the “beads on a string” look: a fibre about 11 nm wide.' },
   'dna-h1': { name: 'Histone H1', color: '#e599f7', note: 'The linker histone. It sits where DNA enters and leaves the nucleosome and helps fold nucleosomes into a thicker fibre.' },
   // level 3: fibre
-  'dna-fibre': { name: 'Chromatin fibre (30 nm)', color: '#a48de0', note: 'The textbook model: nucleosomes coiled into a fibre about 30 nm across, about six per turn. In living cells the packing may be less regular, but this is the model exams use.' },
+  'dna-fibre': { name: 'Chromatin fibre (30 nm)', color: '#8b6fd6', note: 'The textbook model: nucleosomes coiled into a fibre about 30 nm across, about six per turn. In living cells the packing may be less regular, but this is the model exams use.' },
   // level 4: loops
-  'dna-loops': { name: 'Chromatin loops', color: '#8c86cf', note: 'The fibre folds into loops, roughly 300 nm across, anchored at their bases to a protein scaffold. Genes in open loops can be read; tightly packed regions are mostly silent.' },
+  'dna-loops': { name: 'Chromatin loops', color: '#7569c4', note: 'The fibre folds into loops, roughly 300 nm across, anchored at their bases to a protein scaffold. Genes in open loops can be read; tightly packed regions are mostly silent.' },
   'dna-scaffold': { name: 'Protein scaffold', color: '#f08c4a', note: 'A core of non-histone proteins, including condensin and topoisomerase II, that holds the bases of the loops.' },
   // level 5: chromosome
-  'dna-p-arm': { name: 'Short arm (p)', color: '#958ad8', note: 'The shorter arm, above the centromere. Each arm is there twice, once in each sister chromatid: identical copies made when the DNA was copied.' },
-  'dna-q-arm': { name: 'Long arm (q)', color: '#958ad8', note: `The longer arm, below the centromere. On chromosome 4 it carries two tooth genes: ENAM (4q13.3) and DSPP (${dspp.map}).` },
+  'dna-p-arm': { name: 'Short arm (p)', color: '#8072cf', note: 'The shorter arm, above the centromere. Each arm is there twice, once in each sister chromatid: identical copies made when the DNA was copied.' },
+  'dna-q-arm': { name: 'Long arm (q)', color: '#8072cf', note: `The longer arm, below the centromere. On chromosome 4 it carries two tooth genes: ENAM (4q13.3) and DSPP (${dspp.map}).` },
   'dna-centromere': { name: 'Centromere', color: '#f03e3e', note: 'The waist where the two sister chromatids are held together until the cell divides. It splits the chromosome into p and q arms.' },
   'dna-kinetochore': { name: 'Kinetochore', color: '#fab005', note: 'A protein disc on each side of the centromere. Spindle fibres attach here and pull the sister chromatids to opposite poles.' },
   'dna-telomere': { name: 'Telomere', color: '#20c997', note: 'Repeats of TTAGGG that cap the chromosome ends and protect them. They shorten a little each time most body cells divide; cells with telomerase, such as stem and germ cells, rebuild them.' },
@@ -115,7 +115,7 @@ export interface Step {
   parts: string[];
 }
 /** What the camera frames at a stop on the path: a box around `center` (model units; glTF axes, the path runs along +x). */
-export interface PathView { center: [number, number, number]; width: number; height: number }
+export interface PathView { center: [number, number, number]; width: number; height: number; phoneWidth?: number }
 export interface DnaLevel extends Step { size: string; view: PathView }
 
 export const DNA_LEVELS: DnaLevel[] = [
@@ -353,7 +353,8 @@ export const TEETH_STEPS: PathStep[] = CONDITIONS.map((c) => ({
   title: c.name,
   size: `${c.gene} gene · ${c.band} · usually ${PATTERN_WORDS[c.pattern]}`,
   text: `${c.shows} Left, the affected tooth; right, a healthy one.`,
-  view: { center: [GENE_X[c.gene], TEETH_Y + 11, 0], width: 44, height: 30 },
+  // On a phone, room around both teeth and the ladder below them.
+  view: { center: [GENE_X[c.gene], TEETH_Y + 11, 0], width: 44, height: 30, phoneWidth: 36 },
   pattern: c.pattern,
 }));
 export const TEETH_PARTS = [...TOOTH_TISSUES.map((t) => toothKey('healthy', t)), ...CONDITIONS.flatMap((c) => TOOTH_TISSUES.map((t) => toothKey(c.id, t)).filter((k) => PARTS[k])), ...CONDITIONS.map((c) => geneKey(c.gene)), 'gt-between'];

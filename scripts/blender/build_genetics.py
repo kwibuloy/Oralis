@@ -53,9 +53,9 @@ COIL_R, COIL_PITCH, COIL_TUBE = 8.0, 4.2, 3.4
 COLOURS = {  # a hint for anyone opening the .blend; the app colours parts from genetics.ts
     "dna-sugar": "#8f9bb3", "dna-phosphate": "#f2c14e", "dna-hbond": "#d0d5dd",
     "dna-base-a": "#2f9e44", "dna-base-t": "#e03131", "dna-base-g": "#f59f00", "dna-base-c": "#1c7ed6",
-    "dna-histone-octamer": "#a48de0", "dna-wrapped-dna": "#6c7fa8", "dna-linker-dna": "#6c7fa8", "dna-h1": "#e599f7",
-    "dna-fibre": "#a48de0", "dna-loops": "#8c86cf", "dna-scaffold": "#f08c4a",
-    "dna-p-arm": "#958ad8", "dna-q-arm": "#958ad8", "dna-centromere": "#f03e3e", "dna-kinetochore": "#fab005", "dna-telomere": "#20c997",
+    "dna-histone-octamer": "#8b6fd6", "dna-wrapped-dna": "#566a96", "dna-linker-dna": "#566a96", "dna-h1": "#e599f7",
+    "dna-fibre": "#8b6fd6", "dna-loops": "#7569c4", "dna-scaffold": "#f08c4a",
+    "dna-p-arm": "#8072cf", "dna-q-arm": "#8072cf", "dna-centromere": "#f03e3e", "dna-kinetochore": "#fab005", "dna-telomere": "#20c997",
 }
 BASE_KEY = {b: f"dna-base-{b.lower()}" for b in "ATGC"}
 

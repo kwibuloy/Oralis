@@ -627,7 +627,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
 
       {/* Outside the stage so it sits above the floating cards and view rail. */}
       {!ready && !error && <LoadingBar name={mode.name} model={mode.model} progress={progress} />}
-      <p className="hints" aria-hidden="true">{isPath ? 'Drag sideways to travel · Drag up or down to turn · Scroll to zoom · Tap to inspect' : 'Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect'}</p>
+      {/* Genetics' step card carries its own gesture hint. */}
+      {!isPath && <p className="hints" aria-hidden="true">Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect</p>}
     </div>
   );
 }
