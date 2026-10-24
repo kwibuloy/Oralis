@@ -41,3 +41,9 @@ OralisVault/
 
 # Plans stay local (user rule): name every plan file <TOPIC>_PLAN.md
 *_PLAN.md
+
+# Claude Code setup stays local (user rule, 2026-10-24)
+.claude/
+CLAUDE.md
+# Genetics molars (45 MB), rebuilt by scripts/blender/build_genetics_teeth.py before build_genetics.py
+models-src/genetics-teeth.blend

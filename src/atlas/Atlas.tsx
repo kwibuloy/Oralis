@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { baseName, GROUP_SYSTEM, GROUPS, SYSTEMS, type SystemId } from '../content/anatomy';
 import { bloodColour, brainArea, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, type FunctionId } from '../content/function';
+import { MODEL_GROUP, MODEL_PARTS, nodeGroup, nodeKey, PARTS as GENETIC_PARTS, PATHS as GENETIC_PATHS, PROCESS_PARTS as GENETIC_PROCESS_PARTS, TEETH_PARTS as GENETIC_TEETH_PARTS, VIEW_OPTIONS as GENETIC_VIEWS, type GeneticsView } from '../content/genetics';
 import { TISSUES } from '../content/histology';
 import { modeById, type ModeId } from '../content/modes';
 import { BODYPARTS3D, SITE } from '../content/site';
@@ -26,6 +27,7 @@ import Icon from './Icon';
 import SubjectPicker from './SubjectPicker';
 import Search, { type SearchItem } from './Search';
 import Timeline from './Timeline';
+import { GeneticsPath, toothLook } from './Genetics';
 import './atlas.css';
 
 type ArchFilter = 'both' | 'upper' | 'lower';
@@ -51,7 +53,9 @@ const STAGE_LABEL: Record<ModeId, string> = {
   dental: 'Permanent dentition',
   histology: 'Longitudinal section · schematic',
   cariology: 'Left mandibular first molar · sectioned',
+  genetics: 'DNA packing · sizes squeezed',
 };
+const GENETICS_STAGE: Record<GeneticsView, string> = { dna: 'DNA packing · sizes squeezed', process: 'Copy, read, make a protein · schematic', teeth: 'Lower first molars · cut lengthwise' };
 const CARIOLOGY_STAGE: Record<CariologyView, string> = { lesion: 'Left mandibular first molar · sectioned', sites: 'Permanent dentition · caries sites', process: 'Enamel and biofilm · magnified' };
 /** Seconds per lesion stage, and for the Process view's two hours, at 1×; the viewer's clock loops every 3 s. */
 const STAGE_SECONDS = 2.5;
@@ -78,6 +82,7 @@ interface Layer { id: string; label: string; color: string; count: number }
 
 function layersFor(modeId: ModeId, model: string, bySystem: boolean): Layer[] {
   if (modeId === 'histology') return TISSUES.map((t) => ({ id: t.key, label: t.name, color: t.color, count: 1 }));
+  if (modeId === 'genetics') return [{ id: MODEL_GROUP, label: 'DNA', color: GENETIC_PARTS['dna-sugar'].color, count: MODEL_PARTS.length }, { id: 'process', label: 'Processes', color: GENETIC_PARTS['tx-mrna'].color, count: GENETIC_PROCESS_PARTS.length }, { id: 'teeth', label: 'Teeth', color: GENETIC_PARTS['gt-gene-dspp'].color, count: GENETIC_TEETH_PARTS.length }];
   const inModel = structuresIn(model);
   const rank = (g: string) => SYSTEMS.findIndex((s) => s.id === GROUP_SYSTEM[g]);
   const order = bySystem ? [...GROUP_ORDER].sort((a, b) => rank(a) - rank(b)) : GROUP_ORDER;
@@ -131,6 +136,11 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   const stage = cario ? stageAt(lesionKind, time) : 0;
   const minute = time * PROCESS_MINUTES;
   const cariTimeline = cario && cariView !== 'sites';
+  // Genetics: swipe along the ladder (GeneticsPath) instead of orbiting.
+  const isPath = !!mode.path;
+  const [geneView, setGeneView] = useState<GeneticsView>('dna');
+  const genePath = GENETIC_PATHS[geneView]!;
+  const geneViews = GENETIC_VIEWS.filter(([v]) => GENETIC_PATHS[v]);
 
   const layers = useMemo(() => layersFor(modeId, modelName, !!mode.systems), [modeId, modelName, mode.systems]);
   // In the Function view the skeleton stays faded behind the systems for orientation.
@@ -144,6 +154,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     const v = new Viewer(canvas.current);
     viewer.current = v;
     if (import.meta.env.DEV) (window as unknown as { __viewer: Viewer }).__viewer = v;
+    if (mode.path) v.setPathMode(true);
     v.onHover = (key, at) => setHover(key && at ? { key, ...at } : null);
     v.onPick = (key) => setSelected(key);
     v.onTime = setTime;
@@ -160,6 +171,11 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         const t = TISSUES.find((x) => x.key === node);
         return t ? { key: t.key, group: t.key, color: t.color } : null;
       }
+      if (modeId === 'genetics') {
+        // Nodes are part keys, or `key~piece` where a part appears more than once (the processes path).
+        const p = GENETIC_PARTS[nodeKey(node)];
+        return p ? { key: nodeKey(node), group: nodeGroup(node), color: p.color, surface: toothLook(nodeKey(node)) } : null;
+      }
       if (node in CARVING_COLOUR) return { key: node, group: 'carving', color: CARVING_COLOUR[node] };
       if (modeId === 'cariology') { const part = cariologyPart(node); if (part) return part; }
       const key = MESH_TO_KEY.get(node);
@@ -169,7 +185,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       .then(() => !cancelled && setReady(true))
       .catch(() => !cancelled && setError('The 3D model could not be loaded. Check your connection and reload.'));
     return () => { cancelled = true; v.dispose(); viewer.current = null; };
-  }, [mode.model, modeId]);
+  }, [mode.model, modeId, mode.path]);
 
   // Keep framed parts clear of the detail card: above the phone bottom sheet, or between the layers
   // card and the detail card on wider screens.
@@ -183,7 +199,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     const bar = root.current?.querySelector<HTMLElement>('.timeline--rich');
     const phone = matchMedia('(max-width: 860px)').matches;
     const barCover = bar && phone ? root.current!.clientHeight - bar.offsetTop : 0;
-    viewer.current?.setInsets({ left, right: cover.right, bottom: Math.max(cover.bottom, barCover) });
+    // Genetics' step card stands on the left on wider screens: the view centres in the space beside it.
+    const pathLeft = bar && !phone && bar.classList.contains('path-card') ? bar.getBoundingClientRect().right : 0;
+    viewer.current?.setInsets({ left: Math.max(left, pathLeft), right: cover.right, bottom: Math.max(cover.bottom, barCover) });
   }, []);
   const setSheetInset = useCallback((cover: SheetCover) => { sheetCover.current = cover; applyInsets(); }, [applyInsets]);
   // Track the rich timeline's height: the phone sheet and the view switch sit above it.
@@ -193,13 +211,13 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     const ro = new ResizeObserver(() => { root.current?.style.setProperty('--timeline-h', `${bar.offsetHeight}px`); applyInsets(); });
     ro.observe(bar);
     return () => ro.disconnect();
-  }, [cariTimeline, cariView, ready, applyInsets]);
+  }, [cariTimeline, cariView, isPath, ready, applyInsets]);
 
   // Push React state into the viewer. Cariology's views decide their own groups: one lesion stage and
   // the unchanging rest of its section; the arches with the sites (gingiva faded, so root caries
   // shows, and the jaws left out so the teeth fill the screen); or the process block with the
   // biofilm faded so the bacteria inside show.
-  const shown = !cario ? { visible, context } : cariView === 'lesion'
+  const shown = isPath ? { visible: [genePath.group], context: [] } : !cario ? { visible, context } : cariView === 'lesion'
     ? { visible: [staticGroup(lesionKind), stageGroup(lesionKind, stage), perioGroup(lesionKind)], context: [] }
     : cariView === 'sites' ? { visible: ['teeth', 'sites'], context: ['gingiva'] }
       : { visible: ['pr-enamel', 'pr-pellicle', 'pr-bacteria'], context: ['pr-biofilm'] };
@@ -347,6 +365,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       ...Object.entries(PROCESS_PARTS).filter(([k]) => !/pr-band-[1-4]/.test(k)).map(([k, p]) => ({ key: k, label: k === 'pr-band-0' ? 'Enamel prisms' : p.name, group: 'Caries process', color: p.colour })),
     ];
     if (modeId === 'histology') return TISSUES.map((t) => ({ key: t.key, label: t.name, group: 'Tissue', color: t.color }));
+    if (modeId === 'genetics') return [...MODEL_PARTS, ...GENETIC_PROCESS_PARTS, ...GENETIC_TEETH_PARTS].map((k) => ({ key: k, label: GENETIC_PARTS[k].name, group: k.startsWith('dna-') ? 'DNA' : k.startsWith('gt-') ? 'Teeth' : 'Processes', color: GENETIC_PARTS[k].color }));
     return structuresIn(modelName).map((s) => ({ key: s.key, label: labelFor(modeId, s.key, system), group: GROUPS[s.group].label, color: GROUP_COLOR[s.group] }));
   }, [modeId, modelName, system, carving, cario]);
   const onSearch = (key: string) => {
@@ -378,10 +397,10 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     setView(carving ? null : 'front');
     requestAnimationFrame(() => viewer.current?.setView(carving ? CARVING_START : 'front'));
   };
-  const stageLabel = cario ? CARIOLOGY_STAGE[cariView] : carving ? `${CARVING_TOOTH.name} · idealised (Wheeler)` : inFunction ? 'Function · schematic flow' : explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
+  const stageLabel = isPath ? GENETICS_STAGE[geneView] : cario ? CARIOLOGY_STAGE[cariView] : carving ? `${CARVING_TOOTH.name} · idealised (Wheeler)` : inFunction ? 'Function · schematic flow' : explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
 
   return (
-    <div ref={root} className={`atlas${cariTimeline ? ' has-rich-timeline' : ''}`} data-mode={modeId}>
+    <div ref={root} className={`atlas${cariTimeline || isPath ? ' has-rich-timeline' : ''}`} data-mode={modeId}>
       <div className="atlas__stage">
         <span className="floor" aria-hidden="true" />
         <canvas ref={canvas} aria-label={`${mode.name} 3D model`} role="img" />
@@ -409,6 +428,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         </button>
       </div>
 
+      {!isPath && <>
       <button className="card layers-toggle" aria-expanded={layersOpen} onClick={() => setLayersOpen((o) => !o)}>
         <Icon name="layers" /> {inFunction ? 'Functions' : cario ? 'Parts' : 'Layers'}
       </button>
@@ -508,8 +528,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           </button>
         </div>}
       </section>
+      </>}
 
-      <div className="card toolbar" role="toolbar" aria-label="View">
+      {!isPath && <div className="card toolbar" role="toolbar" aria-label="View">
         <button className="icon-button" aria-pressed={autoRotate} aria-label="Auto-rotate" onClick={() => setAutoRotate((a) => !a)}>
           <Icon name="rotate" />
         </button>
@@ -527,7 +548,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           ))}
         <span className="toolbar__sep" />
         <button className="icon-button" aria-label="Reset everything" title="Reset" onClick={resetAll}><Icon name="reset" /></button>
-      </div>
+      </div>}
 
       {modeId === 'dental' && (
         // Phones and tablets: the view switch stays visible instead of hiding in the Layers drawer.
@@ -553,7 +574,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           valueText={`${Math.round(minute)} minutes, pH ${plaquePH(minute, scenario).toFixed(1)}`} track={<PhTrack scenario={scenario} />}>
           <ProcessHead minute={minute} scenario={scenario} onScenario={(s) => { setScenario(s); scrub(0); }} />
         </Timeline>
-      ) : null) : carving ? null : inFunction ? (
+      ) : null) : carving ? null : isPath ? (
+        <GeneticsPath viewer={viewer} ready={ready} path={genePath} views={geneViews} onView={(v) => { setSelected(null); setGeneView(v); }} />
+      ) : inFunction ? (
         <Timeline label="Function" playing={ready && playing} onPlaying={setPlaying} time={time} onScrub={scrub} speed={speed} onSpeed={setSpeed} />
       ) : (
       <section className="card explode" aria-labelledby="explode-title">
@@ -596,6 +619,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
           </p>
           <p>Histology model: authored for {SITE.name} in Blender. It is schematic; proportions are stylised for teaching.</p>
           <p>Cariology: the lesion molar and the enamel and biofilm block are authored for {SITE.name} in code; lesion sizes are schematic, and the sites on the scanned teeth are painted to show where.</p>
+          <p>Genetics: modelled for {SITE.name} in Blender; the molars share the Cariology molar's shape. DNA and RNA letters are real, from <a href="https://www.ncbi.nlm.nih.gov/refseq/">NCBI RefSeq</a> (DSPP, ENAM, MMP20, FAM83H) and GRCh38; proteins are simple shapes at about their real size, and the packing levels are squeezed to fit one path.</p>
           <p>Not in the source data: muscles of mastication, maxillary and mandibular nerves, facial nerve and lower cranial nerves, external carotid artery and its branches, parotid gland, lung tissue, third molars, primary teeth.</p>
           <p>For study only. Not for diagnosis or treatment planning. <a href={SITE.repo}>Source code</a> (MIT).</p>
         </aside>
@@ -603,7 +627,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
 
       {/* Outside the stage so it sits above the floating cards and view rail. */}
       {!ready && !error && <LoadingBar name={mode.name} model={mode.model} progress={progress} />}
-      <p className="hints" aria-hidden="true">Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect</p>
+      {/* Genetics' step card carries its own gesture hint. */}
+      {!isPath && <p className="hints" aria-hidden="true">Drag to orbit · Right-drag to pan · Scroll to zoom · Tap to inspect</p>}
     </div>
   );
 }
