@@ -116,8 +116,18 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
       const to = Math.round(target);
       snap = gsap.to(nav, { t: to, duration: REDUCED_MOTION ? 0 : 0.5 + 0.2 * Math.min(2, Math.abs(to - nav.t)), ease: 'power3.out', onUpdate: show });
     };
-    v.onTravel = (dx) => { setTravelled(true); go.current(nav.t - dx / pxPerStep(), false); };
-    v.onTravelEnd = (velocity) => go.current(nav.t + Math.max(-1, Math.min(1, (-velocity / pxPerStep()) * FLICK_MS)), true);
+    // Stepwise paths (Teeth) move at most one stop per swipe or scroll, from the stop where it began.
+    let from: number | null = null;
+    const reach = (t: number) => (path.stepwise && from !== null ? Math.min(Math.max(t, from - 1), from + 1) : t);
+    v.onTravel = (dx) => {
+      setTravelled(true);
+      from ??= Math.round(nav.t);
+      go.current(reach(nav.t - dx / pxPerStep()), false);
+    };
+    v.onTravelEnd = (velocity) => {
+      go.current(reach(nav.t + Math.max(-1, Math.min(1, (-velocity / pxPerStep()) * FLICK_MS))), true);
+      from = null;
+    };
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.closest('input, textarea')) return;
       if (e.key === 'ArrowRight') go.current(Math.round(nav.t) + 1, true);
