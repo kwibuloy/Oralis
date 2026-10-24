@@ -1,6 +1,9 @@
-// Mesh clean-up for surface-nets output, shared by the cariology lesion molar (build-cariology.mjs) and
-// the caries sites carved into the arch's teeth (extract-bodyparts.mjs).
-import { onFace } from './caries-lesions.mjs';
+// Mesh clean-up for surface-nets output, for the caries sites carved into the arch's teeth
+// (extract-bodyparts.mjs).
+
+/** True if p lies on cut plane i (within tol) and not beyond any of the other planes. */
+const onFace = (planes, i, p, tol = 0.05) =>
+  Math.abs(p[planes[i].axis] - planes[i].at) < tol && planes.every((c, j) => j === i || c.side * (p[c.axis] - c.at) > -tol);
 
 /**
  * Surface nets leave each vertex where grid edges cross the boundary, which shows as a staircase when

@@ -32,8 +32,12 @@ tsconfig.tsbuildinfo
 # Blender backups
 *.blend1
 
-# Intermediate model rebuilt by scripts/build-cariology.mjs (34 MB, uncompressed); only public/models/cariology.glb ships
+# Intermediate process block rebuilt by scripts/build-cariology.mjs; only public/models/cariology.glb ships
 models-src/cariology.glb
 __pycache__/
 models-src/cariology-blender.blend
 portfolio-bullets.md
+OralisVault/
+
+# Plans stay local (user rule): name every plan file <TOPIC>_PLAN.md
+*_PLAN.md

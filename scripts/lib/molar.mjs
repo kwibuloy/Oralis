@@ -1,6 +1,6 @@
 // The idealised mandibular first molar (right tooth: mesial +x, buccal +z, occlusal +y, millimetres)
 // as a signed distance field, plus the surface-nets mesher. Shared by the carving tooth
-// (build-carving-tooth.mjs) and the cariology lesion molar (build-cariology.mjs), so both are the same tooth.
+// (build-carving-tooth.mjs) and the caries sites carved into the arch's teeth (extract-bodyparts.mjs).
 
 // ---------- Wheeler, mandibular first molar (mm) ----------
 export const WHEELER = {
