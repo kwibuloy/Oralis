@@ -37,6 +37,20 @@ if (i2 < 0 || i3 < 0) throw new Error('Exons 2 and 3 not found in the genomic re
 const intron = genomic.slice(i2 + (ex2[1] - ex2[0] + 1), i3);
 const startInGenomic = i2 + (cdsStart - ex2[0]);
 
+// The Teeth path's gene stops: the first coding bases of each tooth gene (MANE Select RefSeq mRNAs).
+const TEETH_GENES = { ENAM: 'NM_031889.3', MMP20: 'NM_004771.4', FAM83H: 'NM_198488.5', DSPP: MRNA };
+const CODING_TAKE = 60;
+const teethGenes = {};
+for (const [gene, acc] of Object.entries(TEETH_GENES)) {
+  const rec = await get(`${eutils}&id=${acc}&rettype=gb`);
+  const v = rec.match(/^VERSION\s+(\S+)/m)[1];
+  if (v !== acc) throw new Error(`Expected ${acc}, NCBI returned ${v}`);
+  const seq = rec.slice(rec.indexOf('\nORIGIN')).replace(/[^acgt]/g, '').toUpperCase();
+  const [start] = rec.match(/^ {5}CDS {13}(\d+)\.\.(\d+)/m).slice(1).map(Number);
+  const prot = rec.match(/\/translation="([^"]+)"/)[1].replace(/\s/g, '');
+  teethGenes[gene] = { mrna: acc, codingStart: seq.slice(start - 1, start - 1 + CODING_TAKE), proteinStart: prot.slice(0, CODING_TAKE / 3) };
+}
+
 const out = {
   source: `NCBI RefSeq ${MRNA} (DSPP mRNA, MANE Select) and ${CHROM.acc}:${CHROM.start}-${CHROM.stop} (GRCh38), fetched by scripts/fetch-dspp.mjs`,
   gene: 'DSPP', map, mrna: MRNA, chromosome: CHROM.acc,
@@ -48,6 +62,7 @@ const out = {
   // First amino acids of the protein (NP_055023), for the translation check; signal peptide length in amino acids.
   proteinStart: protein.slice(0, (exon2Coding.length + exon3Start.length) / 3),
   signalPeptide: (sigEnd - cdsStart + 1) / 3,
+  teethGenes,
 };
 writeFileSync(new URL('../src/content/genetics-sequence.generated.json', import.meta.url), JSON.stringify(out, null, 2) + '\n');
 console.log(out);

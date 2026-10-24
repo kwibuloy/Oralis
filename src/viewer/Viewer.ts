@@ -629,7 +629,9 @@ export class Viewer {
     // Fitted above the bottom bar; a card opening at the side only slides the view over (see resize), it never zooms out.
     // The header and subject picker take the top of the canvas too (more of it on phones).
     const freeH = Math.max(0.3, 1 - this.insetTarget.bottom / this.height - (this.width > 860 ? 0.1 : 0.16));
-    const distance = Math.max(height / 2 / (tan * freeH), width / 2 / (tan * this.camera.aspect)) * this.pathZoom;
+    // The left inset is the path's own step card (always there); a detail card on the right is not counted.
+    const freeW = Math.max(0.45, 1 - this.insetTarget.left / this.width);
+    const distance = Math.max(height / 2 / (tan * freeH), width / 2 / (tan * this.camera.aspect * freeW)) * this.pathZoom;
     const target = new THREE.Vector3(...center);
     const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.pathSpin);
     gsap.killTweensOf(this.controls.target);

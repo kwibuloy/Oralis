@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { baseName, GROUP_SYSTEM, GROUPS, SYSTEMS, type SystemId } from '../content/anatomy';
 import { bloodColour, brainArea, flowFunction, FUNCTION_CONTEXT, FUNCTION_LAYERS, type FunctionId } from '../content/function';
-import { MODEL_GROUP, MODEL_PARTS, nodeGroup, nodeKey, PARTS as GENETIC_PARTS, PATHS as GENETIC_PATHS, PROCESS_PARTS as GENETIC_PROCESS_PARTS, VIEW_OPTIONS as GENETIC_VIEWS, type GeneticsView } from '../content/genetics';
+import { MODEL_GROUP, MODEL_PARTS, nodeGroup, nodeKey, PARTS as GENETIC_PARTS, PATHS as GENETIC_PATHS, PROCESS_PARTS as GENETIC_PROCESS_PARTS, TEETH_PARTS as GENETIC_TEETH_PARTS, VIEW_OPTIONS as GENETIC_VIEWS, type GeneticsView } from '../content/genetics';
 import { TISSUES } from '../content/histology';
 import { modeById, type ModeId } from '../content/modes';
 import { BODYPARTS3D, SITE } from '../content/site';
@@ -53,8 +53,9 @@ const STAGE_LABEL: Record<ModeId, string> = {
   dental: 'Permanent dentition',
   histology: 'Longitudinal section · schematic',
   cariology: 'Left mandibular first molar · sectioned',
-  genetics: 'DSPP gene · double helix · schematic',
+  genetics: 'DNA packing · sizes squeezed',
 };
+const GENETICS_STAGE: Record<GeneticsView, string> = { dna: 'DNA packing · sizes squeezed', process: 'Copy, read, make a protein · schematic', teeth: 'Lower first molars · cut lengthwise' };
 const CARIOLOGY_STAGE: Record<CariologyView, string> = { lesion: 'Left mandibular first molar · sectioned', sites: 'Permanent dentition · caries sites', process: 'Enamel and biofilm · magnified' };
 /** Seconds per lesion stage, and for the Process view's two hours, at 1×; the viewer's clock loops every 3 s. */
 const STAGE_SECONDS = 2.5;
@@ -81,7 +82,7 @@ interface Layer { id: string; label: string; color: string; count: number }
 
 function layersFor(modeId: ModeId, model: string, bySystem: boolean): Layer[] {
   if (modeId === 'histology') return TISSUES.map((t) => ({ id: t.key, label: t.name, color: t.color, count: 1 }));
-  if (modeId === 'genetics') return [{ id: MODEL_GROUP, label: 'DNA', color: GENETIC_PARTS['dna-sugar'].color, count: MODEL_PARTS.length }, { id: 'process', label: 'Processes', color: GENETIC_PARTS['tx-mrna'].color, count: GENETIC_PROCESS_PARTS.length }];
+  if (modeId === 'genetics') return [{ id: MODEL_GROUP, label: 'DNA', color: GENETIC_PARTS['dna-sugar'].color, count: MODEL_PARTS.length }, { id: 'process', label: 'Processes', color: GENETIC_PARTS['tx-mrna'].color, count: GENETIC_PROCESS_PARTS.length }, { id: 'teeth', label: 'Teeth', color: GENETIC_PARTS['gt-healthy-enamel'].color, count: GENETIC_TEETH_PARTS.length }];
   const inModel = structuresIn(model);
   const rank = (g: string) => SYSTEMS.findIndex((s) => s.id === GROUP_SYSTEM[g]);
   const order = bySystem ? [...GROUP_ORDER].sort((a, b) => rank(a) - rank(b)) : GROUP_ORDER;
@@ -197,9 +198,10 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     const left = cover.right && layers && layers.offsetParent ? layers.getBoundingClientRect().right : 0;
     const bar = root.current?.querySelector<HTMLElement>('.timeline--rich');
     const phone = matchMedia('(max-width: 860px)').matches;
-    // Genetics' step card is tall enough to count on every screen size.
-    const barCover = bar && (phone || bar.classList.contains('path-card')) ? root.current!.clientHeight - bar.offsetTop : 0;
-    viewer.current?.setInsets({ left, right: cover.right, bottom: Math.max(cover.bottom, barCover) });
+    const barCover = bar && phone ? root.current!.clientHeight - bar.offsetTop : 0;
+    // Genetics' step card stands on the left on wider screens: the view centres in the space beside it.
+    const pathLeft = bar && !phone && bar.classList.contains('path-card') ? bar.getBoundingClientRect().right : 0;
+    viewer.current?.setInsets({ left: Math.max(left, pathLeft), right: cover.right, bottom: Math.max(cover.bottom, barCover) });
   }, []);
   const setSheetInset = useCallback((cover: SheetCover) => { sheetCover.current = cover; applyInsets(); }, [applyInsets]);
   // Track the rich timeline's height: the phone sheet and the view switch sit above it.
@@ -363,7 +365,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       ...Object.entries(PROCESS_PARTS).filter(([k]) => !/pr-band-[1-4]/.test(k)).map(([k, p]) => ({ key: k, label: k === 'pr-band-0' ? 'Enamel prisms' : p.name, group: 'Caries process', color: p.colour })),
     ];
     if (modeId === 'histology') return TISSUES.map((t) => ({ key: t.key, label: t.name, group: 'Tissue', color: t.color }));
-    if (modeId === 'genetics') return [...MODEL_PARTS, ...GENETIC_PROCESS_PARTS].map((k) => ({ key: k, label: GENETIC_PARTS[k].name, group: k.startsWith('dna-') ? 'DNA' : 'Processes', color: GENETIC_PARTS[k].color }));
+    if (modeId === 'genetics') return [...MODEL_PARTS, ...GENETIC_PROCESS_PARTS, ...GENETIC_TEETH_PARTS].map((k) => ({ key: k, label: GENETIC_PARTS[k].name, group: k.startsWith('dna-') ? 'DNA' : k.startsWith('gt-') ? 'Teeth' : 'Processes', color: GENETIC_PARTS[k].color }));
     return structuresIn(modelName).map((s) => ({ key: s.key, label: labelFor(modeId, s.key, system), group: GROUPS[s.group].label, color: GROUP_COLOR[s.group] }));
   }, [modeId, modelName, system, carving, cario]);
   const onSearch = (key: string) => {
@@ -395,7 +397,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
     setView(carving ? null : 'front');
     requestAnimationFrame(() => viewer.current?.setView(carving ? CARVING_START : 'front'));
   };
-  const stageLabel = cario ? CARIOLOGY_STAGE[cariView] : carving ? `${CARVING_TOOTH.name} · idealised (Wheeler)` : inFunction ? 'Function · schematic flow' : explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
+  const stageLabel = isPath ? GENETICS_STAGE[geneView] : cario ? CARIOLOGY_STAGE[cariView] : carving ? `${CARVING_TOOTH.name} · idealised (Wheeler)` : inFunction ? 'Function · schematic flow' : explode > 0.5 ? 'Anatomical inventory' : explode > 0 ? 'Separated structures' : STAGE_LABEL[modeId];
 
   return (
     <div ref={root} className={`atlas${cariTimeline || isPath ? ' has-rich-timeline' : ''}`} data-mode={modeId}>

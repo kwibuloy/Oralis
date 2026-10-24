@@ -6,7 +6,7 @@ import { bloodColour, brainArea, DEOXYGENATED, flowFunction, FUNCTION_CONTEXT, F
 import { TISSUES } from './histology';
 import { LANDMARKS, landmarkHasNote } from './carving';
 import { LESION_MODEL, LESION_TYPES, mineralAt, PERIO_ZONES, perioGroup, plaquePH, PROCESS_PARTS, SITE_PINS, SITES, staticGroup, stageGroup, ZONES } from './cariology';
-import { CONDITIONS, DNA_LEVELS, DSPP, DSPP_PROTEIN, geneKey, MODEL_GROUP, MODEL_PARTS, nodeKey, PARTS, partner, PEDIGREES, PROCESS_MOTION, PROCESS_PARTS as GENETIC_PROCESS_PARTS, PROCESS_STEPS, toothKey, toRna, translate } from './genetics';
+import { CONDITIONS, DNA_LEVELS, DSPP, DSPP_PROTEIN, geneKey, MODEL_GROUP, MODEL_PARTS, nodeKey, PARTS, partner, PEDIGREES, PROCESS_MOTION, PROCESS_PARTS as GENETIC_PROCESS_PARTS, PROCESS_STEPS, TEETH_PARTS, TEETH_STEPS, toothKey, toRna, translate } from './genetics';
 import { MODES } from './modes';
 import { STRUCTURES, structureByKey } from './structures';
 import { fdi, morphology, palmer, parseTooth, universal } from './teeth';
@@ -291,12 +291,12 @@ describe('genetics', () => {
     expect(DSPP_PROTEIN).not.toContain('*');
   });
 
-  it('describes every tooth tissue and gene; dentinogenesis imperfecta has no pulp left', () => {
+  it('describes every tooth tissue and gene', () => {
     for (const t of ['enamel', 'dentin', 'pulp'] as const) expect(PARTS[toothKey('healthy', t)], t).toBeDefined();
     for (const c of CONDITIONS) {
       expect(PARTS[geneKey(c.gene)], c.gene).toBeDefined();
       for (const t of ['enamel', 'dentin'] as const) expect(PARTS[toothKey(c.id, t)], `${c.id} ${t}`).toBeDefined();
-      expect(Boolean(PARTS[toothKey(c.id, 'pulp')]), c.id).toBe(c.id !== 'di');
+      expect(PARTS[toothKey(c.id, 'pulp')], c.id).toBeDefined();
     }
   });
 
@@ -330,6 +330,17 @@ describe('genetics', () => {
     // Every stop frames ground to the right of the last, and its level's parts are in the model.
     DNA_LEVELS.forEach((s, i) => { if (i) expect(s.view.center[0]).toBeGreaterThan(DNA_LEVELS[i - 1].view.center[0]); });
     for (const l of DNA_LEVELS) for (const k of l.parts.filter((p) => !p.endsWith('-groove'))) expect(MODEL_PARTS, k).toContain(k);
+  });
+
+  it('places every tooth part and gene stop in the model, each gene stop with its real first coding letters', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/genetics.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    const keys = new Set<string>(json.nodes.map((n: { name: string }) => nodeKey(n.name)));
+    for (const k of TEETH_PARTS) expect(keys.has(k), k).toBe(true);
+    expect(TEETH_STEPS).toHaveLength(CONDITIONS.length);
+    // The fetched letters translate into each gene's real first amino acids (RefSeq, MANE Select).
+    for (const [gene, g] of Object.entries(DSPP.teethGenes)) expect(translate(toRna(g.codingStart)), gene).toBe(g.proteinStart);
+    for (const s of TEETH_STEPS) expect(s.pattern).toMatch(/^A[DR]$/);
   });
 
   it('has every processes part in the model, and a shape key for every motion track', () => {

@@ -238,7 +238,7 @@ export const PROCESS_PARTS = Object.keys(PARTS).filter((k) => /^(rep|tx|tl)-/.te
 // ---------- Teeth view: one stop per gene ----------
 
 export type Pattern = 'AD' | 'AR';
-export type ToothTissue = 'enamel' | 'dentin' | 'pulp';
+export type ToothTissue = 'enamel' | 'dentin' | 'cementum' | 'pulp';
 
 export interface Condition {
   id: 'ai-hypoplastic' | 'ai-hypomaturation' | 'ai-hypocalcified' | 'di';
@@ -260,7 +260,7 @@ export const CONDITIONS: Condition[] = [
   {
     id: 'ai-hypoplastic', name: 'Amelogenesis imperfecta, hypoplastic', short: 'AI hypoplastic', gene: 'ENAM', band: '4q13.3', pattern: 'AD', color: '#4dabf7',
     geneNote: 'Enamelin, a protein of the forming enamel matrix that lets enamel crystals grow long enough to reach full thickness.',
-    inheritance: 'Autosomal dominant here (ENAM). Other genes give recessive forms, and AMELX on the X chromosome an X-linked form.',
+    inheritance: 'Usually autosomal dominant with ENAM (it can also act recessively); other genes give recessive forms, and AMELX on the X chromosome an X-linked form.',
     shows: 'The enamel is too thin (from pits and grooves to thin all over) but of normal hardness; where it is thin all over, crowns look small with gaps between them. On a radiograph the enamel still shows up brighter than the dentin.',
     tissue: { enamel: 'Thin enamel of normal hardness, sometimes pitted or grooved.', dentin: 'Normal dentin; its yellow colour shows through the thin enamel.', pulp: 'Normal pulp: this form affects only the enamel.' },
   },
@@ -269,7 +269,7 @@ export const CONDITIONS: Condition[] = [
     geneNote: 'Matrix metallopeptidase 20 (enamelysin), an enzyme that cuts the enamel matrix proteins while enamel is being laid down; KLK4 later clears them so mineral can replace them.',
     inheritance: 'Autosomal recessive here (MMP20; also KLK4 on chromosome 19). AMELX on the X chromosome gives an X-linked form.',
     shows: 'The enamel is of normal thickness but softer than normal, mottled white to yellow-brown, and chips off the cusps. On a radiograph it is about as bright as the dentin.',
-    tissue: { enamel: 'Normal thickness but too little mineral: mottled, soft and chipping. A probe tip can dent it under firm pressure.', dentin: 'Normal dentin: this form affects only the enamel.', pulp: 'Normal pulp: this form affects only the enamel.' },
+    tissue: { enamel: 'Normal thickness but too little mineral: mottled chalky white to yellow-brown, soft and chipping. A probe tip can dent it under firm pressure.', dentin: 'Normal dentin: this form affects only the enamel.', pulp: 'Normal pulp: this form affects only the enamel.' },
   },
   {
     id: 'ai-hypocalcified', name: 'Amelogenesis imperfecta, hypocalcified', short: 'AI hypocalcified', gene: 'FAM83H', band: '8q24.3', pattern: 'AD', color: '#20c997',
@@ -281,30 +281,34 @@ export const CONDITIONS: Condition[] = [
   {
     id: 'di', name: 'Dentinogenesis imperfecta', short: 'Dentinogenesis imperfecta', gene: 'DSPP', band: dspp.map, pattern: 'AD', color: '#f76707',
     geneNote: 'Dentin sialophosphoprotein, the gene drawn on the DNA and Processes paths. Its protein is cut into dentin sialoprotein and dentin phosphoprotein, which guide dentin mineralisation.',
-    inheritance: 'Autosomal dominant (DSPP; type II, and the rarer type III). Type I is the same tooth picture in osteogenesis imperfecta (brittle bones), from type I collagen genes (COL1A1, COL1A2).',
+    inheritance: 'Autosomal dominant (DSPP; type II, and the rarer type III; a newer classification also groups DSPP dentin dysplasia type II with them). Type I is the same tooth picture in osteogenesis imperfecta (brittle bones), from type I collagen genes (COL1A1, COL1A2).',
     shows: 'Amber to grey-blue, see-through (opalescent) teeth. Crowns are bulb-shaped with a narrow neck, roots are short and thin, and the pulp spaces fill in. The enamel is normal but breaks away, thought to be because the junction with the dentin lacks its scalloping. (This is type II; in type III, “shell teeth”, the dentin is thin and the pulps are large.)',
-    tissue: { enamel: 'Normal enamel that chips away from the soft dentin, here lost from the biting surface.', dentin: 'Amber, poorly mineralised, opalescent dentin that wears quickly.' },
+    tissue: { enamel: 'Normal enamel that chips away from the soft dentin, here lost from the biting surface.', dentin: 'Amber, poorly mineralised, opalescent dentin that wears quickly. It fills the pulp chamber and canals over the years, often completely.', pulp: 'A thin remnant of the pulp chamber; the canals have already filled in.', cementum: 'Normal cementum, on roots that are short and thin.' },
   },
 ];
 export const HEALTHY_TISSUE: Record<ToothTissue, string> = {
   enamel: 'Healthy enamel: thickest over the cusps (about 2.5 mm on a molar), thinning to nothing at the neck.',
   dentin: 'Healthy dentin with a scalloped junction to the enamel.',
-  pulp: 'Healthy pulp: a chamber with horns under the cusps, and a canal in each root.',
+  cementum: 'Healthy cementum: a thin layer over the roots, where the periodontal ligament fibres attach.',
+  pulp: 'Healthy pulp: a chamber with horns under the cusps, and canals in the roots. The mesial root has two canals, buccal and lingual, on either side of this cut; they meet near the root tip, which is why only its tip shows.',
 };
 export const TEETH_NOTE = 'The genes are lined up on one ladder only to study them: ENAM and DSPP lie on chromosome 4, MMP20 on 11, FAM83H on 8. The teeth are lower first molars cut in half lengthwise, beside a healthy one.';
 
-const TISSUE_COLOR: Record<ToothTissue, string> = { enamel: '#f4efe4', dentin: '#e7cf9a', pulp: '#c8594f' };
+const TISSUE_COLOR: Record<ToothTissue, string> = { enamel: '#f4efe4', dentin: '#e7cf9a', cementum: '#dcc69a', pulp: '#c8594f' };
 const CONDITION_COLOR: Partial<Record<string, string>> = { 'ai-hypoplastic-enamel': '#efe4c4', 'ai-hypomaturation-enamel': '#ead9b4', 'ai-hypocalcified-enamel': '#c99a5b', 'di-enamel': '#ddd6c4', 'di-dentin': '#b07a3f' };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 export const toothKey = (id: string, tissue: ToothTissue) => `gt-${id}-${tissue}`;
 export const geneKey = (gene: string) => `gt-gene-${gene.toLowerCase()}`;
-for (const t of ['enamel', 'dentin', 'pulp'] as ToothTissue[]) {
+export const TOOTH_TISSUES: ToothTissue[] = ['enamel', 'dentin', 'cementum', 'pulp'];
+for (const t of TOOTH_TISSUES) {
   PARTS[toothKey('healthy', t)] = { name: `${cap(t)} · healthy`, color: TISSUE_COLOR[t], note: HEALTHY_TISSUE[t] };
   for (const c of CONDITIONS) {
-    const note = c.tissue[t];
+    // Amelogenesis imperfecta leaves the cementum as it is.
+    const note = c.tissue[t] ?? (t === 'cementum' && c.id.startsWith('ai-') ? 'Normal cementum: this form affects only the enamel.' : undefined);
     if (note) PARTS[toothKey(c.id, t)] = { name: `${cap(t)} · ${c.short}`, color: CONDITION_COLOR[`${c.id}-${t}`] ?? TISSUE_COLOR[t], note };
   }
 }
+PARTS['gt-between'] = { name: 'Other DNA', color: '#c3c9d4', note: 'The rest of the DNA, shown plain. The four genes are lined up on one ladder only to study them: ENAM and DSPP lie on chromosome 4, MMP20 on 11, FAM83H on 8.' };
 for (const c of CONDITIONS) PARTS[geneKey(c.gene)] = { name: `${c.gene} gene (${c.band})`, color: c.color, note: `${c.geneNote} Faults in it cause ${c.name.toLowerCase()}. ${c.inheritance}` };
 
 // ---------- family trees ----------
@@ -329,8 +333,9 @@ export const PEDIGREES: Record<Pattern, Pedigree> = {
     people: [
       { sex: 'M', status: 'c', generation: 1 }, { sex: 'F', status: 'c', generation: 1 },
       { sex: 'M', status: '', generation: 2 }, // married in, not a carrier
-      { sex: 'F', status: 'a', generation: 2, parents: [0, 1] }, { sex: 'M', status: 'c', generation: 2, parents: [0, 1] },
-      { sex: 'M', status: '', generation: 2, parents: [0, 1] }, { sex: 'F', status: 'c', generation: 2, parents: [0, 1] },
+      // Unaffected brothers and sisters are drawn plain: untested, each has a 2 in 3 chance of being a carrier.
+      { sex: 'F', status: 'a', generation: 2, parents: [0, 1] }, { sex: 'M', status: '', generation: 2, parents: [0, 1] },
+      { sex: 'M', status: '', generation: 2, parents: [0, 1] }, { sex: 'F', status: '', generation: 2, parents: [0, 1] },
       { sex: 'M', status: 'c', generation: 3, parents: [2, 3] }, { sex: 'F', status: 'c', generation: 3, parents: [2, 3] },
     ],
   },
@@ -338,14 +343,29 @@ export const PEDIGREES: Record<Pattern, Pedigree> = {
 
 export const partByKey = (key: string) => PARTS[key];
 
+// ---------- Teeth path ----------
+
+/** The Teeth path lies below the processes path: a ladder with a stop at each gene (x), the affected tooth left of it, a healthy one right. */
+export const TEETH_Y = 2 * PROCESS_Y;
+const GENE_X: Record<string, number> = { ENAM: 0, MMP20: 90, FAM83H: 180, DSPP: 270 };
+const PATTERN_WORDS: Record<Pattern, string> = { AD: 'autosomal dominant', AR: 'autosomal recessive' };
+export const TEETH_STEPS: PathStep[] = CONDITIONS.map((c) => ({
+  title: c.name,
+  size: `${c.gene} gene · ${c.band} · usually ${PATTERN_WORDS[c.pattern]}`,
+  text: `${c.shows} Left, the affected tooth; right, a healthy one.`,
+  view: { center: [GENE_X[c.gene], TEETH_Y + 11, 0], width: 44, height: 30 },
+  pattern: c.pattern,
+}));
+export const TEETH_PARTS = [...TOOTH_TISSUES.map((t) => toothKey('healthy', t)), ...CONDITIONS.flatMap((c) => TOOTH_TISSUES.map((t) => toothKey(c.id, t)).filter((k) => PARTS[k])), ...CONDITIONS.map((c) => geneKey(c.gene)), 'gt-between'];
+
 // ---------- the model ----------
 
 /** Parts in public/models/genetics.glb (built by scripts/blender/build_genetics.py), all in one group. The grooves are spaces, not parts. */
 export const MODEL_PARTS = DNA_LEVELS.flatMap((l) => l.parts).filter((k) => !k.endsWith('-groove'));
 export const MODEL_GROUP = 'dna';
 
-/** A stop on a path: its card text and what the camera frames. */
-export interface PathStep { title: string; text: string; size?: string; view: PathView }
+/** A stop on a path: its card text, what the camera frames, and a family tree to show with it (Teeth). */
+export interface PathStep { title: string; text: string; size?: string; view: PathView; pattern?: Pattern }
 /** One path the student travels: its stops, the shape-key motion along it, the group it shows, and the card's eyebrow per stop. */
 export interface GeneticsPath { id: GeneticsView; group: string; steps: PathStep[]; motion: Record<string, Track>; eyebrow: (i: number) => string; note: string }
 export const PATHS: Partial<Record<GeneticsView, GeneticsPath>> = {
@@ -357,7 +377,9 @@ export const PATHS: Partial<Record<GeneticsView, GeneticsPath>> = {
       return `${SECTIONS[section]} · ${inSection.indexOf(PROCESS_STEPS[i]) + 1} of ${inSection.length}`;
     },
   },
+  teeth: { id: 'teeth', group: 'teeth', steps: TEETH_STEPS, motion: {}, eyebrow: (i) => `Inherited tooth conditions · ${i + 1} of ${TEETH_STEPS.length}`, note: TEETH_NOTE },
 };
-/** The group a model node belongs to: process nodes start rep-/tx-/tl- or carry a `~` suffix (a second copy of a part). */
+/** A model node's part key: nodes are keys, or `key~piece` where a part appears more than once. */
 export const nodeKey = (node: string) => node.split('~')[0];
-export const nodeGroup = (node: string) => (node.includes('~') || /^(rep|tx|tl)-/.test(node) ? 'process' : MODEL_GROUP);
+/** Its view: teeth nodes start gt- or end ~teeth; processes nodes start rep-/tx-/tl- or carry another `~` piece. */
+export const nodeGroup = (node: string) => (node.startsWith('gt-') || node.endsWith('~teeth') ? 'teeth' : node.includes('~') || /^(rep|tx|tl)-/.test(node) ? 'process' : MODEL_GROUP);

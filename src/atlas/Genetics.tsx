@@ -1,6 +1,6 @@
 import { gsap } from 'gsap';
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import type { GeneticsPath as Path, GeneticsView } from '../content/genetics';
+import { PEDIGREES, type GeneticsPath as Path, type GeneticsView, type Pattern } from '../content/genetics';
 import type { Viewer } from '../viewer/Viewer';
 import { Segmented } from './controls';
 
@@ -25,6 +25,9 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
   // The gesture hint goes once the student has swiped: on phones the card then takes less of the screen.
   const [travelled, setTravelled] = useState(false);
   const go = useRef<(t: number, animate: boolean) => void>(() => {});
+  const card = useRef<HTMLElement>(null);
+  // Each stop's card opens at its title (on phones the card scrolls).
+  useEffect(() => { card.current?.scrollTo?.({ top: 0 }); }, [step, path]);
 
   useEffect(() => {
     const v = viewer.current;
@@ -83,7 +86,7 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
 
   const s = steps[Math.min(step, last)];
   return (
-    <section className="card timeline timeline--rich path-card" aria-label={`Genetics: ${path.id}`}>
+    <section ref={card} className="card timeline timeline--rich path-card" aria-label={`Genetics: ${path.id}`}>
       <div className="path-card__views">
         <Segmented label="Genetics view" value={path.id} onChange={onView} options={views} />
       </div>
@@ -91,6 +94,7 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
       <h2 className="path-card__title">{s.title}</h2>
       {s.size && <p className="path-card__size">{s.size}</p>}
       <p className="path-card__text">{s.text}</p>
+      {s.pattern && <FamilyTree pattern={s.pattern} />}
       <div className="path-card__dots">
         {steps.map((x, i) => (
           <button key={x.title} aria-label={`Go to ${x.title}`} aria-current={i === step ? 'step' : undefined} onClick={() => go.current(i, true)}><i /></button>
@@ -99,5 +103,47 @@ export function GeneticsPath({ viewer, ready, path, views, onView }: {
       {!travelled && <p className="path-card__hint">Swipe sideways to travel · up or down to turn · pinch to zoom · tap a part</p>}
       <p className="path-card__note">{path.note}</p>
     </section>
+  );
+}
+
+/** Where each person of a three-generation tree sits (PEDIGREES share this shape): x, y in the drawing. */
+const SPOTS: [number, number][] = [[107, 18], [157, 18], [37, 70], [77, 70], [127, 70], [177, 70], [227, 70], [37, 120], [67, 120], [97, 120]];
+const R = 7;
+
+/** A small family tree: square male, circle female, filled affected, dot carrier; generations I–III. */
+function FamilyTree({ pattern }: { pattern: Pattern }) {
+  const { people, note } = PEDIGREES[pattern];
+  const couples = [...new Set(people.filter((p) => p.parents).map((p) => p.parents!.join()))].map((k) => k.split(',').map(Number) as [number, number]);
+  return (
+    <figure className="path-card__tree">
+      <svg viewBox="0 0 250 132" role="img" aria-label={`Example family tree: ${pattern === 'AD' ? 'autosomal dominant' : 'autosomal recessive'}`}>
+        <g stroke="var(--ink-2)" strokeWidth="1.4" fill="none">
+          {couples.map(([a, b]) => {
+            const kids = people.map((p, i) => [p, i] as const).filter(([p]) => p.parents?.join() === `${a},${b}`).map(([, i]) => i);
+            const [ax, ay] = SPOTS[a], [bx] = SPOTS[b], mx = (ax + bx) / 2, sy = (ay + SPOTS[kids[0]][1]) / 2;
+            const xs = kids.map((k) => SPOTS[k][0]);
+            return (
+              <g key={`${a}-${b}`}>
+                <line x1={ax} y1={ay} x2={bx} y2={ay} />
+                <line x1={mx} y1={ay} x2={mx} y2={sy} />
+                <line x1={Math.min(mx, ...xs)} y1={sy} x2={Math.max(mx, ...xs)} y2={sy} />
+                {kids.map((k) => <line key={k} x1={SPOTS[k][0]} y1={sy} x2={SPOTS[k][0]} y2={SPOTS[k][1] - R} />)}
+              </g>
+            );
+          })}
+          {people.map((p, i) => {
+            const [x, y] = SPOTS[i], fill = p.status === 'a' ? 'var(--ink-2)' : 'var(--card)';
+            return (
+              <g key={i}>
+                {p.sex === 'M' ? <rect x={x - R} y={y - R} width={2 * R} height={2 * R} fill={fill} /> : <circle cx={x} cy={y} r={R} fill={fill} />}
+                {p.status === 'c' && <circle cx={x} cy={y} r={2.4} fill="var(--ink-2)" stroke="none" />}
+              </g>
+            );
+          })}
+        </g>
+        {['I', 'II', 'III'].map((g, i) => <text key={g} x="0" y={22 + i * 51} fill="var(--muted)" fontSize="10" fontWeight="600">{g}</text>)}
+      </svg>
+      <figcaption>{note}</figcaption>
+    </figure>
   );
 }

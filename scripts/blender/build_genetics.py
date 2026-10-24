@@ -665,6 +665,59 @@ for o in objs.values():
     if o.basis is not None:
         o.basis = [(v[0], v[1] + PROCESS_Y, v[2]) for v in o.basis]
 
+# =====================================================================================
+# The Teeth path (stops in genetics.ts: TEETH_STEPS), PROCESS_Y further down again. A ladder with a
+# stop at each tooth gene: the gene's real first 60 coding bases, its backbone in the gene's colour,
+# grey ladder between (the genes really lie on different chromosomes). The teeth come from
+# models-src/genetics-teeth.glb (build_genetics_teeth.py) and are placed when the file is written:
+# the affected tooth to the left of its gene, a healthy one to the right.
+# =====================================================================================
+TEETH_Y = 2 * PROCESS_Y
+GENE_X = {"ENAM": 0.0, "MMP20": 90.0, "FAM83H": 180.0, "DSPP": 270.0}
+GENE_CONDITION = {"ENAM": "ai-hypoplastic", "MMP20": "ai-hypomaturation", "FAM83H": "ai-hypocalcified", "DSPP": "di"}
+TOOTH_SIDE, TOOTH_CEJ_Y = 8.5, 17.0
+TEETH_GLB = os.path.join("models-src", "genetics-teeth.glb")
+teeth = {}
+
+
+def tobj(key):
+    node = f"{key}~teeth"
+    if node not in teeth:
+        teeth[node] = Obj(node, key)
+    return teeth[node]
+
+
+def ladder(x0, x1, seq=None, backbone_key="gt-between"):
+    """A stretch of ladder: real letters when `seq` is given, plain grey otherwise."""
+    for s in (0, 1):
+        tobj(backbone_key).tube([backbone(x, s) for x in frange(x0, x1, 0.08)], BACKBONE_R)
+    i = 0
+    x = x0 + RISE / 2
+    while x < x1:
+        p0, p1 = backbone(x, 0), backbone(x, 1)
+        mid = mul(add(p0, p1), 0.5)
+        b = seq[i] if seq else None
+        for p, bb in ((p0, b), (p1, PAIR[b] if b else None)):
+            tobj(BASE_KEY[bb] if bb else "gt-between").tube([p, sub(mid, mul(norm(sub(mid, p)), HBOND_GAP / 2))], RUNG_R, sides=8)
+            tobj("dna-phosphate" if seq else "gt-between").sphere(p, PHOSPHATE_R, rings=8, segments=12)
+        if seq:
+            inward = norm(sub(mid, p0))
+            tobj("dna-hbond").tube([sub(mid, mul(inward, HBOND_GAP / 2 + 0.02)), add(mid, mul(inward, HBOND_GAP / 2 + 0.02))], HBOND_R, sides=6)
+        x += RISE
+        i += 1
+
+
+x_prev = -30.0
+for gene, gx in GENE_X.items():
+    seq = DSPP["teethGenes"][gene]["codingStart"]
+    half = len(seq) * RISE / 2
+    ladder(x_prev, gx - half)
+    ladder(gx - half, gx + half, seq, f"gt-gene-{gene.lower()}")
+    x_prev = gx + half
+ladder(x_prev, 300.0)
+for o in teeth.values():
+    o.verts = [(v[0], v[1] + TEETH_Y, v[2]) for v in o.verts]
+
 # ---------- write Blender objects ----------
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -690,6 +743,7 @@ PROCESS_COLOURS = {
     "tx-coding-strand": "#adb5bd", "tx-mrna": "#f783ac", "tx-intron": "#adb5bd", "tx-cap": "#5f3dc4", "tx-poly-a": "#ffa94d",
     "tl-small-subunit": "#ffd43b", "tl-large-subunit": "#fab005", "tl-trna": "#da77f2", "tl-start-codon": "#2f9e44",
     "tl-stop-codon": "#e03131", "tl-release-factor": "#ff8787", "tl-polypeptide": "#4dabf7", "rna-base-u": "#e03131",
+    "gt-between": "#c3c9d4", "gt-gene-enam": "#4dabf7", "gt-gene-mmp20": "#9775fa", "gt-gene-fam83h": "#20c997", "gt-gene-dspp": "#f76707",
 }
 
 
@@ -717,11 +771,32 @@ for key, part in parts.items():
 for node, o in objs.items():
     total += write(node, o.key, o.verts, o.faces, o.keys, o.basis)
     print(f"{node}: {len(o.verts)} vertices, keys: {', '.join(o.keys) or '-'}")
+for node, o in teeth.items():
+    total += write(node, o.key, o.verts, o.faces)
+
+# The molars: each condition beside its gene, and a copy of the healthy molar (sharing its mesh) beside each.
+before = set(bpy.data.objects)
+bpy.ops.import_scene.gltf(filepath=os.path.abspath(TEETH_GLB))
+molars = [o for o in bpy.data.objects if o not in before and o.type == "MESH"]
+for gene, gx in GENE_X.items():
+    for o in molars:
+        if o.name.startswith(f"gt-{GENE_CONDITION[gene]}-"):
+            o.location = (gx - TOOTH_SIDE, 0, TEETH_Y + TOOTH_CEJ_Y)
+        elif o.name.startswith("gt-healthy-"):
+            copy = o.copy()  # linked: the same mesh
+            copy.name = f"{o.name}~{gene.lower()}"
+            copy.location = (gx + TOOTH_SIDE, 0, TEETH_Y + TOOTH_CEJ_Y)
+            scene.collection.objects.link(copy)
+for o in molars:
+    if o.name.startswith("gt-healthy-"):
+        bpy.data.objects.remove(o)
+    else:
+        total += len(o.data.polygons)
 
 os.makedirs(os.path.dirname(GLB_OUT) or ".", exist_ok=True)
 # Shape keys go out as morph targets; the app recomputes their normals.
 bpy.ops.export_scene.gltf(filepath=GLB_OUT, export_format="GLB", export_apply=False, export_yup=True, export_morph=True,
-                          export_morph_normal=False, export_draco_mesh_compression_enable=DRACO)
+                          export_morph_normal=False, export_vertex_color="ACTIVE", export_draco_mesh_compression_enable=DRACO)
 if BLEND_OUT:
     os.makedirs(os.path.dirname(BLEND_OUT) or ".", exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(BLEND_OUT), compress=True)
