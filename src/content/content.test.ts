@@ -6,6 +6,7 @@ import { bloodColour, brainArea, DEOXYGENATED, flowFunction, FUNCTION_CONTEXT, F
 import { TISSUES } from './histology';
 import { LANDMARKS, landmarkHasNote } from './carving';
 import { LESION_MODEL, LESION_TYPES, mineralAt, PERIO_ZONES, perioGroup, plaquePH, PROCESS_PARTS, SITE_PINS, SITES, staticGroup, stageGroup, ZONES } from './cariology';
+import { CONDITIONS, DNA_LEVELS, DSPP, DSPP_PROTEIN, geneKey, MODEL_GROUP, MODEL_PARTS, nodeKey, PARTS, partner, PEDIGREES, PROCESS_MOTION, PROCESS_PARTS as GENETIC_PROCESS_PARTS, PROCESS_STEPS, TEETH_PARTS, TEETH_STEPS, toothKey, toRna, translate } from './genetics';
 import { MODES } from './modes';
 import { STRUCTURES, structureByKey } from './structures';
 import { fdi, morphology, palmer, parseTooth, universal } from './teeth';
@@ -64,10 +65,11 @@ describe('content coverage', () => {
   it('labels every group used by the model and by the modes', () => {
     for (const s of STRUCTURES) expect(GROUPS[s.group], s.group).toBeDefined();
     const tissueKeys = new Set(TISSUES.map((t) => t.key));
-    // Cariology's groups are its authored lesion parts (checked in its own tests below).
+    // Cariology's groups are its authored lesion parts (checked in its own tests below); Genetics has one group.
     for (const m of MODES.filter((x) => x.id !== 'cariology')) {
       for (const g of [...m.defaultVisible, ...(m.context ?? [])]) {
-        expect(m.source === 'blender' ? tissueKeys.has(g) : g in GROUPS, `${m.id}: ${g}`).toBe(true);
+        const known = m.id === 'genetics' ? g === MODEL_GROUP : m.source === 'blender' ? tissueKeys.has(g) : g in GROUPS;
+        expect(known, `${m.id}: ${g}`).toBe(true);
       }
     }
   });
@@ -83,7 +85,7 @@ describe('mode models', () => {
 
   it.each(MODES.map((m) => [m.id, m] as const))('%s model contains everything its content expects', (_, m) => {
     const names = glbNodeNames(m.model.replace('/models/', ''));
-    const expected = m.source === 'blender'
+    const expected = m.id === 'genetics' ? MODEL_PARTS : m.source === 'blender'
       ? TISSUES.map((t) => t.key)
       : STRUCTURES.filter((s) => s.models.includes(m.id)).flatMap((s) => s.meshIds);
     expect(expected.length).toBeGreaterThan(0);
@@ -255,6 +257,123 @@ describe('cariology', () => {
     // Frequent sugar keeps the pH down and costs more mineral than one intake.
     expect(mineralAt(120, 'frequent')).toBeLessThan(mineralAt(120, 'single'));
     expect(mineralAt(120, 'single')).toBeGreaterThan(0.97);
+  });
+});
+
+describe('genetics', () => {
+  it('gives every part a name, a colour and a note, and every step only known parts', () => {
+    for (const [k, p] of Object.entries(PARTS)) {
+      expect(p.note.length, k).toBeGreaterThan(30);
+      expect(p.color, k).toMatch(/^#[0-9a-f]{6}$/);
+    }
+    for (const s of [...DNA_LEVELS, ...PROCESS_STEPS]) for (const k of s.parts) expect(PARTS[k], `${s.title} ${k}`).toBeDefined();
+    expect(DNA_LEVELS).toHaveLength(5);
+  });
+
+  it('uses the real DSPP stretch: start codon, whole codons, an intron from GT to AG', () => {
+    expect(DSPP.exon2Coding.startsWith('ATG')).toBe(true);
+    expect(DSPP.exon2Coding.length % 3).toBe(0);
+    expect(DSPP.intronStart.startsWith('GT')).toBe(true);
+    expect(DSPP.intronEnd.endsWith('AG')).toBe(true);
+    expect(DSPP.ladder).toMatch(/^[ATGC]+$/);
+  });
+
+  it('pairs A with T and G with C, and copies DNA into RNA with U', () => {
+    expect(partner('ATGC')).toBe('TACG');
+    expect(partner(partner(DSPP.ladder))).toBe(DSPP.ladder);
+    expect(toRna('ATGT')).toBe('AUGU');
+    expect(translate('AUGUAAUAGUGA')).toBe('M***');
+  });
+
+  it('translates the spliced RNA into the start of the real DSPP protein (NP_055023)', () => {
+    expect(DSPP_PROTEIN).toBe(DSPP.proteinStart);
+    expect(DSPP_PROTEIN.startsWith('M')).toBe(true);
+    expect(DSPP_PROTEIN).not.toContain('*');
+  });
+
+  it('describes every tooth tissue and gene', () => {
+    for (const c of CONDITIONS) {
+      expect(PARTS[geneKey(c.gene)], c.gene).toBeDefined();
+      for (const t of ['enamel', 'dentin'] as const) expect(PARTS[toothKey(c.id, t)], `${c.id} ${t}`).toBeDefined();
+      expect(PARTS[toothKey(c.id, 'pulp')], c.id).toBeDefined();
+    }
+  });
+
+  it('draws family trees that fit their pattern', () => {
+    const ad = PEDIGREES.AD.people;
+    for (const p of ad) if (p.status === 'a' && p.parents) expect(p.parents.some((i) => ad[i].status === 'a')).toBe(true);
+    expect(ad.some((p) => p.status === 'c')).toBe(false);
+    expect(ad.filter((p) => p.status === 'a').map((p) => p.generation)).toEqual(expect.arrayContaining([1, 2, 3]));
+    const ar = PEDIGREES.AR.people;
+    for (const p of ar) {
+      if (!p.parents) continue;
+      const [m, f] = p.parents.map((i) => ar[i].status);
+      // An affected child needs a changed copy from both parents; a child of an affected parent carries at least one.
+      if (p.status === 'a') expect(m !== '' && f !== '').toBe(true);
+      if (m === 'a' || f === 'a') expect(p.status).not.toBe('');
+      if (m === '' && f === '') expect(p.status).toBe('');
+    }
+    expect(ar.some((p) => p.status === 'a' && p.parents?.every((i) => ar[i].status === 'c'))).toBe(true);
+  });
+
+  it('builds the double helix from the real sequence, and every level of the DNA path', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/genetics.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    for (const k of MODEL_PARTS) expect(PARTS[k], k).toBeDefined();
+    // Each base pair is two half rungs, one per letter (18 vertices each): an A–T pair puts one half in
+    // each of the A and T parts, so each holds one half per A–T pair of the sequence; likewise G and C.
+    const vertices = (k: string) => json.accessors[json.meshes.find((m: { name: string }) => m.name === k).primitives[0].attributes.POSITION].count;
+    const count = (bases: string) => [...DSPP.ladder].filter((b) => bases.includes(b)).length;
+    for (const k of ['dna-base-a', 'dna-base-t']) expect(vertices(k), k).toBe(count('AT') * 18);
+    for (const k of ['dna-base-g', 'dna-base-c']) expect(vertices(k), k).toBe(count('GC') * 18);
+    // Every stop frames ground to the right of the last, and its level's parts are in the model.
+    DNA_LEVELS.forEach((s, i) => { if (i) expect(s.view.center[0]).toBeGreaterThan(DNA_LEVELS[i - 1].view.center[0]); });
+    for (const l of DNA_LEVELS) for (const k of l.parts.filter((p) => !p.endsWith('-groove'))) expect(MODEL_PARTS, k).toContain(k);
+  });
+
+  it('places every tooth part and gene stop in the model, each gene stop with its real first coding letters', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/genetics.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    const keys = new Set<string>(json.nodes.map((n: { name: string }) => nodeKey(n.name)));
+    for (const k of TEETH_PARTS) expect(keys.has(k), k).toBe(true);
+    expect(TEETH_STEPS).toHaveLength(CONDITIONS.length);
+    // The fetched letters translate into each gene's real first amino acids (RefSeq, MANE Select).
+    for (const [gene, g] of Object.entries(DSPP.teethGenes)) expect(translate(toRna(g.codingStart)), gene).toBe(g.proteinStart);
+    for (const s of TEETH_STEPS) expect(s.pattern).toMatch(/^A[DR]$/);
+    // Hard tissues carry what the app needs for their finish: the cut-face marker and the rod/tubule directions and depths.
+    const teethMeshes = json.meshes.filter((m: { name: string }) => /^gt-.+-(enamel|dentin|cementum)/.test(m.name));
+    expect(teethMeshes.length).toBeGreaterThan(0);
+    for (const m of teethMeshes) for (const a of ['_CUT', '_DIR', '_DEPTH']) expect(Object.keys(m.primitives[0].attributes), `${m.name} ${a}`).toContain(a);
+  });
+
+  it('has every processes part in the model, and a shape key for every motion track', () => {
+    const buf = readFileSync(resolve(__dirname, '../../public/models/genetics.glb'));
+    const json = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8'));
+    const keys = new Set<string>(json.nodes.map((n: { name: string }) => nodeKey(n.name)));
+    for (const k of keys) expect(PARTS[k], k).toBeDefined();
+    for (const k of GENETIC_PROCESS_PARTS) expect(keys.has(k), k).toBe(true);
+    const targets = new Set<string>(json.meshes.flatMap((m: { extras?: { targetNames?: string[] } }) => m.extras?.targetNames ?? []));
+    for (const name of Object.keys(PROCESS_MOTION)) expect(targets.has(name), name).toBe(true);
+    for (const t of targets) expect(PROCESS_MOTION[t], t).toBeDefined();
+    // Tracks run forward in time within the path's stops.
+    for (const [name, track] of Object.entries(PROCESS_MOTION)) {
+      track.forEach(([t], i) => { if (i) expect(t, name).toBeGreaterThan(track[i - 1][0]); });
+      expect(track[track.length - 1][0], name).toBeLessThanOrEqual(PROCESS_STEPS.length - 1);
+    }
+  });
+});
+
+describe('styles', () => {
+  // A stray brace in one stylesheet is harmless in dev (each file is separate) but in the production
+  // bundle it swallows the next file's first rule: once it dropped base.css's :root tokens, unstyling the app.
+  it.each(['../styles/base.css', '../atlas/atlas.css'])('%s has balanced braces', (file) => {
+    const css = readFileSync(resolve(__dirname, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    let depth = 0;
+    for (const ch of css) {
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; expect(depth, 'closing brace with nothing open').toBeGreaterThanOrEqual(0); }
+    }
+    expect(depth).toBe(0);
   });
 });
 

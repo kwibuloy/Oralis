@@ -29,8 +29,14 @@ export interface SurfaceStyle {
   roughness?: number;
   /** A glossy layer on top (enamel). */
   clearcoat?: number;
-  /** Cut faces drawn flat in the part's colour: no streaks, bands, grain, stain or relief there. */
+  /** Cut faces drawn flat in the part's colour: no grain, stain or relief there (streaks and bands, which are cut-only, still show). */
   flatCut?: boolean;
+  /** Natural surface only: tinted towards this colour near the part's local y = 0 (a tooth's neck), fading out by neckHeight. */
+  neck?: string;
+  neckAmount?: number;
+  neckHeight?: number;
+  /** Natural surface only: lighter and cooler at grazing angles, as translucent enamel looks at its edges. */
+  rim?: number;
   /**
    * Cut faces take the colour of the zone palette at the vertex attribute _zone (the part's own zone),
    * so one palette switches every cut face between study and natural colours.
@@ -71,6 +77,7 @@ const f = (v: number) => v.toFixed(5);
  */
 export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle, zones?: { value: THREE.Color[] }, cutTint?: { value: THREE.Vector4 }) {
   const stain = new THREE.Color(s.stain ?? '#000');
+  const neck = new THREE.Color(s.neck ?? '#000');
   const cutZone = !!(s.cutZone && zones);
   material.onBeforeCompile = (shader) => {
     if (cutZone) {
@@ -95,6 +102,7 @@ export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle
         float srfGrainK = ${f(s.grain ?? 0)} * srfFade(${f(s.grainSize ?? 0.4)}, srfPx) * (srfGrain - 0.5);
         float srfH = srfGrainK * ${f((s.grainSize ?? 0.4) * 0.15)};
         float srfShade = srfGrainK;
+        float srfDetail = 0.0; // cut-face patterns (streaks, bands)
         ${s.streaks ? `{
           // Streaks: noise that does not change along the direction, so it draws lines along it.
           vec3 d = length(vSrfDir) > 0.5 ? normalize(vSrfDir) : vec3(0.0, 1.0, 0.0);
@@ -102,22 +110,24 @@ export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle
           float st = srfNoise(q / ${f(s.streakSize ?? 0.05)}) * 0.7 + srfNoise(q / ${f((s.streakSize ?? 0.05) * 0.45)}) * 0.3;
           float k = ${f(s.streaks)} * srfCut * (length(vSrfDir) > 0.5 ? 1.0 : 0.0) * srfFade(${f(s.streakSize ?? 0.05)}, srfPx);
           srfH += k * (st - 0.5) * ${f((s.streakSize ?? 0.05) * 0.1)};
-          srfShade += k * (st - 0.5);
+          srfDetail += k * (st - 0.5);
         }` : ''}
         ${s.bands ? `{
           float b = pow(0.5 + 0.5 * cos(6.2831853 * vSrfDepth / ${f(s.bandSpacing ?? 0.3)} + srfGrain * 2.0), 10.0);
-          srfShade -= ${f(s.bands)} * srfCut * b * srfFade(${f((s.bandSpacing ?? 0.3) * 0.3)}, srfPx);
+          srfDetail -= ${f(s.bands)} * srfCut * b * srfFade(${f((s.bandSpacing ?? 0.3) * 0.3)}, srfPx);
         }` : ''}
         ${s.perikymata ? `{
           float pk = 0.5 + 0.5 * sin(6.2831853 * vSrfLocal.y / ${f(s.perikymataSpacing ?? 0.12)} + srfGrain * 1.5);
           srfH += ${f(s.perikymata)} * (1.0 - srfCut) * (pk - 0.5) * srfFade(${f(s.perikymataSpacing ?? 0.12)}, srfPx) * ${f((s.perikymataSpacing ?? 0.12) * 0.15)};
         }` : ''}
         ${s.flatCut ? 'srfShade *= 1.0 - srfCut; srfH *= 1.0 - srfCut;' : ''}
-        diffuseColor.rgb *= 1.0 + srfShade * 0.55;
+        diffuseColor.rgb *= 1.0 + (srfShade + srfDetail) * 0.55;
+        ${s.neck ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(neck.r)}, ${f(neck.g)}, ${f(neck.b)}), ${f(s.neckAmount ?? 0.5)} * (1.0 - srfCut) * (1.0 - smoothstep(0.0, ${f(s.neckHeight ?? 3)}, vSrfLocal.y)));` : ''}
         ${s.stain ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(stain.r)}, ${f(stain.g)}, ${f(stain.b)}), ${f(s.stainAmount ?? 0.5)} * ${s.flatCut ? '(1.0 - srfCut) * ' : ''}smoothstep(0.42, 0.72, srfFbm(vSrfLocal / ${f(s.stainSize ?? 0.8)} + 11.0)));` : ''}
         ${cutZone ? 'diffuseColor.rgb = mix(diffuseColor.rgb, mix(uZone[int(vZoneOwn + 0.5)], uCutTint.rgb, uCutTint.a), srfCut);' : ''}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        normal = srfPerturb(-vViewPosition, normal, vec2(dFdx(srfH), dFdy(srfH)) * ${f((s.bump ?? 0.5) * 6)}, faceDirection);`);
+        normal = srfPerturb(-vViewPosition, normal, vec2(dFdx(srfH), dFdy(srfH)) * ${f((s.bump ?? 0.5) * 6)}, faceDirection);
+        ${s.rim ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.84, 0.90), ${f(s.rim)} * (1.0 - srfCut) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0));` : ''}`);
   };
   material.customProgramCacheKey = () => `surface:${JSON.stringify(s)}`;
 }
