@@ -360,6 +360,20 @@ describe('genetics', () => {
   });
 });
 
+describe('styles', () => {
+  // A stray brace in one stylesheet is harmless in dev (each file is separate) but in the production
+  // bundle it swallows the next file's first rule: once it dropped base.css's :root tokens, unstyling the app.
+  it.each(['../styles/base.css', '../atlas/atlas.css'])('%s has balanced braces', (file) => {
+    const css = readFileSync(resolve(__dirname, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    let depth = 0;
+    for (const ch of css) {
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; expect(depth, 'closing brace with nothing open').toBeGreaterThanOrEqual(0); }
+    }
+    expect(depth).toBe(0);
+  });
+});
+
 describe('routes', () => {
   it('parses mode and selection', () => {
     expect(parseRoute('#/dental/left-maxilla')).toEqual({ mode: 'dental', selected: 'left-maxilla' });
