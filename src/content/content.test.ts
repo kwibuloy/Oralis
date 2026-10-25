@@ -355,6 +355,11 @@ describe('genetics', () => {
     const targets = new Set<string>(json.meshes.flatMap((m: { extras?: { targetNames?: string[] } }) => m.extras?.targetNames ?? []));
     for (const name of Object.keys(PROCESS_MOTION)) expect(targets.has(name), name).toBe(true);
     for (const t of targets) expect(PROCESS_MOTION[t], t).toBeDefined();
+    // The helper proteins carry baked occlusion for their shaded creases (processLook in Genetics.tsx).
+    for (const k of ['rep-helicase', 'tx-rna-polymerase', 'tl-large-subunit']) {
+      const m = json.meshes.find((x: { name: string }) => nodeKey(x.name) === k);
+      expect(Object.keys(m.primitives[0].attributes), k).toContain('_AO');
+    }
     // Tracks run forward in time within the path's stops.
     for (const [name, track] of Object.entries(PROCESS_MOTION)) {
       track.forEach(([t], i) => { if (i) expect(t, name).toBeGreaterThan(track[i - 1][0]); });
