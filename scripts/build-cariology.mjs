@@ -13,12 +13,13 @@ const scene = doc.createScene('cariology');
 const t0 = Date.now();
 const log = (m) => console.log(`${((Date.now() - t0) / 1000).toFixed(0).padStart(4)} s  ${m}`);
 
-/** Add a mesh node from positions, triangles and normals. */
-function addMesh(name, positions, tris, normals) {
+/** Add a mesh node from positions, triangles and normals (and _AO, baked crease shading, if given). */
+function addMesh(name, positions, tris, normals, ao) {
   const prim = doc.createPrimitive()
     .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(positions).setBuffer(buffer))
     .setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(normals).setBuffer(buffer))
     .setIndices(doc.createAccessor().setType('SCALAR').setArray(tris).setBuffer(buffer));
+  if (ao) prim.setAttribute('_AO', doc.createAccessor().setType('SCALAR').setArray(ao).setBuffer(buffer));
   scene.addChild(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim)));
 }
 
@@ -58,12 +59,52 @@ function sphere(c, r, seg = 14, rings = 9) {
   for (let j = 0; j < rings; j++) for (let i = 0; i < seg; i++) { const a = j * (seg + 1) + i, b = a + seg + 1; idx.push(a, a + 1, b, b, a + 1, b + 1); }
   return { pos, nrm, idx };
 }
-/** A rod-shaped bacterium: a capsule from a to b. */
-function capsuleMesh(a, b, r) {
-  const parts = [];
-  const steps = 6;
-  for (let s = 0; s <= steps; s++) parts.push(sphere(a.map((v, i) => v + (b[i] - v) * (s / steps)), r, 12, 8));
-  return parts;
+/**
+ * One smooth body swept along a path (points), its radius radius(s, L) at arc length s of L, closed at both
+ * ends: a chain of cocci that narrows between cells, or a rod with round ends (illustrated-look skill). The
+ * crease shading (_AO) is crease(s, L): dark in the narrowings between cells, never at the round ends.
+ */
+function sweep(path, radius, crease = () => 0, seg = 14, step = 0.07) {
+  const len = [0];
+  for (let i = 1; i < path.length; i++) len.push(len[i - 1] + Math.hypot(...path[i].map((v, k) => v - path[i - 1][k])));
+  const L = len[len.length - 1], rings = Math.max(2, Math.ceil(L / step));
+  const at = (s) => { let i = 1; while (i < len.length - 1 && len[i] < s) i++; const t = (s - len[i - 1]) / (len[i] - len[i - 1] || 1); return path[i - 1].map((v, k) => v + (path[i][k] - v) * t); };
+  const pos = [], nrm = [], idx = [], ao = [];
+  let n = null;
+  for (let j = 0; j <= rings; j++) {
+    const s = (L * j) / rings, c = at(s), ahead = at(Math.min(L, s + 0.02)), behind = at(Math.max(0, s - 0.02));
+    let t = ahead.map((v, k) => v - behind[k]); const tl = Math.hypot(...t) || 1; t = t.map((v) => v / tl);
+    if (!n) n = Math.abs(t[1]) < 0.9 ? [t[2], 0, -t[0]] : [0, -t[2], t[1]];
+    const d = n[0] * t[0] + n[1] * t[1] + n[2] * t[2]; n = n.map((v, k) => v - d * t[k]); const nl = Math.hypot(...n); n = n.map((v) => v / nl);
+    const b = [t[1] * n[2] - t[2] * n[1], t[2] * n[0] - t[0] * n[2], t[0] * n[1] - t[1] * n[0]];
+    const r = Math.max(radius(s, L), 1e-3);
+    for (let i = 0; i <= seg; i++) {
+      const a = (i / seg) * Math.PI * 2, dir = [0, 1, 2].map((k) => Math.cos(a) * n[k] + Math.sin(a) * b[k]);
+      pos.push(...c.map((v, k) => v + dir[k] * r)); nrm.push(...dir); ao.push(crease(s, L));
+    }
+  }
+  // Wound outward (around the ring, then along the path): the viewer draws back faces as cut faces.
+  for (let j = 0; j < rings; j++) for (let i = 0; i < seg; i++) { const a = j * (seg + 1) + i, b2 = a + seg + 1; idx.push(a, a + 1, b2, a + 1, b2 + 1, b2); }
+  // Shade from the faces: the narrowings and round ends tilt the surface away from the ring directions.
+  const fn = new Float32Array(pos.length);
+  for (let t = 0; t < idx.length; t += 3) {
+    const [p, q, w] = [idx[t] * 3, idx[t + 1] * 3, idx[t + 2] * 3];
+    const e1 = [0, 1, 2].map((k) => pos[q + k] - pos[p + k]), e2 = [0, 1, 2].map((k) => pos[w + k] - pos[p + k]);
+    const c = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    for (const v of [p, q, w]) for (let k = 0; k < 3; k++) fn[v + k] += c[k];
+  }
+  for (let v = 0; v < fn.length; v += 3) { const l = Math.hypot(fn[v], fn[v + 1], fn[v + 2]); if (l > 1e-12) for (let k = 0; k < 3; k++) nrm[v + k] = fn[v + k] / l; }
+  return { pos, nrm, idx, ao };
+}
+/** A gently wandering path from p along dir: n points, each `step` apart. */
+function wander(p, dir, n, step, wobble) {
+  const out = [p];
+  let d = dir;
+  for (let i = 1; i < n; i++) {
+    d = d.map((v) => v + (rand() - 0.5) * wobble); const l = Math.hypot(...d); d = d.map((v) => v / l);
+    out.push(out[i - 1].map((v, k) => v + d[k] * step));
+  }
+  return out;
 }
 
 // Prisms about 5 µm across, in a hexagonal pattern, running from the surface (y = 0) 40 µm deep.
@@ -111,22 +152,32 @@ BANDS.forEach(([y0, y1], b) => {
 }
 // Bacteria in the biofilm: chains of cocci (mutans streptococci) and rods (lactobacilli, actinomyces).
 {
+  // Cocci about 0.65 um across (S. mutans 0.5-0.75 um), in chains that narrow where the cells divide (as in
+  // micrographs of streptococci); rods 0.76 um thick with round ends. One smooth body per chain or rod.
+  const CELL = 0.64, R = 0.33, NECK = 0.62, ROD = 0.38;
   const cocci = [], rods = [];
   for (let n = 0; n < 34; n++) {
-    let p = [-15 + rand() * 30, 2.2 + rand() * 9, -13 + rand() * 26];
-    const dir = [rand() - 0.5, (rand() - 0.5) * 0.4, rand() - 0.5];
-    const l = Math.hypot(...dir);
-    for (let c = 0, len = 3 + Math.floor(rand() * 5); c < len; c++) {
-      cocci.push(sphere(p, 0.5));
-      p = p.map((v, i) => v + (dir[i] / l) * 0.98 + (rand() - 0.5) * 0.15);
-    }
+    const p = [-15 + rand() * 30, 2.2 + rand() * 9, -13 + rand() * 26];
+    const dir = [rand() - 0.5, (rand() - 0.5) * 0.4, rand() - 0.5], l = Math.hypot(...dir);
+    const cells = 3 + Math.floor(rand() * 5);
+    const path = wander(p, dir.map((v) => v / l), cells * 4 + 1, CELL / 4, 0.25);
+    const round = (s) => Math.sqrt(Math.max(0, 1 - (2 * ((s / CELL) % 1) - 1) ** 2));
+    const end = (s, L) => s < CELL / 2 || s > L - CELL / 2;
+    cocci.push(sweep(path, (s, L) => R * (end(s, L) ? round(s) : Math.max(round(s), NECK)),
+      (s, L) => (end(s, L) ? 0 : 0.7 * (1 - Math.max(round(s), NECK)) ** 1.5)));
   }
   for (let n = 0; n < 22; n++) {
     const a = [-15 + rand() * 30, 2.2 + rand() * 9, -13 + rand() * 26];
     const dir = [rand() - 0.5, (rand() - 0.5) * 0.5, rand() - 0.5], l = Math.hypot(...dir), len = 2 + rand() * 2.5;
-    rods.push(...capsuleMesh(a, a.map((v, i) => v + (dir[i] / l) * len), 0.38));
+    rods.push(sweep(wander(a, dir.map((v) => v / l), 9, len / 8, 0.12), (s, L) => {
+      const e = Math.min(s, L - s);
+      return e < ROD ? Math.sqrt(Math.max(0, ROD * ROD - (ROD - e) ** 2)) : ROD;
+    }));
   }
-  for (const [name, parts] of [['pr-cocci', cocci], ['pr-rods', rods]]) { const m = merge(parts); addMesh(name, m.positions, m.tris, m.normals); }
+  for (const [name, parts] of [['pr-cocci', cocci], ['pr-rods', rods]]) {
+    const m = merge(parts);
+    addMesh(name, m.positions, m.tris, m.normals, new Float32Array(parts.flatMap((x) => x.ao)));
+  }
 }
 function hexSlab(x0, x1, z0, z1, y0, y1) {
   const pos = [], nrm = [], idx = [];

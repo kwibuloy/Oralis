@@ -16,7 +16,8 @@
   "pdl",
   "pulp",
   "sclerotic-dentin",
-  "tertiary-dentin"
+  "tertiary-dentin",
+  "vessels"
  ],
  "lesions": {
   "pit-fissure": {
@@ -25,7 +26,8 @@
     "enamel",
     "cementum",
     "dentin",
-    "pulp"
+    "pulp",
+    "vessels"
    ],
    "perio": "cl-pit-fissure-perio",
    "perioParts": [
@@ -1119,7 +1121,8 @@
     "enamel",
     "cementum",
     "dentin",
-    "pulp"
+    "pulp",
+    "vessels"
    ],
    "perio": "cl-root-perio",
    "perioParts": [

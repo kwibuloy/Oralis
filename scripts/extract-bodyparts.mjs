@@ -229,10 +229,9 @@ async function addCarvingTooth(doc, buffer, scene, skullRightEdge) {
   for (const node of tooth.getRoot().listNodes()) {
     const src = node.getMesh().listPrimitives()[0];
     const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setBuffer(buffer);
-    const prim = doc.createPrimitive()
-      .setAttribute('POSITION', copy(src.getAttribute('POSITION')))
-      .setAttribute('NORMAL', copy(src.getAttribute('NORMAL')))
-      .setIndices(copy(src.getIndices()));
+    // Every attribute, the baked crease shading (_AO) included.
+    const prim = doc.createPrimitive().setIndices(copy(src.getIndices()));
+    for (const semantic of src.listSemantics()) prim.setAttribute(semantic, copy(src.getAttribute(semantic)));
     scene.addChild(doc.createNode(node.getName()).setMesh(doc.createMesh(node.getName()).addPrimitive(prim))
       .setScale([0.1, 0.1, 0.1]).setTranslation([skullRightEdge + 6, 0, 0]));
   }
@@ -602,12 +601,17 @@ async function addCariologyParts(doc, buffer, scene, archRightEdge) {
   if (regions.length > 16) throw new Error(`${regions.length} lesion-molar regions: the viewer's zone palette holds 16`);
   const cutFaces = new Map(); // part → its cut-face triangles [a, b, c, normal], for the pins
   for (const [name, node] of nodes) {
-    const pos = [], nrm = [], cut = [], idx = [], tris = [];
+    const pos = [], nrm = [], cut = [], idx = [], tris = [], col = [];
     for (const p of node.getMesh().listPrimitives()) {
       const isCut = / \(cut\)$/.test(p.getMaterial()?.getName() ?? '');
       const P = p.getAttribute('POSITION').getArray(), N = p.getAttribute('NORMAL').getArray(), I = p.getIndices().getArray();
       const base = pos.length / 3;
       for (let i = 0; i < P.length; i++) { pos.push(P[i]); nrm.push(N[i]); }
+      // Vertex colours (the pulp's vessels and nerve) come through as they are.
+      // Blender stores them as normalised 16-bit integers: back to 0..1.
+      const CA = p.getAttribute('COLOR_0'), C = CA?.getArray();
+      const unit = CA?.getNormalized() ? (C instanceof Uint16Array ? 65535 : C instanceof Uint8Array ? 255 : 1) : 1;
+      if (C) for (let i = 0; i < (P.length / 3) * 4; i++) col.push(C[i] / unit);
       for (let i = 0; i < P.length / 3; i++) cut.push(isCut ? 1 : 0);
       for (let i = 0; i < I.length; i++) idx.push(base + I[i]);
       const v = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
@@ -621,6 +625,7 @@ async function addCariologyParts(doc, buffer, scene, archRightEdge) {
       .setAttribute('_CUT', doc.createAccessor().setType('SCALAR').setArray(new Float32Array(cut)).setBuffer(buffer))
       .setAttribute('_ZONE', doc.createAccessor().setType('SCALAR').setArray(new Float32Array(cut.length).fill(zone)).setBuffer(buffer))
       .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(idx)).setBuffer(buffer));
+    if (col.length === (pos.length / 3) * 4) prim.setAttribute('COLOR_0', doc.createAccessor().setType('VEC4').setArray(new Float32Array(col)).setBuffer(buffer));
     place(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim)), 0.1, 4);
   }
 

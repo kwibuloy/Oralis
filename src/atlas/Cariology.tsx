@@ -40,9 +40,26 @@ export const TISSUE_LOOK: Record<string, SurfaceStyle> = {
   'alveolar-bone': { grain: 0.35, grainSize: 0.3, bump: 0.6, stain: '#c4a983', stainAmount: 0.4, stainSize: 0.4, roughness: 0.85 },
   gingiva: { grain: 0.15, grainSize: 0.12, bump: 0.25, stain: '#c9727a', stainAmount: 0.2, stainSize: 0.7, roughness: 0.5 },
   pdl: { grain: 0.2, grainSize: 0.05, roughness: 0.6 },
+  // Drawn on the cut in their own vertex colours (build_cariology.py, pulp_vessels.py).
+  vessels: { roughness: 0.45, clearcoat: 0.25, glow: 0.12 },
 };
+/** Every lesion-molar part: a soft edge glow under the showcase lighting (illustrated-look skill). */
+const LESION_GLOW: SurfaceStyle = { glow: 0.2 };
+/** Sites view: glossy enamel and soft, moist gingiva. */
+export const SITES_LOOK: Record<string, SurfaceStyle> = {
+  teeth: { roughness: 0.28, clearcoat: 0.55, rim: 0.3, glow: 0.15 },
+  gingiva: { roughness: 0.4, clearcoat: 0.3, glow: 0.15 },
+};
+/** Process view: crease shading where the cocci divide (_AO), gloss on the biofilm and the prisms. */
+export const PROCESS_LOOK: Record<string, SurfaceStyle> = {
+  'pr-bacteria': { ao: 1.6, glow: 0.3, clearcoat: 0.45, roughness: 0.4 },
+  'pr-biofilm': { glow: 0.2, clearcoat: 0.5, roughness: 0.3 },
+  'pr-pellicle': { clearcoat: 0.4, roughness: 0.35 },
+  'pr-enamel': { glow: 0.15, clearcoat: 0.35, roughness: 0.4 },
+};
+// Front first: the vessels stand only a few hundredths of a millimetre proud of the pulp's cut face.
 const DRAW_ORDER = [
-  'enamel-surface-zone', 'enamel-lesion-body', 'enamel-dark-zone', 'enamel-translucent-zone', 'infected-dentin', 'affected-dentin',
+  'vessels', 'enamel-surface-zone', 'enamel-lesion-body', 'enamel-dark-zone', 'enamel-translucent-zone', 'infected-dentin', 'affected-dentin',
   'sclerotic-dentin', 'tertiary-dentin', 'pulp', 'cementum', 'enamel', 'dentin', 'pdl', 'gingiva', 'alveolar-bone',
 ];
 /** Natural colour and texture of a lesion-molar part; fissure lesions are stained brown, as they usually are clinically. */
@@ -50,7 +67,7 @@ export function lesionPartLook(key: string) {
   const zone = zoneOfPart(key);
   const fissure = key.startsWith('cl-pit-fissure-') && /^enamel-(surface-zone|lesion-body)$/.test(zone);
   // Cut faces are drawn flat in the zone palette's colour (study or natural, see Show zones).
-  const look = { ...TISSUE_LOOK[zone], flatCut: true, cutZone: true };
+  const look = { ...LESION_GLOW, ...TISSUE_LOOK[zone], flatCut: true, cutZone: true };
   return {
     color: ZONES[zone]?.real ?? '#ddd',
     surface: fissure ? { ...look, stain: '#9b7448', stainAmount: 0.55, stainSize: 0.25 } : look,

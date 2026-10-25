@@ -87,6 +87,7 @@ export const ICDAS_NOTE = 'ICDAS codes describe what is seen clinically; they co
  * colour of the cut faces with Show zones on. Both are the palette of the Blender model.
  */
 export const ZONES: Record<string, { name: string; note: string; colour: string; real: string }> = {
+  vessels: { name: 'Pulp vessels and nerve', note: 'Schematic: an arteriole (red) brings blood in through the root tip and a venule (blue) takes it out; the nerve (yellow) has sensory fibres, felt as pain whatever the stimulus, and sympathetic fibres that control blood flow. They branch under the pulp horns. Acids and bacterial toxins diffusing along the tubules inflame the pulp (pulpitis) well before a lesion reaches it: reversible at first, irreversible as bacteria come close or the pulp is exposed. Where tertiary dentin forms, it takes pulp space and the vessels keep clear of it.', colour: '#c8463c', real: '#ffffff' },
   enamel: { name: 'Enamel', note: 'Sound enamel: about 96% mineral by weight (hydroxyapatite) in prisms running from the DEJ to the surface.', colour: '#cfdcea', real: '#ede6d3' },
   dentin: { name: 'Dentin', note: 'Sound dentin: about 70% mineral, with tubules from the pulp to the DEJ that carry odontoblast processes.', colour: '#f1d79e', real: '#e3c891' },
   cementum: { name: 'Cementum', note: 'Thin layer covering the root, here exposed by gingival recession. It holds less mineral than enamel and dissolves at a higher pH.', colour: '#c4ab73', real: '#dcc69a' },

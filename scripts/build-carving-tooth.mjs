@@ -12,6 +12,8 @@
 // antimeres are mirror images, and mirroring puts mesial on the viewer's left in buccal view, as for 36.
 import { Document, NodeIO } from '@gltf-transform/core';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import * as THREE from 'three';
+import { MeshBVH } from 'three-mesh-bvh';
 import { BUCCAL_PIT, cast, cejY, CUSPS, down, gradient, PITS, ROOTS, surfaceNets, WHEELER } from './lib/molar.mjs';
 
 // ---------- Landmarks (defined here so the pins sit on this exact surface) ----------
@@ -90,13 +92,40 @@ for (const f of [crown, rootFaces]) for (let t = 0; t < f.length; t += 3) {
 }
 for (let v = 0; v < normals.length; v += 3) { const l = Math.hypot(normals[v], normals[v + 1], normals[v + 2]) || 1; normals[v] /= l; normals[v + 1] /= l; normals[v + 2] /= l; }
 
+// Landmark shading (illustrated-look skill): occlusion per vertex from rays against the tooth itself, within
+// 1.2 mm, so grooves, pits and fossae darken and the ridges between them read (the app's `ao` look).
+const AO_REACH = 1.2, AO_RAYS = 24;
+const ao = new Float32Array(positions.length / 3);
+{
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setIndex([...crown, ...rootFaces]);
+  const bvh = new MeshBVH(geo);
+  const ray = new THREE.Ray(), n = new THREE.Vector3(), t = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3();
+  for (let v = 0; v < ao.length; v++) {
+    n.fromArray(normals, v * 3);
+    t.set(n.y, -n.x, 0); if (t.lengthSq() < 1e-6) t.set(1, 0, 0); t.normalize(); b.crossVectors(n, t);
+    ray.origin.fromArray(positions, v * 3).addScaledVector(n, 0.01);
+    let occ = 0;
+    for (let k = 0; k < AO_RAYS; k++) {
+      const r = Math.sqrt((k + 0.5) / AO_RAYS), a = k * 2.399963 + v * 2.399963; // each vertex's rays turned: no banding
+      d.copy(t).multiplyScalar(r * Math.cos(a)).addScaledVector(b, r * Math.sin(a)).addScaledVector(n, Math.sqrt(1 - r * r));
+      ray.direction.copy(d);
+      const hit = bvh.raycastFirst(ray, THREE.DoubleSide, 0, AO_REACH);
+      if (hit) occ += 1 - hit.distance / AO_REACH;
+    }
+    ao[v] = occ / AO_RAYS;
+  }
+}
+
 const doc = new Document();
 const buffer = doc.createBuffer();
 const scene = doc.createScene('carving');
 const pos = doc.createAccessor().setType('VEC3').setArray(positions).setBuffer(buffer);
 const nrm = doc.createAccessor().setType('VEC3').setArray(normals).setBuffer(buffer);
+const occlusion = doc.createAccessor().setType('SCALAR').setArray(ao).setBuffer(buffer);
 for (const [name, faces] of [['carving-crown', crown], ['carving-root', rootFaces]]) {
-  const prim = doc.createPrimitive().setAttribute('POSITION', pos).setAttribute('NORMAL', nrm)
+  const prim = doc.createPrimitive().setAttribute('POSITION', pos).setAttribute('NORMAL', nrm).setAttribute('_AO', occlusion)
     .setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(faces)).setBuffer(buffer));
   scene.addChild(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim)));
 }

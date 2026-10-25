@@ -157,7 +157,7 @@ export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle
         }` : ''}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal = srfPerturb(-vViewPosition, normal, vec2(dFdx(srfH), dFdy(srfH)) * ${f((s.bump ?? 0.5) * 6)}, faceDirection);
-        ${s.glow ? `diffuseColor.rgb = mix(diffuseColor.rgb, min(diffuseColor.rgb * 1.3 + 0.05, vec3(1.0)), ${f(s.glow)} * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5));` : ''}
+        ${s.glow ? `diffuseColor.rgb = mix(diffuseColor.rgb, min(diffuseColor.rgb * 1.3 + 0.05, vec3(1.0)), ${f(s.glow)} * (1.0 - srfCut) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5));` : ''}
         ${s.rim ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.84, 0.90), ${f(s.rim)} * (1.0 - srfCut) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0));` : ''}`);
   };
   material.customProgramCacheKey = () => `surface:${JSON.stringify(s)}`;

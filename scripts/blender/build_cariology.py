@@ -41,6 +41,7 @@ import openvdb as vdb
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cariology_shape as S  # noqa: E402
+import pulp_vessels as PV  # noqa: E402
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 GLB_OUT = argv[0] if argv else "models-src/cariology-blender.glb"
@@ -707,6 +708,38 @@ def drop_specks(me, min_volume=5e-4):
     return dropped
 
 
+def bevel_outline(me, study_planes, outer):
+    """Round the cut's edge a little where it meets the tooth's outer surface (0.05 mm, three segments), as on a
+    sectioned teaching model (illustrated-look skill). Only there: lesion zones (the surface zone is 20-50 um)
+    and the borders between tissues on the cut stay exact. The cut face is first merged into polygons, so the
+    bevel keeps an even width over Manifold's long thin triangles."""
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.normal_update()
+
+    def on_cut(f):
+        c = f.calc_center_median()
+        return any(abs(c[a] - v) < 1e-4 and abs(f.normal[a]) > 0.999 for a, v in study_planes)
+    cut = [f for f in bm.faces if on_cut(f)]
+    if cut:
+        bmesh.ops.dissolve_faces(bm, faces=cut)
+        bm.normal_update()
+        cutset = {f for f in bm.faces if on_cut(f)}
+        others = [f for f in bm.faces if f not in cutset]
+        if others:
+            c = np.array([tuple(f.calc_center_median()) for f in others], np.float64)
+            d = np.abs(outer(c)) / (np.linalg.norm(grad(outer, c), axis=1) + 1e-9)
+            outerset = {f for f, dist in zip(others, d) if dist < 0.03}
+            edges = [e for e in bm.edges if len(e.link_faces) == 2
+                     and {e.link_faces[0] in cutset, e.link_faces[1] in cutset} == {True, False}
+                     and (e.link_faces[0] in outerset or e.link_faces[1] in outerset)]
+            if edges:
+                bmesh.ops.bevel(bm, geom=edges, offset=0.05, segments=3, profile=0.5, affect="EDGES", clamp_overlap=True)
+        bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
+        bm.to_mesh(me)
+    bm.free()
+
+
 def finish(me, surfaces, planes, study_planes):
     """Shade from the fields: faces on a plane get the plane's normal (study material if it is a
     cut plane); faces on one of `surfaces` get that field's gradient; the rest keep mesh normals."""
@@ -846,6 +879,7 @@ def build():
             odej = march(at_points(lambda x, y, z, T, D: D), site.o, site.axis * 0.002)
             site.t_dej = float((odej - site.o) @ site.axis)
         q = pulp_pts[np.argmin(np.linalg.norm(pulp_pts - odej, axis=1))]
+        site.lens_at = q  # the tertiary dentin lens's centre, which the pulp vessels keep clear of
 
         for n, st in enumerate(STAGES[site.name]):
             log(f"{site.name}: stage {n}")
@@ -919,6 +953,8 @@ def build():
         dropped = drop_specks(me)
         if dropped:
             log(f"{name}: dropped {len(dropped)} specks (faces, volume): {dropped[:6]}")
+        if zone in ("enamel", "cementum", "dentin"):
+            bevel_outline(me, study, surfaces[0])
         finish(me, surfaces, planes, set(study))
         ob = bpy.data.objects.new(name, me)
         key = (site, group)
@@ -940,6 +976,50 @@ def build():
 
 
 manifest, colls = build()
+
+# The pulp's vessels and nerve on each upright cut (schematic, illustrated-look skill): cl-<site>-static-vessels.
+for site in SITES:
+    lo, hi = site.cut
+    verts, faces, cols = [], [], []
+    for axis, value in cut_planes(site):
+        if axis == 2:
+            continue  # a level cut shows the pulp in cross-section: no vessel runs along it
+        b = 1 - axis
+        us = np.arange(max(lo[b], -7.0), min(hi[b], 7.0) + 1e-9, H)
+        zs = np.arange(max(lo[2], -15.0), min(hi[2], 9.0) + 1e-9, H)
+        U, Z = np.meshgrid(us, zs, indexing="ij")
+        P = [None, None, Z]
+        P[axis], P[b] = np.full_like(U, value), U
+
+        def to3d(u, z, axis=axis, value=value, b=b):
+            p = [0.0, 0.0, z]
+            p[axis], p[b] = value, u
+            return tuple(p)
+        # Pulp still open at the deepest stage: outside the largest tertiary dentin lens (with room for a tube).
+        inside = pulp_n(P[0], P[1], Z) < 0
+        lens = [st["tertiary"] for st in STAGES[site.name] if "tertiary" in st]
+        if lens and hasattr(site, "lens_at"):
+            t, w = max(x[0] for x in lens) + 0.12, max(x[1] for x in lens) + 0.1
+            q = site.lens_at
+            d2 = (P[0] - q[0]) ** 2 + (P[1] - q[1]) ** 2 + (Z - q[2]) ** 2
+            inside &= ~(-pulp_n(P[0], P[1], Z) < t * (1 - d2 / w ** 2))
+        v, f, c = PV.tubes(PV.trace(inside, us, zs), to3d)
+        o = len(verts)
+        verts += v
+        faces += [tuple(i + o for i in t) for t in f]
+        cols += c
+    if not faces:
+        continue
+    name = f"cl-{site.name}-static-vessels"
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], faces)
+    me.shade_smooth()
+    ca = me.color_attributes.new("Color", "FLOAT_COLOR", "POINT")
+    ca.data.foreach_set("color", np.array([(*c, 1.0) for c in cols], np.float32).ravel())
+    me.color_attributes.active_color = ca
+    colls[(site.name, "base")].objects.link(bpy.data.objects.new(name, me))
+    manifest["sites"][site.name]["base"].append(name)
+    log(f"{name}: {len(faces)} faces")
 tris = 0
 for o in bpy.data.objects:
     if o.type != "MESH":
@@ -951,7 +1031,7 @@ log(f"{len(bpy.data.objects)} objects, {tris} triangles")
 os.makedirs(os.path.dirname(os.path.abspath(GLB_OUT)), exist_ok=True)
 bpy.ops.export_scene.gltf(
     filepath=os.path.abspath(GLB_OUT), export_format="GLB", export_apply=True, export_yup=True,
-    export_normals=True, export_materials="EXPORT", export_draco_mesh_compression_enable=True,
+    export_normals=True, export_materials="EXPORT", export_vertex_color="ACTIVE", export_draco_mesh_compression_enable=True,
     export_draco_mesh_compression_level=10, export_draco_position_quantization=14,
     export_draco_normal_quantization=10, export_draco_texcoord_quantization=12)
 with open(os.path.splitext(os.path.abspath(GLB_OUT))[0] + ".json", "w") as fh:

@@ -11,7 +11,8 @@
     "cl-pit-fissure-static-enamel",
     "cl-pit-fissure-static-cementum",
     "cl-pit-fissure-static-dentin",
-    "cl-pit-fissure-static-pulp"
+    "cl-pit-fissure-static-pulp",
+    "cl-pit-fissure-static-vessels"
    ],
    "stages": [
     [
@@ -227,7 +228,8 @@
     "cl-root-static-enamel",
     "cl-root-static-cementum",
     "cl-root-static-dentin",
-    "cl-root-static-pulp"
+    "cl-root-static-pulp",
+    "cl-root-static-vessels"
    ],
    "stages": [
     [
