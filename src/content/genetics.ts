@@ -89,7 +89,7 @@ export const PARTS: Record<string, Part> = {
   // reading DNA (transcription)
   'tx-promoter': { name: 'Promoter', color: '#51cf66', note: 'A DNA sequence just before a gene, often with a TATA box, where transcription factors and RNA polymerase bind.' },
   'tx-transcription-factors': { name: 'Transcription factors', color: '#63e6be', note: 'Proteins that recognise the promoter and bring RNA polymerase II. Which factors a cell has decides which genes it reads: odontoblasts read DSPP, most cells don’t.' },
-  'tx-rna-polymerase': { name: 'RNA polymerase II', color: '#e8590c', note: 'Opens a small bubble of DNA and builds an RNA copy of one strand, 5′→3′. Unlike DNA polymerase, it needs no primer.' },
+  'tx-rna-polymerase': { name: 'RNA polymerase II', color: '#e8590c', note: 'Opens a small bubble of DNA and builds an RNA copy of one strand, 5′→3′. Unlike DNA polymerase, it needs no primer. Drawn open at the front so the bubble shows; while it works, its clamp closes over the DNA.' },
   'tx-template-strand': { name: 'Template strand', color: '#3b4252', note: 'The strand that is read. The RNA is complementary to it.' },
   'tx-coding-strand': { name: 'Coding strand', color: '#adb5bd', note: 'Has the same sequence as the RNA, with T where the RNA has U.' },
   'tx-mrna': { name: 'Messenger RNA (mRNA)', color: '#f783ac', note: 'A single-stranded copy of the gene, with uracil (U) in place of thymine. It carries the message from the nucleus to the ribosomes.' },
@@ -102,7 +102,7 @@ export const PARTS: Record<string, Part> = {
   'tl-trna': { name: 'Transfer RNA (tRNA)', color: '#da77f2', note: 'Brings one amino acid. Its anticodon pairs with a codon on the mRNA, so the right amino acid is added. The first tRNA carries methionine.' },
   'tl-start-codon': { name: 'Start codon (AUG)', color: '#2f9e44', note: 'Where translation begins; it codes for methionine. In DSPP it lies in exon 2, after a short stretch that is never translated.' },
   'tl-stop-codon': { name: 'Stop codon', color: '#e03131', note: 'UAA, UAG or UGA. No tRNA matches it; a release factor binds instead. (DSPP’s real stop codon is near the end of its long last exon; the path shortens the way to it.)' },
-  'tl-release-factor': { name: 'Release factor', color: '#ff8787', note: 'Binds the stop codon in the A site and frees the finished chain from the ribosome.' },
+  'tl-release-factor': { name: 'Release factor', color: '#ff8787', note: 'A protein shaped like a tRNA but carrying no amino acid. It binds the stop codon in the A site and frees the finished chain from the ribosome.' },
   'tl-polypeptide': { name: 'Polypeptide', color: '#4dabf7', note: `The chain of amino acids joined by peptide bonds. DSPP begins ${DSPP_PROTEIN.slice(0, 8)}…; its first ${dspp.signalPeptide} amino acids are a signal peptide that sends it out of the cell and is then cut off. The rest is cut into dentin sialoprotein and dentin phosphoprotein, which guide how dentin mineralises.` },
 };
 
@@ -184,7 +184,7 @@ export const PROCESS_STEPS: ProcessStep[] = PROCESS_TEXT.map((s, i) => {
   const [x, y, width, height] = PROCESS_FRAMES[i];
   return { ...s, view: { center: [x, PROCESS_Y + y, 0], width, height } };
 });
-export const PROCESS_NOTE = 'Proteins are simple shapes at about their real size next to the 2 nm DNA. The mRNA’s letters are spaced out 2.5 times to be readable; speeds are not to scale.';
+export const PROCESS_NOTE = 'Proteins are schematic shapes (rounded lobes for their folded domains, not atomic surfaces) at about their real size next to the 2 nm DNA. The mRNA’s letters are spaced out 2.5 times to be readable; speeds are not to scale.';
 
 /** A shape key's weight over the path's time (time = stop index; between stops, linear). */
 export type Track = [number, number][];
@@ -283,10 +283,10 @@ export const CONDITIONS: Condition[] = [
     geneNote: 'Dentin sialophosphoprotein, the gene drawn on the DNA and Processes paths. Its protein is cut into dentin sialoprotein and dentin phosphoprotein, which guide dentin mineralisation.',
     inheritance: 'Autosomal dominant (DSPP; type II, and the rarer type III; a newer classification also groups DSPP dentin dysplasia type II with them). Type I is the same tooth picture in osteogenesis imperfecta (brittle bones), from type I collagen genes (COL1A1, COL1A2).',
     shows: 'Amber to grey-blue, see-through (opalescent) teeth. Crowns are bulb-shaped with a narrow neck, roots are short and thin, and the pulp spaces fill in. The enamel is normal but breaks away, thought to be because the junction with the dentin lacks its scalloping. (This is type II; in type III, “shell teeth”, the dentin is thin and the pulps are large.)',
-    tissue: { enamel: 'Normal enamel that chips away from the soft dentin, here lost from the biting surface.', dentin: 'Amber, poorly mineralised, opalescent dentin that wears quickly. It fills the pulp chamber and canals over the years, often completely.', pulp: 'A thin remnant of the pulp chamber; the canals have already filled in.', cementum: 'Normal cementum, on roots that are short and thin.' },
+    tissue: { enamel: 'Normal enamel that chips away from the soft dentin, here lost from the biting surface.', dentin: 'Amber, poorly mineralised, opalescent dentin that wears quickly. Its tubules are fewer and irregular. It fills the pulp chamber and canals over the years, often completely.', pulp: 'A thin remnant of the pulp chamber; the canals have already filled in.', cementum: 'Normal cementum, on roots that are short and thin.' },
   },
 ];
-export const TEETH_NOTE = 'The genes are lined up on one ladder only to study them: ENAM and DSPP lie on chromosome 4, MMP20 on 11, FAM83H on 8. The teeth are lower first molars cut in half lengthwise.';
+export const TEETH_NOTE = 'The genes are lined up on one ladder only to study them: ENAM and DSPP lie on chromosome 4, MMP20 on 11, FAM83H on 8. The teeth are lower first molars cut in half lengthwise. The stands and the glowing threads from each gene are not anatomy, and the pulp’s vessels and nerve are schematic. A faint blue tint marks where each condition has taken tooth away (pits, chips, wear, flaked enamel): a marker, not the tooth’s colour.';
 
 const TISSUE_COLOR: Record<ToothTissue, string> = { enamel: '#f4efe4', dentin: '#e7cf9a', cementum: '#dcc69a', pulp: '#c8594f' };
 const CONDITION_COLOR: Partial<Record<string, string>> = { 'ai-hypoplastic-enamel': '#efe4c4', 'ai-hypomaturation-enamel': '#ead9b4', 'ai-hypocalcified-enamel': '#c99a5b', 'di-enamel': '#ddd6c4', 'di-dentin': '#b07a3f' };
@@ -305,6 +305,16 @@ for (const t of TOOTH_TISSUES) {
 }
 PARTS['gt-between'] = { name: 'Other DNA', color: '#c3c9d4', note: 'The rest of the DNA, shown plain. The four genes are lined up on one ladder only to study them: ENAM and DSPP lie on chromosome 4, MMP20 on 11, FAM83H on 8.' };
 for (const c of CONDITIONS) PARTS[geneKey(c.gene)] = { name: `${c.gene} gene (${c.band})`, color: c.color, note: `${c.geneNote} Faults in it cause ${c.name.toLowerCase()}. ${c.inheritance}` };
+// The pulp's vessels and nerve, drawn on the cut (build_genetics_teeth.py `vessels`), in their own colours.
+const VESSELS_NOTE = 'Blood vessels and nerve of the pulp (schematic): an arteriole (red) brings blood in through the opening at the root tip, a venule (blue) takes it out, and the nerve (yellow) has sensory fibres, felt as pain whatever the stimulus, and sympathetic fibres that control blood flow. They branch under the pulp horns.';
+for (const c of CONDITIONS) {
+  PARTS[`gt-${c.id}-vessels`] = {
+    name: `Pulp vessels and nerve · ${c.short}`, color: '#ffffff',
+    note: c.id === 'di' ? `${VESSELS_NOTE} Here only in what is left of the pulp (the thin channels that still feed it are too narrow to draw): as the dentin fills the pulp in, they are lost too.` : `${VESSELS_NOTE} Normal here: this form affects only the enamel.`,
+  };
+}
+PARTS['gt-link'] = { name: 'Gene to tooth', color: '#ffffff', note: 'Not anatomy: a marker linking each gene to the tooth its faults change. ENAM, MMP20 and FAM83H are needed by the cells that build enamel (ameloblasts), DSPP by the cells that build dentin (odontoblasts).' };
+PARTS['gt-stand'] = { name: 'Display stand', color: '#eef1f6', note: 'Not anatomy: each tooth is shown standing on a stand, like a specimen.' };
 
 // ---------- family trees ----------
 
@@ -350,10 +360,11 @@ export const TEETH_STEPS: PathStep[] = CONDITIONS.map((c) => ({
   text: c.shows,
   // The molar centred above its gene, with the ladder below it.
   // Opens turned a little, so the tooth reads as 3D; the student can turn it any way from there.
-  view: { center: [GENE_X[c.gene], TEETH_Y + 12, 0], width: 24, height: 30, phoneWidth: 20, yaw: 0.45 },
+  view: { center: [GENE_X[c.gene], TEETH_Y + 14.5, 0], width: 24, height: 37, phoneWidth: 20, yaw: 0.45 },
   pattern: c.pattern,
 }));
-export const TEETH_PARTS = [...CONDITIONS.flatMap((c) => TOOTH_TISSUES.map((t) => toothKey(c.id, t)).filter((k) => PARTS[k])), ...CONDITIONS.map((c) => geneKey(c.gene)), 'gt-between'];
+export const TEETH_PARTS = [...CONDITIONS.flatMap((c) => [...TOOTH_TISSUES.map((t) => toothKey(c.id, t)), `gt-${c.id}-vessels`].filter((k) => PARTS[k])),
+  ...CONDITIONS.map((c) => geneKey(c.gene)), 'gt-between', 'gt-link', 'gt-stand'];
 
 // ---------- the model ----------
 

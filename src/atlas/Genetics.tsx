@@ -1,6 +1,6 @@
 import { gsap } from 'gsap';
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { PEDIGREES, type GeneticsPath as Path, type GeneticsView, type Pattern } from '../content/genetics';
+import { nodeKey, PEDIGREES, type GeneticsPath as Path, type GeneticsView, type Pattern } from '../content/genetics';
 import type { SurfaceStyle, Viewer } from '../viewer/Viewer';
 import { Segmented } from './controls';
 
@@ -14,9 +14,13 @@ const MAX_DOTS = 6;
 const PHONE = '(max-width: 860px)';
 
 // How the Teeth path's tissues look (src/viewer/surface.ts; sizes in millimetres). Cut faces stay flat.
-// Cut faces: faint rods (streaks along _dir) and growth lines (bands across _depth), baked by build_genetics_teeth.py.
-const ENAMEL_CUT: SurfaceStyle = { streaks: 0.22, streakSize: 0.06, bands: 0.1, bandSpacing: 0.28 };
-const DENTIN_CUT: SurfaceStyle = { streaks: 0.18, streakSize: 0.07, bands: 0.06, bandSpacing: 0.35 };
+// Cut faces: faint rods (streaks along _dir) and growth lines (bands across _depth), baked by build_genetics_teeth.py,
+// over clearer layer colours than the outside (an illustrated section). Outside, a faint warm halo marks where each
+// condition took tooth away (_defect, baked from the damage), so students see where to look.
+// A cool blue no tooth tissue has, so it is never read as stain, caries or amber DI dentin (the Teeth note explains it).
+const HALO: SurfaceStyle = { halo: '#4d8dff', haloAmount: 0.45 };
+const ENAMEL_CUT: SurfaceStyle = { ...HALO, streaks: 0.22, streakSize: 0.06, bands: 0.1, bandSpacing: 0.28, cutColor: '#f8f3e9', cutAmount: 0.35 };
+const DENTIN_CUT: SurfaceStyle = { ...HALO, streaks: 0.18, streakSize: 0.07, bands: 0.06, bandSpacing: 0.35, cutColor: '#f0c27a', cutAmount: 0.5 };
 // Outside: warmer at the neck, where dentin shows through; lighter and cooler at the edges (translucent enamel).
 const ENAMEL: SurfaceStyle = {
   ...ENAMEL_CUT, roughness: 0.24, clearcoat: 0.65, grain: 0.22, grainSize: 0.35, perikymata: 0.8, perikymataSpacing: 0.1, bump: 0.4,
@@ -33,14 +37,36 @@ const TOOTH_LOOK: Record<string, SurfaceStyle> = {
   // Normal enamel over soft dentin, chipping away.
   'di-enamel': { ...ENAMEL, perikymata: 0.3 },
   // Opalescent: amber with grey-blue patches and a soft sheen.
-  'di-dentin': { ...DENTIN_CUT, roughness: 0.32, clearcoat: 0.4, grain: 0.2, grainSize: 0.45, bump: 0.3, stain: '#7d8796', stainAmount: 0.22, stainSize: 1.1, rim: 0.2, flatCut: true },
+  // Few, irregular tubules: faint streaks.
+  'di-dentin': { ...DENTIN_CUT, streaks: 0.06, streakSize: 0.12, roughness: 0.32, clearcoat: 0.4, grain: 0.2, grainSize: 0.45, bump: 0.3, stain: '#7d8796', stainAmount: 0.22, stainSize: 1.1, rim: 0.2, flatCut: true },
   dentin: { ...DENTIN_CUT, roughness: 0.55, grain: 0.25, grainSize: 0.35, bump: 0.3, flatCut: true },
-  cementum: { bands: 0.08, bandSpacing: 0.12, roughness: 0.8, grain: 0.35, grainSize: 0.25, bump: 0.45, flatCut: true },
-  pulp: { roughness: 0.7, grain: 0.25, grainSize: 0.25, stain: '#8f2f3c', stainAmount: 0.3, stainSize: 0.45 },
+  cementum: { ...HALO, bands: 0.08, bandSpacing: 0.12, roughness: 0.8, grain: 0.35, grainSize: 0.25, bump: 0.45, flatCut: true, cutColor: '#d9b878', cutAmount: 0.45 },
+  // Living tissue: a richer red on the cut and a faint warm glow, with its vessels and nerve drawn on it.
+  pulp: { roughness: 0.55, grain: 0.25, grainSize: 0.25, stain: '#8f2f3c', stainAmount: 0.3, stainSize: 0.45, glow: 0.4, cutColor: '#ea9a90', cutAmount: 0.5 },
+  vessels: { roughness: 0.45, clearcoat: 0.25, glow: 0.12 },
 };
+// The display stand (contact shadow baked into _ao) and each gene's glowing thread to its tooth.
+const STAND: SurfaceStyle = { ao: 1.6, roughness: 0.25, clearcoat: 0.6 };
+const LINK: SurfaceStyle = { glow: 0.65, roughness: 0.3, clearcoat: 0.5 };
+// Proteins (and the tRNAs, built the same way) carry baked occlusion (_ao, build_genetics.py) on their lobed
+// relief; with the showcase lighting (Viewer.setShowcase) every Genetics path reads as one illustrated set.
+const PROTEINS = new Set(['rep-helicase', 'rep-topoisomerase', 'rep-ssb', 'rep-primase', 'rep-dna-polymerase', 'rep-ligase',
+  'tx-transcription-factors', 'tx-rna-polymerase', 'tl-small-subunit', 'tl-large-subunit', 'tl-trna', 'tl-release-factor',
+  'dna-histone-octamer', 'dna-h1', 'dna-fibre', 'dna-scaffold']);
+const PROTEIN: SurfaceStyle = { ao: 2.6, glow: 0.35, roughness: 0.42, clearcoat: 0.45, grain: 0.12, grainSize: 0.3, bump: 0.3 };
+// DNA, RNA and the rest: the same gloss and edge glow, no relief.
+const STRAND: SurfaceStyle = { glow: 0.3, roughness: 0.4, clearcoat: 0.35 };
+/** The finish of any Genetics part: the teeth's tissues their own (toothLook), proteins lobed, the rest glossy. */
+export function geneticsLook(node: string): SurfaceStyle {
+  const key = nodeKey(node);
+  if (key === 'gt-stand') return STAND;
+  if (key === 'gt-link') return LINK;
+  return toothLook(key) ?? (PROTEINS.has(key) ? PROTEIN : STRAND);
+}
+
 /** The finish of a Teeth-path part (gt-<condition>-<tissue>); other parts keep the default. */
 export function toothLook(key: string): SurfaceStyle | undefined {
-  const m = /^gt-(.+)-(enamel|dentin|cementum|pulp)$/.exec(key);
+  const m = /^gt-(.+)-(enamel|dentin|cementum|pulp|vessels)$/.exec(key);
   if (!m) return undefined;
   return TOOTH_LOOK[key.slice(3)] ?? TOOTH_LOOK[m[2]];
 }

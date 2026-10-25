@@ -1,6 +1,7 @@
 import { gsap } from 'gsap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { acceleratedRaycast, type MeshBVH } from 'three-mesh-bvh';
@@ -161,6 +162,8 @@ export class Viewer {
   private down: { x: number; y: number } | null = null;
   private frame = 0;
   private needsRender = true;
+  private hemi = new THREE.HemisphereLight(0xffffff, 0xd9d4cc, 2.1);
+  private showcase: { rim: THREE.DirectionalLight; env: THREE.Texture } | null = null;
   private compiling = false;
   private resizeObserver: ResizeObserver;
   private reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -228,7 +231,7 @@ export class Viewer {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 
     this.scene.add(this.root);
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd9d4cc, 2.1));
+    this.scene.add(this.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.4);
     key.position.set(4, 7, 9);
     this.scene.add(key);
@@ -631,6 +634,31 @@ export class Viewer {
     if (this.pathMode) this.applyPath();
   }
 
+  /**
+   * Showcase lighting (the Genetics Processes path): soft reflections from a room environment and a rim
+   * light from behind the model, fixed to the camera, so edges glow against the white canvas. Off: the
+   * usual studio lights.
+   */
+  setShowcase(on: boolean) {
+    if (on && !this.showcase) {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+      // Behind and a little above the model as seen from the camera, shining back towards it.
+      const rim = new THREE.DirectionalLight(0xffffff, 3.2);
+      rim.position.set(0.5, 1.4, -10);
+      this.camera.add(rim, rim.target);
+      if (!this.camera.parent) this.scene.add(this.camera);
+      this.showcase = { rim, env };
+    }
+    if (!this.showcase) return;
+    this.showcase.rim.visible = on;
+    this.scene.environment = on ? this.showcase.env : null;
+    this.scene.environmentIntensity = 0.55;
+    this.hemi.intensity = on ? 1.2 : 2.1;
+    this.needsRender = true;
+  }
+
   setPathView(view: PathView) {
     this.pathView = view;
     if (this.pathMode) this.applyPath();
@@ -762,6 +790,10 @@ export class Viewer {
     const { batch, instance, fadedBatch, fadedInstance } = m.userData as { batch?: Batch; instance: number; fadedBatch?: Batch; fadedInstance?: number };
     batch?.mesh.setGeometryAt(batch.mesh.getGeometryIdAt(instance), m.geometry);
     fadedBatch?.mesh.setGeometryAt(fadedBatch.mesh.getGeometryIdAt(fadedInstance!), m.geometry);
+    // The batch's own bounds were computed once; a part that travels (the ribosome along the mRNA) can leave
+    // them, and the whole batch would be culled.
+    batch?.mesh.computeBoundingSphere();
+    fadedBatch?.mesh.computeBoundingSphere();
     morph.at = at;
     this.needsRender = true;
   }

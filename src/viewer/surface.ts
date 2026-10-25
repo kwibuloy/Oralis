@@ -42,6 +42,16 @@ export interface SurfaceStyle {
    * so one palette switches every cut face between study and natural colours.
    */
   cutZone?: boolean;
+  /** Crevices darkened (and a little richer) by the baked vertex attribute _ao (0 open .. 1 enclosed), times this. */
+  ao?: number;
+  /** Lighter towards the part's own colour at grazing angles: edges glow, as in illustrated models. */
+  glow?: number;
+  /** Cut faces tinted towards this colour (an illustrated section: clearer layer colours than the outside). */
+  cutColor?: string;
+  cutAmount?: number;
+  /** Natural surface only: tinted towards this colour by the baked vertex attribute _defect (a condition's damage). */
+  halo?: string;
+  haloAmount?: number;
 }
 
 /** Colours of the zones a `cutZone` part's cut faces take, by index (linear, as material colours are). */
@@ -78,6 +88,8 @@ const f = (v: number) => v.toFixed(5);
 export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle, zones?: { value: THREE.Color[] }, cutTint?: { value: THREE.Vector4 }) {
   const stain = new THREE.Color(s.stain ?? '#000');
   const neck = new THREE.Color(s.neck ?? '#000');
+  const cutColor = new THREE.Color(s.cutColor ?? '#000');
+  const halo = new THREE.Color(s.halo ?? '#000');
   const cutZone = !!(s.cutZone && zones);
   material.onBeforeCompile = (shader) => {
     if (cutZone) {
@@ -88,6 +100,18 @@ export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvZoneOwn = _zone;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>\nuniform vec3 uZone[${ZONE_SLOTS}];\nuniform vec4 uCutTint;\nvarying float vZoneOwn;`);
+    }
+    if (s.halo) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float _defect;\nvarying float vSrfDefect;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSrfDefect = _defect;');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vSrfDefect;');
+    }
+    if (s.ao) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float _ao;\nvarying float vSrfAo;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSrfAo = _ao;');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vSrfAo;');
     }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec3 _dir;\nattribute float _depth;\nattribute float _cut;\nvarying vec3 vSrfLocal;\nvarying vec3 vSrfDir;\nvarying float vSrfDepth;\nvarying float vSrfCut;')
@@ -121,12 +145,19 @@ export function addSurface(material: THREE.MeshStandardMaterial, s: SurfaceStyle
           srfH += ${f(s.perikymata)} * (1.0 - srfCut) * (pk - 0.5) * srfFade(${f(s.perikymataSpacing ?? 0.12)}, srfPx) * ${f((s.perikymataSpacing ?? 0.12) * 0.15)};
         }` : ''}
         ${s.flatCut ? 'srfShade *= 1.0 - srfCut; srfH *= 1.0 - srfCut;' : ''}
+        ${s.cutColor ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(cutColor.r)}, ${f(cutColor.g)}, ${f(cutColor.b)}), ${f(s.cutAmount ?? 0.5)} * srfCut);` : ''}
         diffuseColor.rgb *= 1.0 + (srfShade + srfDetail) * 0.55;
         ${s.neck ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(neck.r)}, ${f(neck.g)}, ${f(neck.b)}), ${f(s.neckAmount ?? 0.5)} * (1.0 - srfCut) * (1.0 - smoothstep(0.0, ${f(s.neckHeight ?? 3)}, vSrfLocal.y)));` : ''}
         ${s.stain ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(stain.r)}, ${f(stain.g)}, ${f(stain.b)}), ${f(s.stainAmount ?? 0.5)} * ${s.flatCut ? '(1.0 - srfCut) * ' : ''}smoothstep(0.42, 0.72, srfFbm(vSrfLocal / ${f(s.stainSize ?? 0.8)} + 11.0)));` : ''}
-        ${cutZone ? 'diffuseColor.rgb = mix(diffuseColor.rgb, mix(uZone[int(vZoneOwn + 0.5)], uCutTint.rgb, uCutTint.a), srfCut);' : ''}`)
+        ${cutZone ? 'diffuseColor.rgb = mix(diffuseColor.rgb, mix(uZone[int(vZoneOwn + 0.5)], uCutTint.rgb, uCutTint.a), srfCut);' : ''}
+        ${s.halo ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${f(halo.r)}, ${f(halo.g)}, ${f(halo.b)}), ${f(s.haloAmount ?? 0.35)} * (1.0 - srfCut) * clamp(vSrfDefect, 0.0, 1.0));` : ''}
+        ${s.ao ? `{
+          float occ = clamp(vSrfAo * ${f(s.ao)}, 0.0, 1.0);
+          diffuseColor.rgb = pow(diffuseColor.rgb, vec3(1.0 + 0.6 * occ)) * (1.0 - 0.7 * occ);
+        }` : ''}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal = srfPerturb(-vViewPosition, normal, vec2(dFdx(srfH), dFdy(srfH)) * ${f((s.bump ?? 0.5) * 6)}, faceDirection);
+        ${s.glow ? `diffuseColor.rgb = mix(diffuseColor.rgb, min(diffuseColor.rgb * 1.3 + 0.05, vec3(1.0)), ${f(s.glow)} * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5));` : ''}
         ${s.rim ? `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.84, 0.90), ${f(s.rim)} * (1.0 - srfCut) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0));` : ''}`);
   };
   material.customProgramCacheKey = () => `surface:${JSON.stringify(s)}`;

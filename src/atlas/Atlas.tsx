@@ -27,7 +27,7 @@ import Icon from './Icon';
 import SubjectPicker from './SubjectPicker';
 import Search, { type SearchItem } from './Search';
 import Timeline from './Timeline';
-import { GeneticsPath, toothLook } from './Genetics';
+import { geneticsLook, GeneticsPath } from './Genetics';
 import './atlas.css';
 
 type ArchFilter = 'both' | 'upper' | 'lower';
@@ -174,7 +174,7 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
       if (modeId === 'genetics') {
         // Nodes are part keys, or `key~piece` where a part appears more than once (the processes path).
         const p = GENETIC_PARTS[nodeKey(node)];
-        return p ? { key: nodeKey(node), group: nodeGroup(node), color: p.color, surface: toothLook(nodeKey(node)) } : null;
+        return p ? { key: nodeKey(node), group: nodeGroup(node), color: p.color, surface: geneticsLook(node) } : null;
       }
       if (node in CARVING_COLOUR) return { key: node, group: 'carving', color: CARVING_COLOUR[node] };
       if (modeId === 'cariology') { const part = cariologyPart(node); if (part) return part; }
@@ -225,6 +225,8 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   // Presets can change the extent a lot (whole body → head), so they refit; single toggles don't.
   const [presetTick, setPresetTick] = useState(0);
   useEffect(() => { if (presetTick) viewer.current?.fit(); }, [presetTick]);
+  // Showcase lighting on every Genetics path: the illustrated look.
+  useEffect(() => { viewer.current?.setShowcase(isPath); }, [isPath, ready]);
   useEffect(() => { viewer.current?.setFilter(arch === 'both' ? () => true : (key) => archOf(key) === arch); }, [arch, ready]);
   // Cariology's Sites view opens the bite, so the occlusal lesions (Class I, secondary caries) can be seen.
   const openBite = biteOpen || (cario && cariView === 'sites');

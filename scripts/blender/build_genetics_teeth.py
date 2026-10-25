@@ -156,9 +156,10 @@ PULP = field_by_slabs(S.pulp)
 log("fields ready")
 
 
-def tissues(T, D, P, cej, Z, enamel_cap=None):
+def tissues(T, D, P, cej, Z, enamel_cap=None, damage=None):
     """Enamel, dentin, cementum and pulp from the tooth (T), DEJ (D) and pulp (P) fields.
-    The dentin's outer surface is the DEJ on the crown and 0.15 mm under the root surface below it."""
+    The dentin's outer surface is the DEJ on the crown and 0.15 mm under the root surface below it.
+    `damage` (True where the condition took tooth away) becomes the app's halo (bake_defect)."""
     D = D + scallop()  # the DEJ is faintly scalloped, not smooth
     w = np.clip((Z - cej + 0.05) / 0.2, 0, 1)
     inner = w * D + (1 - w) * (T + 0.15)
@@ -176,7 +177,139 @@ def tissues(T, D, P, cej, Z, enamel_cap=None):
     # What each tissue's cut-face pattern follows (see bake_patterns): enamel rods run out from the DEJ,
     # dentinal tubules out from the pulp, cementum lamellae along the root surface.
     out["_fields"] = {"enamel": D, "dentin": P if P is not None else inner, "cementum": -T}
+    out["_damage"] = damage
     return out
+
+
+def blur(a, r):
+    """Box blur over 2r + 1 voxels along each axis, twice (close to a Gaussian about r voxels wide)."""
+    for _ in range(2):
+        for ax in range(3):
+            c = np.cumsum(np.pad(a, [(r + 1, r) if i == ax else (0, 0) for i in range(3)], mode="edge"), axis=ax, dtype=np.float32)
+            n = c.shape[ax]
+            a = (np.take(c, np.arange(2 * r + 1, n), axis=ax) - np.take(c, np.arange(0, n - 2 * r - 1), axis=ax)) / (2 * r + 1)
+    return a
+
+
+def bake_defect(me, halo):
+    """_defect, 0..1 per vertex: near where the condition took tooth away (pits, grooves, chips, wear, flaked
+    enamel), fading over about 0.3 mm. The app tints it faintly so students see where to look."""
+    co = np.empty(len(me.vertices) * 3, np.float32)
+    me.vertices.foreach_get("co", co)
+    d = np.clip(sample(halo, co.reshape(-1, 3).astype(np.float64)) * 3.0, 0, 1)
+    me.attributes.new("_defect", "FLOAT", "POINT").data.foreach_set("value", d.astype(np.float32))
+
+
+def bevel_cut(me):
+    """Round the cut face's edge a little (0.06 mm, three segments), as on a sectioned teaching model: the
+    tooth's outline and the borders between layers read as soft rims instead of hairlines. The cut face is
+    first merged into polygons, so the bevel keeps an even width over Manifold's long thin triangles."""
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.normal_update()
+
+    def on_cut(f):
+        return f.normal.y < -0.999 and all(abs(v.co.y) < 1e-4 for v in f.verts)
+    bmesh.ops.dissolve_faces(bm, faces=[f for f in bm.faces if on_cut(f)])
+    bm.normal_update()
+    edges = [e for e in bm.edges if len(e.link_faces) == 2 and on_cut(e.link_faces[0]) != on_cut(e.link_faces[1])]
+    bmesh.ops.bevel(bm, geom=edges, offset=0.06, segments=3, profile=0.5, affect="EDGES", clamp_overlap=True)
+    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
+    bm.to_mesh(me)
+    bm.free()
+
+
+VESSEL_COLOURS = {"artery": (0.78, 0.13, 0.12), "vein": (0.16, 0.27, 0.72), "nerve": (0.95, 0.78, 0.25)}
+
+
+def vessels(pulp, name):
+    """The pulp's blood vessels and nerve, schematic (as in histology texts: they enter at the apex and fan
+    out under the horns): an artery (red) and a vein (blue) either side of the nerve (yellow), up each canal
+    and into the chamber's horns. Traced along the middle of the pulp on the cut face and drawn half proud of
+    it, so they read on the cut. Thin pulp (DI's remnant) gets them only where it is wide enough."""
+    j = int(np.argmin(np.abs(YS - 0.06)))
+    inside = pulp[:, j, :] < 0  # (x, z) on the cut
+    tracks, done = [], []  # a track: [(x, z, half width)], plus the run (x0, x1) it ended on
+    for k in range(inside.shape[1]):
+        idx = np.flatnonzero(inside[:, k])
+        runs = []
+        if len(idx):
+            cut = np.flatnonzero(np.diff(idx) > 1)
+            for a, b in zip(np.concatenate([[idx[0]], idx[cut + 1]]), np.concatenate([idx[cut], [idx[-1]]])):
+                if b - a >= 4:  # at least 0.2 mm wide
+                    runs.append((XS[a], XS[b]))
+        z = ZS[k]
+        claimed = set()
+        nxt = []
+        for t in tracks:
+            hits = [i for i, (x0, x1) in enumerate(runs) if x0 <= t["run"][1] and x1 >= t["run"][0]]
+            if not hits:
+                done.append(t)
+                continue
+            for n, i in enumerate(hits):
+                x0, x1 = runs[i]
+                p = ((x0 + x1) / 2, z, (x1 - x0) / 2)
+                if i in claimed:  # two canals meet in the chamber: this one ends there
+                    t["pts"].append(p)
+                    done.append(t)
+                    break
+                claimed.add(i)
+                if n == 0:
+                    t["pts"].append(p)
+                    t["run"] = runs[i]
+                    nxt.append(t)
+                else:  # the chamber splits towards a horn: a branch from the last point
+                    nxt.append({"pts": [t["pts"][-2] if len(t["pts"]) > 1 else t["pts"][-1], p], "run": runs[i]})
+        for i, (x0, x1) in enumerate(runs):
+            if i not in claimed:
+                nxt.append({"pts": [((x0 + x1) / 2, z, (x1 - x0) / 2)], "run": (x0, x1)})
+        tracks = nxt
+    done += tracks
+    verts, faces, cols = [], [], []
+
+    def tube(path, r, colour, sides=10):
+        start = len(verts)
+        for i, p in enumerate(path):
+            a = path[max(i - 1, 0)]
+            b = path[min(i + 1, len(path) - 1)]
+            t = np.array(b) - np.array(a)
+            t /= np.linalg.norm(t) or 1.0
+            n = np.cross(t, (0.0, 1.0, 0.0))
+            n /= np.linalg.norm(n) or 1.0
+            bb = np.cross(t, n)
+            for s in range(sides):
+                ang = 2 * math.pi * s / sides
+                verts.append(tuple(np.array(p) + r * (math.cos(ang) * n + math.sin(ang) * bb)))
+                cols.append(colour)
+        for i in range(len(path) - 1):
+            for s in range(sides):
+                a, b = start + i * sides + s, start + i * sides + (s + 1) % sides
+                faces.append((a, b, b + sides, a + sides))
+        for i, flip in ((0, True), (len(path) - 1, False)):
+            c = len(verts)
+            verts.append(tuple(path[i]))
+            cols.append(colour)
+            for s in range(sides):
+                a, b = start + i * sides + s, start + i * sides + (s + 1) % sides
+                faces.append((c, b, a) if flip else (c, a, b))
+
+    for t in done:
+        pts = t["pts"][::4] + ([t["pts"][-1]] if (len(t["pts"]) - 1) % 4 else [])
+        if len(pts) < 2:
+            continue
+        # Smoothed, so the vessels curve gently instead of following every voxel step.
+        sm = [pts[0]] + [tuple((np.array(pts[i - 1]) + 2 * np.array(pts[i]) + np.array(pts[i + 1])) / 4) for i in range(1, len(pts) - 1)] + [pts[-1]]
+        for kind, side, r in (("artery", -0.38, 0.07), ("vein", 0.38, 0.085), ("nerve", 0.0, 0.06)):
+            path = [(x + side * max(hw - 0.12, 0.0), 0.0, z) for x, z, hw in sm]
+            tube(path, r, VESSEL_COLOURS[kind])
+    if not faces:
+        return None
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], faces)
+    me.shade_smooth()
+    ca = me.color_attributes.new("Color", "FLOAT_COLOR", "POINT")
+    ca.data.foreach_set("color", np.array([(*c, 1.0) for c in cols], np.float32).ravel())
+    return me
 
 
 _scallop = []
@@ -265,13 +398,14 @@ def hypoplastic():
     pits = [(x, y, S.occlusal_height(np.array(x), np.array(y)) - 1.9) for x, y in ((-2.0, 1.6), (0.6, 2.4), (2.6, 1.2), (-0.8, 3.4), (1.6, 3.9))]
     pits += [(x, 4.35, z) for x, z in ((-2.4, 4.6), (0.4, 3.6), (2.6, 4.2), (-1.0, 2.4))]
     pits += [(x, 0.15, S.occlusal_height(np.array(x), np.array(0.15)) - 1.75) for x in (-2.3, 1.4)]
+    base = T
     T = np.maximum(T, -balls(pits, 0.32))
     # Two grooves round the crown, slightly wavy, 0.2 mm deep in the 0.3 mm enamel.
     for z0, seed in ((2.6, 3), (4.3, 4)):
         level = z0 + CEJ + 0.15 * noise(2.5, seed, 6)
         groove = np.maximum(np.abs(Z3 - level) - 0.22, -T - 0.2)
         T = np.maximum(T, -groove)
-    return tissues(T, DS, PULP, CEJ, Z3)
+    return tissues(T, DS, PULP, CEJ, Z3, damage=(base < 0) & (T > 0))
 
 
 def hypomaturation():
@@ -280,7 +414,7 @@ def hypomaturation():
     chips += [(x, 0.1, S.occlusal_height(np.array(x), np.array(0.1)) + 0.45) for x in (-3.3, 2.9)]
     ragged = 0.25 * noise(0.5, 5)
     T = np.maximum(TS, -(balls(chips, 1.05) + ragged))
-    return tissues(T, DS, PULP, CEJ, Z3)
+    return tissues(T, DS, PULP, CEJ, Z3, damage=(TS < 0) & (T > 0))
 
 
 def hypocalcified():
@@ -290,7 +424,7 @@ def hypocalcified():
     rough = 0.06 * noise(0.35, 8)
     thin = np.where(Z3 > CEJ + 3.0, DS - 0.45 - 0.08 * noise(0.6, 9), -1.0)
     T = np.maximum.reduce([TS + np.where(Z3 > CEJ + 0.5, rough, 0), worn, thin])
-    return tissues(T, DS, PULP, CEJ, Z3)
+    return tissues(T, DS, PULP, CEJ, Z3, damage=(TS < 0) & (T > 0.03))
 
 
 def di():
@@ -314,19 +448,22 @@ def di():
     D = TSS_DI + S.enamel_thickness(xw, yw, zw)
     cej = S.cej(xw, yw)
     # The soft dentin wears fast once the enamel goes: cusps flattened by attrition.
+    whole = T
     T = np.maximum(T, Z3 - (6.0 + 0.3 * noise(1.5, 13)))
     # Enamel has flaked off the upper crown along a ragged line, and in patches lower down.
     edge = Z3 - (cej + 2.6 + 0.4 * noise(1.2, 10) + 0.12 * noise(0.4, 11))
     flakes = np.where(Z3 > cej + 1.0, noise(0.9, 12) - 0.6, -1.0)  # positive in patches: enamel gone there
     cap = np.maximum(edge, flakes)
     remnant = field_by_slabs(field(S.pulp)) + 0.45  # the pulp narrowed by dentin: chamber thinned, canals gone
-    return tissues(T, D, remnant, cej, Z3, enamel_cap=cap)
+    # Damage: the worn cusps, and the enamel layer (between the surface and the DEJ) where it flaked off.
+    damage = ((whole < 0) & (T > 0)) | ((cap > 0) & (T < 0) & (D > 0) & (Z3 > cej))
+    return tissues(T, D, remnant, cej, Z3, enamel_cap=cap, damage=damage)
 
 
 # The healthy molar is only the base the conditions are built from; it is not shown.
 CONDITIONS = {"ai-hypoplastic": hypoplastic, "ai-hypomaturation": hypomaturation,
               "ai-hypocalcified": hypocalcified, "di": di}
-COLOURS = {"enamel": "#f4efe4", "dentin": "#e7cf9a", "cementum": "#dcc69a", "pulp": "#c8594f"}
+COLOURS = {"enamel": "#f4efe4", "dentin": "#e7cf9a", "cementum": "#dcc69a", "pulp": "#c8594f", "vessels": "#ffffff"}
 
 
 def mark_cut(me):
@@ -345,15 +482,27 @@ for cond, make in CONDITIONS.items():
     log(cond)
     made = make()
     patterns = made.pop("_fields")
+    halo = np.clip(blur(made.pop("_damage").astype(np.float32), 6), 0, 1)
+    meshes = {}
     for tissue, arr in made.items():
         name = f"gt-{cond}-{tissue}"
         me = cut_half(bl_mesh(name, arr))
         if not len(me.polygons):
             log(f"  {name}: empty, skipped")
             continue
+        bevel_cut(me)
+        meshes[tissue] = me
+    if "pulp" in made:
+        v = vessels(made["pulp"], f"gt-{cond}-vessels")
+        if v:
+            meshes["vessels"] = v
+    for tissue, me in meshes.items():
+        name = f"gt-{cond}-{tissue}"
         me.name = name
-        me.set_sharp_from_angle(angle=math.radians(35))  # flat cut faces, smooth tooth surfaces
-        mark_cut(me)
+        if tissue != "vessels":
+            me.set_sharp_from_angle(angle=math.radians(35))  # flat cut faces, smooth tooth surfaces and bevels
+            mark_cut(me)
+            bake_defect(me, halo)
         if tissue in patterns:
             bake_patterns(me, patterns[tissue], tissue)
         m = bpy.data.materials.new(name)
