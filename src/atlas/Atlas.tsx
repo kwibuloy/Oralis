@@ -8,7 +8,7 @@ import { BODYPARTS3D, SITE } from '../content/site';
 import { GROUP_COLOR, GROUP_ORDER, MESH_TO_KEY, structureByKey, structuresIn } from '../content/structures';
 import { SYSTEM_LABEL, type NumberingSystem } from '../content/teeth';
 import { replaceSelection } from '../lib/route';
-import { Viewer, type Pickable, type View } from '../viewer/Viewer';
+import { Viewer, type Pickable, type SurfaceStyle, type View } from '../viewer/Viewer';
 import { Segmented, Switch } from './controls';
 import { archOf, labelFor } from './describe';
 import DetailCard from './DetailCard';
@@ -20,7 +20,7 @@ import {
   stageGroup, ZONES, zoneOfPart, type CariologyView, type LesionKind, type Scenario,
   LESION_REGIONS, LESION_VIEW, lesionKey,
 } from '../content/cariology';
-import { CariologyPanel, lesionPartLook, LesionHead, PhTrack, ProcessCard, ProcessHead, SiteCard, StageCard, stageAt, stageTime, VIEW_OPTIONS, ZoneCard } from './Cariology';
+import { CariologyPanel, lesionPartLook, LesionHead, PhTrack, PROCESS_LOOK, ProcessCard, ProcessHead, SiteCard, SITES_LOOK, StageCard, stageAt, stageTime, VIEW_OPTIONS, ZoneCard } from './Cariology';
 import LoadingBar, { type LoadProgress } from './LoadingBar';
 import { SheetInset, type SheetCover } from './Sheet';
 import Icon from './Icon';
@@ -46,6 +46,14 @@ const CARVING_VIEWS: [string, string, string, { x: number; y: number; z: number 
 ];
 const CARVING_START = { x: -0.5, y: 0.45, z: 1 }; // three-quarter view from mesiobuccal
 const CARVING_COLOUR: Record<string, string> = { 'carving-crown': '#f2ece0', 'carving-root': '#e2cc9f' };
+// The carving tooth's finish (illustrated-look skill; millimetres): glossy enamel with growth lines, warmer at
+// the neck and lighter at the edges; a matte root. Grooves, pits and fossae darken by the baked _ao, so the
+// landmarks read at a glance.
+const CARVING_LOOK: Record<string, SurfaceStyle> = {
+  // Fine patterns kept faint and wide: at this size on screen, growth lines 0.1 mm apart alias into stripes.
+  'carving-crown': { ao: 2.6, roughness: 0.24, clearcoat: 0.6, grain: 0.1, grainSize: 0.6, bump: 0.12, neck: '#dcc391', neckAmount: 0.4, neckHeight: 3, rim: 0.3 },
+  'carving-root': { ao: 1.6, roughness: 0.72, grain: 0.15, grainSize: 0.7, bump: 0.12, glow: 0.1 },
+};
 const VIEWS: [View, string, string][] = [['front', 'F', 'Front'], ['side', 'S', 'Side'], ['back', 'B', 'Back'], ['top', 'T', 'Top']];
 const STAGE_LABEL: Record<ModeId, string> = {
   general: 'Whole body · adult male',
@@ -73,7 +81,7 @@ function cariologyPart(node: string): Pickable | null {
   if (node.startsWith('site-')) return { key: node, group: 'sites', color: node === 'site-restoration' ? SITE_COLOUR.restoration : SITE_COLOUR.site, surface: { roughness: node === 'site-restoration' ? 0.35 : 0.7 } };
   if (node.startsWith('pr-')) {
     const group = node.startsWith('pr-band') ? 'pr-enamel' : node === 'pr-biofilm-matrix' ? 'pr-biofilm' : node === 'pr-pellicle' ? 'pr-pellicle' : 'pr-bacteria';
-    return { key: node, group, color: PROCESS_PARTS[node]?.colour ?? '#ddd' };
+    return { key: node, group, color: PROCESS_PARTS[node]?.colour ?? '#ddd', surface: PROCESS_LOOK[group] };
   }
   return null;
 }
@@ -176,11 +184,11 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
         const p = GENETIC_PARTS[nodeKey(node)];
         return p ? { key: nodeKey(node), group: nodeGroup(node), color: p.color, surface: geneticsLook(node) } : null;
       }
-      if (node in CARVING_COLOUR) return { key: node, group: 'carving', color: CARVING_COLOUR[node] };
+      if (node in CARVING_COLOUR) return { key: node, group: 'carving', color: CARVING_COLOUR[node], surface: CARVING_LOOK[node] };
       if (modeId === 'cariology') { const part = cariologyPart(node); if (part) return part; }
       const key = MESH_TO_KEY.get(node);
       const s = key ? structureByKey(key) : undefined;
-      return s ? { key: s.key, group: s.group, color: GROUP_COLOR[s.group] ?? '#ddd' } : null;
+      return s ? { key: s.key, group: s.group, color: GROUP_COLOR[s.group] ?? '#ddd', surface: modeId === 'cariology' ? SITES_LOOK[s.group] : undefined } : null;
     }, (loaded, total) => !cancelled && setProgress({ loaded, total }), { heavy: modeId === 'cariology' })
       .then(() => !cancelled && setReady(true))
       .catch(() => !cancelled && setError('The 3D model could not be loaded. Check your connection and reload.'));
@@ -225,8 +233,9 @@ export default function Atlas({ modeId, initialSelected }: { modeId: ModeId; ini
   // Presets can change the extent a lot (whole body → head), so they refit; single toggles don't.
   const [presetTick, setPresetTick] = useState(0);
   useEffect(() => { if (presetTick) viewer.current?.fit(); }, [presetTick]);
-  // Showcase lighting on every Genetics path: the illustrated look.
-  useEffect(() => { viewer.current?.setShowcase(isPath); }, [isPath, ready]);
+  // Showcase lighting (the illustrated look, illustrated-look skill): Genetics, Cariology and Oral anatomy.
+  const showcase = isPath || cario || modeId === 'dental';
+  useEffect(() => { viewer.current?.setShowcase(showcase); }, [showcase, ready]);
   useEffect(() => { viewer.current?.setFilter(arch === 'both' ? () => true : (key) => archOf(key) === arch); }, [arch, ready]);
   // Cariology's Sites view opens the bite, so the occlusal lesions (Class I, secondary caries) can be seen.
   const openBite = biteOpen || (cario && cariView === 'sites');

@@ -707,6 +707,38 @@ def drop_specks(me, min_volume=5e-4):
     return dropped
 
 
+def bevel_outline(me, study_planes, outer):
+    """Round the cut's edge a little where it meets the tooth's outer surface (0.05 mm, three segments), as on a
+    sectioned teaching model (illustrated-look skill). Only there: lesion zones (the surface zone is 20-50 um)
+    and the borders between tissues on the cut stay exact. The cut face is first merged into polygons, so the
+    bevel keeps an even width over Manifold's long thin triangles."""
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.normal_update()
+
+    def on_cut(f):
+        c = f.calc_center_median()
+        return any(abs(c[a] - v) < 1e-4 and abs(f.normal[a]) > 0.999 for a, v in study_planes)
+    cut = [f for f in bm.faces if on_cut(f)]
+    if cut:
+        bmesh.ops.dissolve_faces(bm, faces=cut)
+        bm.normal_update()
+        cutset = {f for f in bm.faces if on_cut(f)}
+        others = [f for f in bm.faces if f not in cutset]
+        if others:
+            c = np.array([tuple(f.calc_center_median()) for f in others], np.float64)
+            d = np.abs(outer(c)) / (np.linalg.norm(grad(outer, c), axis=1) + 1e-9)
+            outerset = {f for f, dist in zip(others, d) if dist < 0.03}
+            edges = [e for e in bm.edges if len(e.link_faces) == 2
+                     and {e.link_faces[0] in cutset, e.link_faces[1] in cutset} == {True, False}
+                     and (e.link_faces[0] in outerset or e.link_faces[1] in outerset)]
+            if edges:
+                bmesh.ops.bevel(bm, geom=edges, offset=0.05, segments=3, profile=0.5, affect="EDGES", clamp_overlap=True)
+        bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
+        bm.to_mesh(me)
+    bm.free()
+
+
 def finish(me, surfaces, planes, study_planes):
     """Shade from the fields: faces on a plane get the plane's normal (study material if it is a
     cut plane); faces on one of `surfaces` get that field's gradient; the rest keep mesh normals."""
@@ -919,6 +951,8 @@ def build():
         dropped = drop_specks(me)
         if dropped:
             log(f"{name}: dropped {len(dropped)} specks (faces, volume): {dropped[:6]}")
+        if zone in ("enamel", "cementum", "dentin"):
+            bevel_outline(me, study, surfaces[0])
         finish(me, surfaces, planes, set(study))
         ob = bpy.data.objects.new(name, me)
         key = (site, group)
@@ -940,6 +974,7 @@ def build():
 
 
 manifest, colls = build()
+
 tris = 0
 for o in bpy.data.objects:
     if o.type != "MESH":

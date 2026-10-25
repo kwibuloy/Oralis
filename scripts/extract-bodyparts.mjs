@@ -229,10 +229,9 @@ async function addCarvingTooth(doc, buffer, scene, skullRightEdge) {
   for (const node of tooth.getRoot().listNodes()) {
     const src = node.getMesh().listPrimitives()[0];
     const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setBuffer(buffer);
-    const prim = doc.createPrimitive()
-      .setAttribute('POSITION', copy(src.getAttribute('POSITION')))
-      .setAttribute('NORMAL', copy(src.getAttribute('NORMAL')))
-      .setIndices(copy(src.getIndices()));
+    // Every attribute, the baked crease shading (_AO) included.
+    const prim = doc.createPrimitive().setIndices(copy(src.getIndices()));
+    for (const semantic of src.listSemantics()) prim.setAttribute(semantic, copy(src.getAttribute(semantic)));
     scene.addChild(doc.createNode(node.getName()).setMesh(doc.createMesh(node.getName()).addPrimitive(prim))
       .setScale([0.1, 0.1, 0.1]).setTranslation([skullRightEdge + 6, 0, 0]));
   }
