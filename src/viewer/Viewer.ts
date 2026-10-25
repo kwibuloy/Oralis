@@ -848,7 +848,11 @@ export class Viewer {
     clearTimeout(this.wheelEnd);
     gsap.killTweensOf(this.biteTween);
     for (const [m] of this.state) { m.geometry.dispose(); m.material.dispose(); }
-    for (const b of this.batches) { b.mesh.dispose(); (b.mesh.material as THREE.Material).dispose(); }
+    for (const b of this.batches) {
+      b.mesh.dispose(); (b.mesh.material as THREE.Material).dispose();
+      const depth = b.mesh.userData.depth as THREE.BatchedMesh | undefined;
+      if (depth) { depth.dispose(); (depth.material as THREE.Material).dispose(); }
+    }
     this.controls.dispose();
     this.renderer.dispose();
   }
@@ -953,8 +957,25 @@ export class Viewer {
       if (faded) mesh.renderOrder = 1;
       const batch: Batch = { mesh, parts: [], faded };
       if (first.geometry.getAttribute('_flow')) batch.flowOn = addFlow(material, this.flowTime);
+      // See-through parts draw only their nearest surface: a depth-only twin writes depth first (opaque pass),
+      // so folds and back walls behind it don't stack into darker patches (a fold of the gum read as a stray
+      // diamond). The twin is a child, so it hides with the batch; instance updates are forwarded to it.
+      const depth = faded ? new THREE.BatchedMesh(parts.length, vertices, indices, new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })) : null;
+      if (depth) {
+        depth.sortObjects = false;
+        mesh.add(depth);
+        for (const fn of ['setVisibleAt', 'setMatrixAt', 'setGeometryAt'] as const) {
+          const own = mesh[fn].bind(mesh) as (...a: unknown[]) => unknown;
+          (mesh as unknown as Record<string, unknown>)[fn] = (...a: unknown[]) => { (depth[fn] as (...b: unknown[]) => unknown)(...a); return own(...a); };
+        }
+        const bounds = mesh.computeBoundingSphere.bind(mesh);
+        mesh.computeBoundingSphere = () => { depth.computeBoundingSphere(); bounds(); };
+        mesh.userData.depth = depth;
+      }
       for (const m of parts) {
-        const id = mesh.addInstance(mesh.addGeometry(m.geometry));
+        const g = m.geometry;
+        if (depth) depth.addInstance(depth.addGeometry(g));
+        const id = mesh.addInstance(mesh.addGeometry(g));
         batch.parts[id] = m;
         m.userData[faded ? 'fadedBatch' : 'batch'] = batch;
         m.userData[faded ? 'fadedInstance' : 'instance'] = id;

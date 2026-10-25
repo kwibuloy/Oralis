@@ -40,8 +40,6 @@ export const TISSUE_LOOK: Record<string, SurfaceStyle> = {
   'alveolar-bone': { grain: 0.35, grainSize: 0.3, bump: 0.6, stain: '#c4a983', stainAmount: 0.4, stainSize: 0.4, roughness: 0.85 },
   gingiva: { grain: 0.15, grainSize: 0.12, bump: 0.25, stain: '#c9727a', stainAmount: 0.2, stainSize: 0.7, roughness: 0.5 },
   pdl: { grain: 0.2, grainSize: 0.05, roughness: 0.6 },
-  // Drawn on the cut in their own vertex colours (build_cariology.py, pulp_vessels.py).
-  vessels: { roughness: 0.45, clearcoat: 0.25, glow: 0.12 },
 };
 /** Every lesion-molar part: a soft edge glow under the showcase lighting (illustrated-look skill). */
 const LESION_GLOW: SurfaceStyle = { glow: 0.2 };
@@ -57,9 +55,8 @@ export const PROCESS_LOOK: Record<string, SurfaceStyle> = {
   'pr-pellicle': { clearcoat: 0.4, roughness: 0.35 },
   'pr-enamel': { glow: 0.15, clearcoat: 0.35, roughness: 0.4 },
 };
-// Front first: the vessels stand only a few hundredths of a millimetre proud of the pulp's cut face.
 const DRAW_ORDER = [
-  'vessels', 'enamel-surface-zone', 'enamel-lesion-body', 'enamel-dark-zone', 'enamel-translucent-zone', 'infected-dentin', 'affected-dentin',
+  'enamel-surface-zone', 'enamel-lesion-body', 'enamel-dark-zone', 'enamel-translucent-zone', 'infected-dentin', 'affected-dentin',
   'sclerotic-dentin', 'tertiary-dentin', 'pulp', 'cementum', 'enamel', 'dentin', 'pdl', 'gingiva', 'alveolar-bone',
 ];
 /** Natural colour and texture of a lesion-molar part; fissure lesions are stained brown, as they usually are clinically. */
